@@ -37,6 +37,7 @@ struct Hud {
 enum Message {
     Tick,
     Quit,
+    CopyText(String),
 }
 
 impl Hud {
@@ -64,7 +65,11 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
             hud.snapshot = hud.shared.lock().unwrap().clone();
             Task::none()
         }
-        Message::Quit => std::process::exit(0),
+        Message::Quit => {
+            kill_other_instances();
+            std::process::exit(0)
+        }
+        Message::CopyText(value) => iced::clipboard::write(value),
         _ => Task::none(),
     }
 }
@@ -192,21 +197,30 @@ fn pairing_qr(payload: &str) -> Element<'static, Message> {
         .into()
 }
 
-fn kv_row(label: &str, value: String) -> Element<'static, Message> {
-    container(
-        column![
-            text(label.to_string()).size(9).color(TEXT_2),
-            text(value).size(11).color(TEXT).font(Font::MONOSPACE),
+/// Linha chave/valor copiável — mostra `display_value` mas copia `copy_value`
+/// por inteiro (o fingerprint é abreviado na tela, o token não pode ser).
+fn kv_row(label: &str, display_value: String, copy_value: String) -> Element<'static, Message> {
+    button(
+        row![
+            column![
+                text(label.to_string()).size(9).color(TEXT_2),
+                text(display_value).size(11).color(TEXT).font(Font::MONOSPACE),
+            ]
+            .spacing(2)
+            .width(Length::Fill),
+            text("copiar").size(9).color(TEXT_2),
         ]
-        .spacing(2),
+        .align_y(Alignment::Center),
     )
     .padding([9, 12])
     .width(Length::Fill)
-    .style(|_| container::Style {
+    .style(|_, _| button::Style {
         background: Some(Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.35))),
         border: Border { color: Color::from_rgba(1.0, 1.0, 1.0, 0.08), width: 1.0, radius: 10.0.into() },
+        text_color: TEXT,
         ..Default::default()
     })
+    .on_press(Message::CopyText(copy_value))
     .into()
 }
 
@@ -281,9 +295,13 @@ fn view(hud: &Hud) -> Element<'_, Message> {
                     text("APONTE A CÂMARA DO TELEMÓVEL").size(11).color(TEXT_2),
                     pairing_qr(&payload),
                     text("Abra o HyprLink no Android e escaneie o código").size(10).color(TEXT_2),
-                    kv_row("FINGERPRINT", short_fp(&hud.snapshot.server_fingerprint_hex)),
-                    kv_row("HOST : PORTA", hud.snapshot.local_addr.clone()),
-                    kv_row("TOKEN", hud.snapshot.pairing_token_hex.clone()),
+                    kv_row(
+                        "FINGERPRINT",
+                        short_fp(&hud.snapshot.server_fingerprint_hex),
+                        hud.snapshot.server_fingerprint_hex.clone(),
+                    ),
+                    kv_row("HOST : PORTA", hud.snapshot.local_addr.clone(), hud.snapshot.local_addr.clone()),
+                    kv_row("TOKEN", hud.snapshot.pairing_token_hex.clone(), hud.snapshot.pairing_token_hex.clone()),
                 ]
                 .spacing(10)
                 .align_x(Alignment::Center),
@@ -315,6 +333,23 @@ fn view(hud: &Hud) -> Element<'_, Message> {
             ..Default::default()
         })
         .into()
+}
+
+/// Botão "×": mata qualquer outra instância órfã do daemon (comum durante
+/// desenvolvimento, quando um `cargo run` anterior fica preso na porta 7443)
+/// antes de encerrar este processo — `exit(0)` já derruba a thread do daemon
+/// que roda dentro deste mesmo processo.
+fn kill_other_instances() {
+    let my_pid = std::process::id().to_string();
+    let Ok(output) = std::process::Command::new("pgrep").args(["-x", "hyprlink-daemon"]).output() else {
+        return;
+    };
+    let Ok(text) = String::from_utf8(output.stdout) else {
+        return;
+    };
+    for pid in text.lines().filter(|p| !p.is_empty() && *p != my_pid) {
+        let _ = std::process::Command::new("kill").args(["-9", pid]).status();
+    }
 }
 
 fn short_fp(fp: &str) -> String {
