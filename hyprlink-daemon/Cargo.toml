@@ -1,0 +1,18 @@
+[package]
+name = "hyprlink-daemon"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.104"
+ciborium = "0.2.2"
+dirs = "6.0.0"
+qrcode = "0.14.1"
+quinn = "0.11.11"
+rand = "0.10.2"
+rcgen = "0.14.10"
+rustls = { version = "0.23.43", features = ["ring"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sha2 = "0.11.0"
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync", "fs"] }
