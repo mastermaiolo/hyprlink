@@ -12,6 +12,7 @@ use rustls::pki_types::CertificateDer;
 use crate::identity::{fingerprint_der, ServerIdentity};
 use crate::pairing::PairingStore;
 use crate::protocol::{body_get_bytes, body_get_str, read_frame, write_frame, Packet};
+use crate::state::{self, HudState};
 use crate::tls_verifier::AcceptAnyClientCert;
 
 pub fn build_endpoint(identity: &ServerIdentity, addr: SocketAddr) -> anyhow::Result<quinn::Endpoint> {
@@ -40,12 +41,15 @@ pub fn build_endpoint(identity: &ServerIdentity, addr: SocketAddr) -> anyhow::Re
     Ok(endpoint)
 }
 
-pub async fn run(endpoint: quinn::Endpoint, pairing: Arc<Mutex<PairingStore>>) {
+pub async fn run(endpoint: quinn::Endpoint, pairing: Arc<Mutex<PairingStore>>, hud: Arc<Mutex<HudState>>) {
     while let Some(incoming) = endpoint.accept().await {
         let pairing = pairing.clone();
+        let hud = hud.clone();
+        state::set_connecting(&hud);
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(incoming, pairing).await {
-                eprintln!("[conexão] encerrada: {e}");
+            if let Err(e) = handle_connection(incoming, pairing, hud.clone()).await {
+                state::push_log(&hud, format!("[!] conexão encerrada: {e}"));
+                state::set_pairing(&hud);
             }
         });
     }
@@ -54,6 +58,7 @@ pub async fn run(endpoint: quinn::Endpoint, pairing: Arc<Mutex<PairingStore>>) {
 async fn handle_connection(
     incoming: quinn::Incoming,
     pairing: Arc<Mutex<PairingStore>>,
+    hud: Arc<Mutex<HudState>>,
 ) -> anyhow::Result<()> {
     let connection = incoming.await?;
     let peer_fingerprint = peer_cert_fingerprint(&connection)
@@ -98,6 +103,8 @@ async fn handle_connection(
     }
 
     println!("[+] core.hello de '{device_name}' — dispositivo autorizado");
+    state::set_connected(&hud, device_name.clone(), peer_fingerprint.clone());
+    state::push_log(&hud, format!("[+] core.hello autorizado · {device_name}"));
 
     let reply_body = Value::Map(vec![(
         Value::Text("device_name".into()),
@@ -114,13 +121,15 @@ async fn handle_connection(
             Ok(pair) => pair,
             Err(_) => break, // conexão fechada pelo peer
         };
-        tokio::spawn(handle_control_stream(send, recv));
+        tokio::spawn(handle_control_stream(send, recv, hud.clone()));
     }
 
+    state::push_log(&hud, format!("[!] {device_name} desconectou"));
+    state::set_pairing(&hud);
     Ok(())
 }
 
-async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::RecvStream) {
+async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::RecvStream, hud: Arc<Mutex<HudState>>) {
     let frame = match read_frame(&mut recv).await {
         Ok(f) => f,
         Err(e) => {
@@ -140,9 +149,10 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
         "core.ping" => {
             let reply = Packet::new(packet.id, "core.pong", None, false);
             let _ = write_frame(&mut send, &reply.encode()).await;
+            state::push_log(&hud, "[i] core.ping".to_string());
         }
         other => {
-            eprintln!("[stream] tipo de pacote ainda não implementado: {other}");
+            state::push_log(&hud, format!("[!] tipo ainda não implementado: {other}"));
         }
     }
     // Fecha a stream de escrita prontamente — o app bloqueia lendo até EOF
