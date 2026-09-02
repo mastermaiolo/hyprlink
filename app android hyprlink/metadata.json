@@ -1,0 +1,6 @@
+{
+  "name": "HyprLink",
+  "description": "Secure QUIC and CBOR connection protocol link dashboard",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,29 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Link 1 (top-left) in accent light blue -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#D1E1FF"
+        android:strokeWidth="6.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M 38,50 L 50,38 C 55,33 63,33 68,38 L 70,40 C 75,45 75,53 70,58 L 58,70" />
+
+    <!-- Link 2 (bottom-right) in high contrast white -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="6.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M 70,58 L 58,70 C 53,75 45,75 40,70 L 38,68 C 33,63 33,55 38,50 L 50,38" />
+
+    <!-- Center Connection Pulse Core -->
+    <path
+        android:fillColor="#D1E1FF"
+        android:pathData="M 54,54 m -4,0 a 4,4 0 1,1 8,0 a 4,4 0 1,1 -8,0" />
+</vector>
