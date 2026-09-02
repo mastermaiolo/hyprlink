@@ -1,0 +1,8 @@
+# Rust (binário: Cargo.lock fica versionado para build reprodutível)
+/hyprlink-daemon/target/
+
+# zip é duplicata binária do que já está versionado em "app android hyprlink/"
+hyprlink.zip
+
+# editores/SO
+.DS_Store
