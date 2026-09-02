@@ -1,6 +1,6 @@
 //! Servidor QUIC: aceita conexões mTLS, valida o pareamento por fingerprint e
-//! despacha os pacotes de controlo (Fase 1: só `core.*` — os outros módulos
-//! chegam nas fases seguintes do plano).
+//! despacha os pacotes de controlo. Fase 3: clipboard, hyprland, bateria e
+//! mídia — ver PROTOCOL.md para o catálogo completo.
 
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -9,11 +9,28 @@ use ciborium::Value;
 use quinn::crypto::rustls::QuicServerConfig;
 use rustls::pki_types::CertificateDer;
 
+use crate::active::{self, ActiveConn};
+use crate::clip::{self, LastLocalSet};
 use crate::identity::{fingerprint_der, ServerIdentity};
 use crate::pairing::PairingStore;
 use crate::protocol::{body_get_bytes, body_get_str, read_frame, write_frame, Packet};
 use crate::state::{self, HudState};
 use crate::tls_verifier::AcceptAnyClientCert;
+use crate::{battery, hypr, media};
+
+/// Estado partilhado entre todas as streams/tarefas de fundo de uma sessão.
+#[derive(Clone)]
+pub struct Ctx {
+    pub hud: Arc<Mutex<HudState>>,
+    pub active: ActiveConn,
+    pub clip_guard: LastLocalSet,
+}
+
+impl Ctx {
+    pub fn new(hud: Arc<Mutex<HudState>>) -> Self {
+        Self { hud, active: active::new_registry(), clip_guard: clip::new_guard() }
+    }
+}
 
 pub fn build_endpoint(identity: &ServerIdentity, addr: SocketAddr) -> anyhow::Result<quinn::Endpoint> {
     let provider = rustls::crypto::ring::default_provider();
@@ -41,25 +58,32 @@ pub fn build_endpoint(identity: &ServerIdentity, addr: SocketAddr) -> anyhow::Re
     Ok(endpoint)
 }
 
-pub async fn run(endpoint: quinn::Endpoint, pairing: Arc<Mutex<PairingStore>>, hud: Arc<Mutex<HudState>>) {
+/// Sobe as tarefas de fundo que empurram eventos pro telemóvel independente
+/// de estar ou não conectado no momento (elas checam `ctx.active` sozinhas) —
+/// chamado uma vez, na subida do daemon.
+pub fn spawn_background_tasks(ctx: Ctx) {
+    tokio::spawn(clip::watch(ctx.active.clone(), ctx.clip_guard.clone(), ctx.hud.clone()));
+    tokio::spawn(hypr::watch_events(ctx.active.clone(), ctx.hud.clone()));
+    tokio::spawn(battery::poll_and_push(ctx.active.clone()));
+    tokio::spawn(media::poll_and_push(ctx.active.clone(), ctx.hud.clone()));
+}
+
+pub async fn run(endpoint: quinn::Endpoint, pairing: Arc<Mutex<PairingStore>>, ctx: Ctx) {
     while let Some(incoming) = endpoint.accept().await {
         let pairing = pairing.clone();
-        let hud = hud.clone();
-        state::set_connecting(&hud);
+        let ctx = ctx.clone();
+        state::set_connecting(&ctx.hud);
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(incoming, pairing, hud.clone()).await {
-                state::push_log(&hud, format!("[!] conexão encerrada: {e}"));
-                state::set_pairing(&hud);
+            if let Err(e) = handle_connection(incoming, pairing, ctx.clone()).await {
+                state::push_log(&ctx.hud, format!("[!] conexão encerrada: {e}"));
+                state::set_pairing(&ctx.hud);
+                active::clear(&ctx.active);
             }
         });
     }
 }
 
-async fn handle_connection(
-    incoming: quinn::Incoming,
-    pairing: Arc<Mutex<PairingStore>>,
-    hud: Arc<Mutex<HudState>>,
-) -> anyhow::Result<()> {
+async fn handle_connection(incoming: quinn::Incoming, pairing: Arc<Mutex<PairingStore>>, ctx: Ctx) -> anyhow::Result<()> {
     let connection = incoming.await?;
     let peer_fingerprint = peer_cert_fingerprint(&connection)
         .ok_or_else(|| anyhow::anyhow!("cliente não apresentou certificado (mTLS obrigatório)"))?;
@@ -103,8 +127,9 @@ async fn handle_connection(
     }
 
     println!("[+] core.hello de '{device_name}' — dispositivo autorizado");
-    state::set_connected(&hud, device_name.clone(), peer_fingerprint.clone());
-    state::push_log(&hud, format!("[+] core.hello autorizado · {device_name}"));
+    state::set_connected(&ctx.hud, device_name.clone(), peer_fingerprint.clone());
+    state::push_log(&ctx.hud, format!("[+] core.hello autorizado · {device_name}"));
+    active::set(&ctx.active, connection.clone());
 
     let reply_body = Value::Map(vec![(
         Value::Text("device_name".into()),
@@ -121,15 +146,16 @@ async fn handle_connection(
             Ok(pair) => pair,
             Err(_) => break, // conexão fechada pelo peer
         };
-        tokio::spawn(handle_control_stream(send, recv, hud.clone()));
+        tokio::spawn(handle_control_stream(send, recv, ctx.clone()));
     }
 
-    state::push_log(&hud, format!("[!] {device_name} desconectou"));
-    state::set_pairing(&hud);
+    state::push_log(&ctx.hud, format!("[!] {device_name} desconectou"));
+    state::set_pairing(&ctx.hud);
+    active::clear(&ctx.active);
     Ok(())
 }
 
-async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::RecvStream, hud: Arc<Mutex<HudState>>) {
+async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::RecvStream, ctx: Ctx) {
     let frame = match read_frame(&mut recv).await {
         Ok(f) => f,
         Err(e) => {
@@ -144,20 +170,79 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
             return;
         }
     };
+    let body = packet.body.as_ref();
+    let hud = &ctx.hud;
 
     match packet.kind.as_str() {
         "core.ping" => {
-            let reply = Packet::new(packet.id, "core.pong", None, false);
-            let _ = write_frame(&mut send, &reply.encode()).await;
-            state::push_log(&hud, "[i] core.ping".to_string());
+            reply(&mut send, packet.id, "core.pong", None).await;
         }
+
+        "clipboard.set" => {
+            if let Some(text) = body.and_then(|b| body_get_str(b, "text")) {
+                clip::set_from_remote(text, &ctx.clip_guard).await;
+                state::push_log(hud, "[i] clipboard.set · telemóvel → PC".to_string());
+            }
+        }
+
+        "hypr.workspaces" => {
+            let data = hypr::workspaces_json();
+            reply(&mut send, packet.id, "hypr.workspaces_state", Some(ok_data(data))).await;
+        }
+        "hypr.clients" => {
+            let data = hypr::clients_json();
+            reply(&mut send, packet.id, "hypr.clients_state", Some(ok_data(data))).await;
+        }
+        "hypr.dispatch" => {
+            let cmd = body.and_then(|b| body_get_str(b, "cmd")).unwrap_or("").to_string();
+            let data = hypr::dispatch(&cmd);
+            state::push_log(hud, format!("[i] hypr.dispatch {cmd}"));
+            reply(&mut send, packet.id, "hypr.dispatch_result", Some(ok_data(data))).await;
+        }
+
+        "battery.request" => {
+            reply(&mut send, packet.id, "battery.state", Some(battery::state_body())).await;
+        }
+        "battery.state" => {
+            // bateria do telemóvel — só log por enquanto (ver Fase 8 pra UI).
+            if let (Some(level), Some(charging)) = (
+                body.and_then(|b| crate::protocol::body_get(b, "level"))
+                    .and_then(|v| v.as_integer())
+                    .and_then(|i| i64::try_from(i).ok()),
+                body.and_then(|b| crate::protocol::body_get(b, "charging")).and_then(|v| v.as_bool()),
+            ) {
+                state::push_log(hud, format!("[i] bateria do telemóvel: {level}% · carregando={charging}"));
+            }
+        }
+
+        "media.command" => {
+            let cmd = body.and_then(|b| body_get_str(b, "command")).unwrap_or("").to_string();
+            media::handle_command(&cmd).await;
+        }
+
+        "share.url" => {
+            if let Some(url) = body.and_then(|b| body_get_str(b, "url")) {
+                state::push_log(hud, format!("[i] share.url {url}"));
+                let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+            }
+        }
+
         other => {
-            state::push_log(&hud, format!("[!] tipo ainda não implementado: {other}"));
+            state::push_log(hud, format!("[!] tipo ainda não implementado: {other}"));
         }
     }
     // Fecha a stream de escrita prontamente — o app bloqueia lendo até EOF
     // nas respostas tipadas (ver PROTOCOL.md §4).
     let _ = send.finish();
+}
+
+async fn reply(send: &mut quinn::SendStream, id: u64, kind: &str, body: Option<Value>) {
+    let packet = Packet::new(id, kind, body, false);
+    let _ = write_frame(send, &packet.encode()).await;
+}
+
+fn ok_data(data: String) -> Value {
+    Value::Map(vec![(Value::Text("ok".into()), Value::Bool(true)), (Value::Text("data".into()), Value::Text(data))])
 }
 
 fn peer_cert_fingerprint(connection: &quinn::Connection) -> Option<String> {

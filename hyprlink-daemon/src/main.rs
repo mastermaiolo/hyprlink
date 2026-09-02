@@ -1,5 +1,10 @@
+mod active;
+mod battery;
+mod clip;
 mod gui;
+mod hypr;
 mod identity;
+mod media;
 mod pairing;
 mod protocol;
 mod server;
@@ -49,7 +54,9 @@ async fn run_daemon(
             return;
         }
     };
-    server::run(endpoint, pairing, hud).await;
+    let ctx = server::Ctx::new(hud);
+    server::spawn_background_tasks(ctx.clone());
+    server::run(endpoint, pairing, ctx).await;
 }
 
 fn print_terminal_qr(fingerprint_hex: &str, local_ip: std::net::IpAddr, token_hex: &str) -> anyhow::Result<()> {
