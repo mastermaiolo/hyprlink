@@ -149,36 +149,31 @@ fn module_list() -> Element<'static, Message> {
     scrollable(rows).width(296).height(Length::Fill).into()
 }
 
+/// Cada linha é um botão: clicar copia a linha inteira pro clipboard — o
+/// widget de texto do iced ainda não suporta seleção nativa, então "clicar
+/// pra copiar" substitui "arrastar pra selecionar".
+fn console_line(line: &str) -> Element<'static, Message> {
+    let color = if line.starts_with("[+]") {
+        GREEN
+    } else if line.starts_with("[!]") {
+        AMBER
+    } else {
+        TEXT_2
+    };
+    button(text(line.to_string()).size(10).color(color).font(Font::MONOSPACE))
+        .padding(0)
+        .style(move |_, _| button::Style { background: None, text_color: color, ..Default::default() })
+        .on_press(Message::CopyText(line.to_string()))
+        .into()
+}
+
 fn console(logs: &[String]) -> Element<'static, Message> {
     let lines: Vec<Element<'static, Message>> = if logs.is_empty() {
         vec![text("[i] aguardando eventos...".to_string()).size(10).color(TEXT_2).into()]
     } else {
-        logs.iter()
-            .rev()
-            .take(6)
-            .rev()
-            .map(|l| {
-                let color = if l.starts_with("[+]") {
-                    GREEN
-                } else if l.starts_with("[!]") {
-                    AMBER
-                } else {
-                    TEXT_2
-                };
-                text(l.clone()).size(10).color(color).font(Font::MONOSPACE).into()
-            })
-            .collect()
+        logs.iter().rev().take(40).rev().map(|l| console_line(l)).collect()
     };
-    container(column(lines).spacing(3))
-        .padding([9, 14])
-        .width(Length::Fill)
-        .height(96)
-        .style(|_| container::Style {
-            background: Some(Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.35))),
-            border: Border { color: Color::from_rgba(1.0, 1.0, 1.0, 0.08), width: 1.0, radius: 12.0.into() },
-            ..Default::default()
-        })
-        .into()
+    scrollable(column(lines).spacing(3)).width(Length::Fill).height(Length::Fill).into()
 }
 
 fn pairing_qr(payload: &str) -> Element<'static, Message> {
