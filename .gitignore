@@ -4,5 +4,9 @@
 # zip é duplicata binária do que já está versionado em "app android hyprlink/"
 hyprlink.zip
 
+# exportação pontual do AI Studio, duplica "app android hyprlink/" — arquivos
+# relevantes já são puxados manualmente pra lá, não versionar a pasta inteira
+/app new/
+
 # editores/SO
 .DS_Store
