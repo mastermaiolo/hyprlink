@@ -11,7 +11,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use iced::widget::{button, column, container, row, scrollable, text, Space};
+use iced::widget::{button, column, container, row, scrollable, text, text_editor, Space};
 use iced::window;
 use iced::{Alignment, Background, Border, Color, Element, Font, Length, Shadow, Task, Theme, Vector};
 
@@ -29,6 +29,11 @@ const PANEL_H: u32 = 800;
 struct Hud {
     shared: Arc<Mutex<HudState>>,
     snapshot: HudState,
+    /// Conteúdo do console — só reconstruído quando o número de linhas muda
+    /// de verdade (não a cada Tick), pra não perder seleção/scroll do
+    /// usuário enquanto ele está lendo o histórico.
+    console: text_editor::Content,
+    console_len: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -36,12 +41,15 @@ enum Message {
     Tick,
     Quit,
     CopyText(String),
+    ConsoleAction(text_editor::Action),
 }
 
 impl Hud {
     fn new(shared: Arc<Mutex<HudState>>) -> Self {
         let snapshot = shared.lock().unwrap().clone();
-        Self { shared, snapshot }
+        let console_len = snapshot.logs.len();
+        let console = text_editor::Content::with_text(&snapshot.logs.join("\n"));
+        Self { shared, snapshot, console, console_len }
     }
 
     fn accent(&self) -> Color {
@@ -57,6 +65,10 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
     match message {
         Message::Tick => {
             hud.snapshot = hud.shared.lock().unwrap().clone();
+            if hud.snapshot.logs.len() != hud.console_len {
+                hud.console_len = hud.snapshot.logs.len();
+                hud.console = text_editor::Content::with_text(&hud.snapshot.logs.join("\n"));
+            }
             Task::none()
         }
         Message::Quit => {
@@ -64,6 +76,12 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
             std::process::exit(0)
         }
         Message::CopyText(value) => iced::clipboard::write(value),
+        Message::ConsoleAction(action) => {
+            if !action.is_edit() {
+                hud.console.perform(action);
+            }
+            Task::none()
+        }
     }
 }
 
@@ -142,31 +160,24 @@ fn module_list() -> Element<'static, Message> {
     scrollable(rows).width(296).height(Length::Fill).into()
 }
 
-/// Cada linha é um botão: clicar copia a linha inteira pro clipboard — o
-/// widget de texto do iced ainda não suporta seleção nativa, então "clicar
-/// pra copiar" substitui "arrastar pra selecionar".
-fn console_line(line: &str) -> Element<'static, Message> {
-    let color = if line.starts_with("[+]") {
-        GREEN
-    } else if line.starts_with("[!]") {
-        AMBER
-    } else {
-        TEXT_2
-    };
-    button(text(line.to_string()).size(10).color(color).font(Font::MONOSPACE))
+/// Console de diagnóstico real: `text_editor` em modo "só leitura" (ignora
+/// `Action::Edit`, aceita mover/selecionar/scroll/copiar) — dá scroll,
+/// seleção de texto e Ctrl+A/Ctrl+C de verdade, ao contrário de uma pilha de
+/// `Text` estáticos.
+fn console(content: &text_editor::Content) -> Element<'_, Message> {
+    text_editor(content)
+        .on_action(Message::ConsoleAction)
+        .font(Font::MONOSPACE)
+        .size(10)
         .padding(0)
-        .style(move |_, _| button::Style { background: None, text_color: color, ..Default::default() })
-        .on_press(Message::CopyText(line.to_string()))
+        .style(|_theme, _status| text_editor::Style {
+            background: Background::Color(Color::TRANSPARENT),
+            border: Border::default(),
+            placeholder: TEXT_2,
+            value: TEXT_2,
+            selection: Color { a: 0.35, ..GREEN },
+        })
         .into()
-}
-
-fn console(logs: &[String]) -> Element<'static, Message> {
-    let lines: Vec<Element<'static, Message>> = if logs.is_empty() {
-        vec![text("[i] aguardando eventos...".to_string()).size(10).color(TEXT_2).into()]
-    } else {
-        logs.iter().rev().take(40).rev().map(|l| console_line(l)).collect()
-    };
-    scrollable(column(lines).spacing(3)).width(Length::Fill).height(Length::Fill).into()
 }
 
 fn pairing_qr(payload: &str) -> Element<'static, Message> {
@@ -259,7 +270,7 @@ fn view(hud: &Hud) -> Element<'_, Message> {
 
             row![
                 column![connbar, module_list()].spacing(14),
-                container(console(&hud.snapshot.logs))
+                container(console(&hud.console))
                     .width(Length::Fill)
                     .height(Length::Fill)
                     .padding(18)
