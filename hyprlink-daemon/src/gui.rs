@@ -16,6 +16,7 @@ use iced::widget::{button, column, container, row, scrollable, text, text_editor
 use iced::window;
 use iced::{Alignment, Background, Border, Color, Element, Font, Length, Shadow, Task, Theme, Vector};
 
+use crate::active::ActiveConn;
 use crate::config::{self, SharedConfig};
 use crate::state::{ConnState, HudState};
 
@@ -38,6 +39,7 @@ struct Hud {
     console_len: usize,
     config: SharedConfig,
     download_dir: PathBuf,
+    active: ActiveConn,
 }
 
 #[derive(Debug, Clone)]
@@ -51,12 +53,12 @@ enum Message {
 }
 
 impl Hud {
-    fn new(shared: Arc<Mutex<HudState>>, config: SharedConfig) -> Self {
+    fn new(shared: Arc<Mutex<HudState>>, config: SharedConfig, active: ActiveConn) -> Self {
         let snapshot = shared.lock().unwrap().clone();
         let console_len = snapshot.logs.len();
         let console = text_editor::Content::with_text(&snapshot.logs.join("\n"));
         let download_dir = config::download_dir(&config);
-        Self { shared, snapshot, console, console_len, config, download_dir }
+        Self { shared, snapshot, console, console_len, config, download_dir, active }
     }
 
     fn accent(&self) -> Color {
@@ -79,6 +81,13 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
             Task::none()
         }
         Message::Quit => {
+            if let Some(connection) = hud.active.lock().unwrap().take() {
+                connection.close(0u32.into(), b"HyprLink: GUI encerrada");
+                // O close() só enfileira o frame CONNECTION_CLOSE — precisa
+                // dar tempo da task do QUIC (noutra thread) chegar a
+                // transmiti-lo antes do processo morrer de vez.
+                std::thread::sleep(Duration::from_millis(150));
+            }
             kill_other_instances();
             std::process::exit(0)
         }
@@ -324,9 +333,24 @@ fn view(hud: &Hud) -> Element<'_, Message> {
             .padding([12, 16])
             .style(|_| glass(14.0));
 
+            let console_header = row![
+                text("console de diagnóstico").size(9).color(TEXT_2),
+                Space::new().width(Length::Fill),
+                button(text("copiar log").size(9).color(TEXT_2))
+                    .padding([4, 10])
+                    .style(|_, _| button::Style {
+                        background: Some(Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.35))),
+                        border: Border { color: Color::from_rgba(1.0, 1.0, 1.0, 0.08), width: 1.0, radius: 8.0.into() },
+                        text_color: TEXT_2,
+                        ..Default::default()
+                    })
+                    .on_press(Message::CopyText(hud.snapshot.logs.join("\n"))),
+            ]
+            .align_y(Alignment::Center);
+
             row![
                 column![connbar, module_list(&hud.download_dir)].spacing(14),
-                container(console(&hud.console))
+                container(column![console_header, console(&hud.console)].spacing(8))
                     .width(Length::Fill)
                     .height(Length::Fill)
                     .padding(18)
@@ -422,8 +446,8 @@ fn style(_hud: &Hud, theme: &Theme) -> iced::theme::Style {
     }
 }
 
-pub fn run(shared: Arc<Mutex<HudState>>, config: SharedConfig) -> iced::Result {
-    iced::application(move || Hud::new(shared.clone(), config.clone()), update, view)
+pub fn run(shared: Arc<Mutex<HudState>>, config: SharedConfig, active: ActiveConn) -> iced::Result {
+    iced::application(move || Hud::new(shared.clone(), config.clone(), active.clone()), update, view)
         .title("HyprLink")
         .style(style)
         .subscription(subscription)

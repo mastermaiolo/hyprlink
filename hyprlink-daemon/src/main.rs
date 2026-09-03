@@ -32,19 +32,24 @@ fn main() -> anyhow::Result<()> {
     let token_hex = pairing.lock().unwrap().current_token_hex.clone();
     let hud = state::HudState::new(format!("{local_ip}:{PORT}"), identity.fingerprint_hex.clone(), token_hex.clone());
     let config = config::load();
+    // Compartilhado com a GUI só pra permitir um `close()` educado da conexão
+    // QUIC (frame CONNECTION_CLOSE de verdade) no botão de fechar — sem isso
+    // o telemóvel fica "conectado" até o idle timeout expirar sozinho.
+    let active = active::new_registry();
 
     print_terminal_qr(&identity.fingerprint_hex, local_ip, &token_hex)?;
 
     {
         let hud = hud.clone();
         let config = config.clone();
+        let active = active.clone();
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().expect("falha ao criar runtime tokio");
-            rt.block_on(run_daemon(identity, pairing, hud, config, local_ip));
+            rt.block_on(run_daemon(identity, pairing, hud, config, active, local_ip));
         });
     }
 
-    gui::run(hud, config).map_err(|e| anyhow::anyhow!("erro na GUI: {e}"))
+    gui::run(hud, config, active).map_err(|e| anyhow::anyhow!("erro na GUI: {e}"))
 }
 
 async fn run_daemon(
@@ -52,6 +57,7 @@ async fn run_daemon(
     pairing: Arc<Mutex<pairing::PairingStore>>,
     hud: Arc<Mutex<state::HudState>>,
     config: config::SharedConfig,
+    active: active::ActiveConn,
     local_ip: std::net::IpAddr,
 ) {
     let addr: std::net::SocketAddr = format!("0.0.0.0:{PORT}").parse().expect("porta fixa válida");
@@ -63,7 +69,7 @@ async fn run_daemon(
             return;
         }
     };
-    let ctx = server::Ctx::new(hud, config);
+    let ctx = server::Ctx::new(hud, config, active);
     server::spawn_background_tasks(ctx.clone());
     server::run(endpoint, pairing, ctx).await;
 }

@@ -4,19 +4,32 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 
+// Compatibility aliases for any legacy references
+val DarkBackground = HyprColors.Background
+val DarkSurface = HyprColors.SurfaceCard
+val DarkOutline = HyprColors.BorderNormal
+val PrimaryPurple = HyprColors.NeonGreen
+val PrimaryViolet = HyprColors.BorderHighlight
+val CyanActive = HyprColors.NeonGreen
+val AmberWarning = HyprColors.Amber
+val RedError = HyprColors.Red
+val TextPrimary = HyprColors.TextTitle
+val TextSecondary = HyprColors.TextSecondary
+val TerminalBlack = HyprColors.TerminalSurface
+
 private val DarkColorScheme = darkColorScheme(
-    primary = PrimaryPurple,
-    onPrimary = TextPrimary,
-    primaryContainer = PrimaryViolet,
-    secondary = CyanActive,
-    tertiary = AmberWarning,
-    error = RedError,
-    background = DarkBackground,
-    surface = DarkSurface,
-    outline = DarkOutline,
-    onBackground = TextPrimary,
-    onSurface = TextPrimary,
-    onSurfaceVariant = TextSecondary
+    primary = HyprColors.NeonGreen,
+    onPrimary = HyprColors.OnNeonGreen,
+    primaryContainer = HyprColors.SurfaceElevated,
+    secondary = HyprColors.NeonGreen,
+    tertiary = HyprColors.Amber,
+    error = HyprColors.Red,
+    background = HyprColors.Background,
+    surface = HyprColors.SurfaceCard,
+    outline = HyprColors.BorderNormal,
+    onBackground = HyprColors.TextBody,
+    onSurface = HyprColors.TextBody,
+    onSurfaceVariant = HyprColors.TextSecondary
 )
 
 @Composable

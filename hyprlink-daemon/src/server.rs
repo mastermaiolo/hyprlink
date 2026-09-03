@@ -36,10 +36,10 @@ pub struct Ctx {
 }
 
 impl Ctx {
-    pub fn new(hud: Arc<Mutex<HudState>>, config: SharedConfig) -> Self {
+    pub fn new(hud: Arc<Mutex<HudState>>, config: SharedConfig, active: ActiveConn) -> Self {
         Self {
             hud,
-            active: active::new_registry(),
+            active,
             clip_guard: clip::new_guard(),
             input: Arc::new(InputDevice::open()),
             notif: notif::new_registry(),
@@ -62,14 +62,31 @@ pub fn build_endpoint(identity: &ServerIdentity, addr: SocketAddr) -> anyhow::Re
         .with_client_cert_verifier(verifier)
         .with_single_cert(vec![identity.cert_der.clone()], identity.key_der.clone_key())?;
     tls_config.alpn_protocols = vec![b"hyprlink/1".to_vec()];
-    tls_config.max_early_data_size = u32::MAX;
+    // ponytail: 0-RTT (max_early_data_size = MAX) permite ao cliente retomar
+    // sessão sem reapresentar o certificado — mTLS é obrigatório aqui, e o
+    // fingerprint do peer (peer_cert_fingerprint) some numa retomada, fazendo
+    // toda reconexão após a primeira falhar em silêncio (bail antes do
+    // primeiro log). 0 força handshake completo com cert sempre.
+    tls_config.max_early_data_size = 0;
+    // Isso sozinho não basta: em TLS 1.3 (o único usado no QUIC) a retomada
+    // é via NewSessionTicket/PSK, controlada por `send_tls13_tickets`, não
+    // por `session_storage` (esse é o mecanismo de sessão à moda TLS 1.2).
+    // Zerar aqui impede o servidor de emitir qualquer ticket resumível.
+    tls_config.send_tls13_tickets = 0;
 
     let quic_tls_config = QuicServerConfig::try_from(tls_config)?;
     let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(quic_tls_config));
     if let Some(transport) = Arc::get_mut(&mut server_config.transport) {
         transport
             .max_concurrent_bidi_streams(100u32.into())
-            .max_concurrent_uni_streams(100u32.into());
+            .max_concurrent_uni_streams(100u32.into())
+            // ponytail: o app manda ping de keepalive a cada 30s (mesmo valor do
+            // max_idle_timeout padrão do quinn) — sem margem, qualquer jitter faz o
+            // QUIC fechar a conexão por "ociosa" bem na hora que o ping ia renová-la.
+            // keep_alive_interval manda PING de verdade a nível de transporte, sem
+            // depender do app; max_idle_timeout maior dá folga extra.
+            .keep_alive_interval(Some(std::time::Duration::from_secs(5)))
+            .max_idle_timeout(Some(quinn::VarInt::from_u32(60_000).into()));
     }
 
     let endpoint = quinn::Endpoint::server(server_config, addr)?;
@@ -97,6 +114,7 @@ pub async fn run(endpoint: quinn::Endpoint, pairing: Arc<Mutex<PairingStore>>, c
                 state::push_log(&ctx.hud, format!("[!] conexão encerrada: {e}"));
                 state::set_pairing(&ctx.hud);
                 active::clear(&ctx.active);
+                crate::tap::stop(&ctx.tap);
             }
         });
     }
@@ -193,6 +211,7 @@ async fn handle_connection(incoming: quinn::Incoming, pairing: Arc<Mutex<Pairing
     state::push_log(&ctx.hud, format!("[!] {device_name} desconectou"));
     state::set_pairing(&ctx.hud);
     active::clear(&ctx.active);
+    crate::tap::stop(&ctx.tap);
     Ok(())
 }
 

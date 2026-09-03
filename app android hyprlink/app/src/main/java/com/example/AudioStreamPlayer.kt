@@ -11,6 +11,7 @@ import tech.kwik.core.QuicStream
 object AudioStreamPlayer {
     private val playerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var audioTrack: AudioTrack? = null
+    private var activeStream: QuicStream? = null
     private var playJob: Job? = null
 
     private val _isPlaying = MutableStateFlow(false)
@@ -20,6 +21,7 @@ object AudioStreamPlayer {
     fun playStream(stream: QuicStream) {
         stop()
 
+        activeStream = stream
         _isPlaying.value = true
         playJob = playerScope.launch(Dispatchers.IO) {
             val inp = stream.inputStream
@@ -30,7 +32,7 @@ object AudioStreamPlayer {
                 val audioFormat = AudioFormat.ENCODING_PCM_16BIT
                 
                 val minBufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-                val bufferSize = maxOf(minBufferSize * 4, 16384)
+                val bufferSize = maxOf(minBufferSize * 2, 16384)
 
                 track = AudioTrack.Builder()
                     .setAudioAttributes(
@@ -54,17 +56,60 @@ object AudioStreamPlayer {
                     audioTrack = track
                 }
 
+                track.setVolume(1.0f)
                 track.play()
-                ConnectionRepository.appendLog("[AUDIO] AudioTrack started playing")
+                ConnectionRepository.appendLog("[AUDIO] AudioTrack started playing (bufferSize=$bufferSize, state=${track.state})")
 
                 val buffer = ByteArray(bufferSize)
+                var totalBytesRead = 0L
+                var intervalBytes = 0
+                var intervalPeak = 0
+                // read() não garante retornar múltiplos de 2 bytes (amostra 16-bit) —
+                // guarda o byte baixo órfão de uma leitura pra parear com o primeiro
+                // byte da próxima, senão o cálculo de pico desalinha e vira lixo.
+                var pendingLowByte = -1
+
                 while (isActive) {
                     val n = inp.read(buffer)
                     if (n == -1) {
-                        ConnectionRepository.appendLog("[AUDIO] PCM stream reached EOF")
+                        ConnectionRepository.appendLog("[AUDIO] PCM stream reached EOF (total read: $totalBytesRead bytes)")
                         break
                     }
                     if (n > 0) {
+                        totalBytesRead += n
+                        intervalBytes += n
+
+                        // Compute peak amplitude across 16-bit little-endian samples
+                        var i = 0
+                        if (pendingLowByte != -1) {
+                            val sample = ((buffer[0].toInt() shl 8) or (pendingLowByte and 0xFF)).toShort()
+                            val absVal = kotlin.math.abs(sample.toInt())
+                            if (absVal > intervalPeak) {
+                                intervalPeak = absVal
+                            }
+                            pendingLowByte = -1
+                            i = 1
+                        }
+                        while (i + 1 < n) {
+                            val sample = ((buffer[i + 1].toInt() shl 8) or (buffer[i].toInt() and 0xFF)).toShort()
+                            val absVal = kotlin.math.abs(sample.toInt())
+                            if (absVal > intervalPeak) {
+                                intervalPeak = absVal
+                            }
+                            i += 2
+                        }
+                        if (i < n) {
+                            pendingLowByte = buffer[i].toInt() and 0xFF
+                        }
+
+                        // Every ~1 second of 48kHz stereo 16-bit audio (48000 * 2 * 2 = 192000 bytes)
+                        if (intervalBytes >= 192000) {
+                            val pct = (intervalPeak * 100) / 32767
+                            ConnectionRepository.appendLog("[AUDIO] chunk peak amplitude: $intervalPeak / 32767 ($pct%) | Total: ${totalBytesRead / 1024} KB")
+                            intervalBytes = 0
+                            intervalPeak = 0
+                        }
+
                         var written = 0
                         while (written < n && isActive) {
                             val result = track.write(buffer, written, n - written)
@@ -83,6 +128,9 @@ object AudioStreamPlayer {
                 synchronized(this@AudioStreamPlayer) {
                     if (audioTrack == track) {
                         audioTrack = null
+                    }
+                    if (activeStream == stream) {
+                        activeStream = null
                     }
                 }
                 try {
@@ -103,6 +151,11 @@ object AudioStreamPlayer {
     fun stop() {
         playJob?.cancel()
         playJob = null
+        val streamToClose = activeStream
+        activeStream = null
+        try {
+            streamToClose?.closeInput(0)
+        } catch (e: Exception) {}
         val track = audioTrack
         audioTrack = null
         if (track != null) {

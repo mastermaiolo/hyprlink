@@ -283,7 +283,7 @@ class HyprLinkConnectionService : Service() {
             while (isActive && quicConn.isConnected) {
                 delay(1000)
                 pingTimer += 1000
-                if (pingTimer >= 30_000) {
+                if (pingTimer >= 10_000) {
                     pingTimer = 0
                     if (ConnectionRepository.activeConnection != null) {
                         val pingSuccess = ConnectionRepository.sendPing()

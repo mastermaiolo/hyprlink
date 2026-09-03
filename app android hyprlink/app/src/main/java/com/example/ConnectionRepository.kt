@@ -1118,6 +1118,7 @@ object ConnectionRepository {
 
     private suspend fun handlePeerUniStream(stream: QuicStream, context: Context) = withContext(Dispatchers.IO) {
         val inp = stream.inputStream
+        var handedOffToAudioTap = false
         try {
             // Read 8 bytes for packet ID
             val idBytes = ConnectionUtils.readWithDeadline(stream, 10_000) { readExact(inp, 8) }
@@ -1145,6 +1146,7 @@ object ConnectionRepository {
 
             if (announcement.name == "__audio_tap__") {
                 appendLog("[AUDIO] Redirecting unidirectional stream for audio tap to AudioStreamPlayer...")
+                handedOffToAudioTap = true
                 AudioStreamPlayer.playStream(stream)
                 return@withContext
             }
@@ -1165,9 +1167,11 @@ object ConnectionRepository {
         } catch (e: Exception) {
             appendLog("[ERROR] Error receiving file: ${e.message}")
         } finally {
-            try {
-                stream.closeInput(0)
-            } catch (e: Exception) {}
+            if (!handedOffToAudioTap) {
+                try {
+                    stream.closeInput(0)
+                } catch (e: Exception) {}
+            }
         }
     }
 
@@ -1555,14 +1559,17 @@ object ConnectionRepository {
                 for (item in value) {
                     array.add(encodeCborValue(item))
                 }
+                array.add(Special.BREAK)
                 array
             }
             is Map<*, *> -> {
                 val map = co.nstant.`in`.cbor.model.Map()
-                map.setChunked(true)
-                for ((k, v) in value) {
-                    val keyStr = k?.toString() ?: "null"
-                    map.put(UnicodeString(keyStr), encodeCborValue(v))
+                if (value.isNotEmpty()) {
+                    map.setChunked(true)
+                    for ((k, v) in value) {
+                        val keyStr = k?.toString() ?: "null"
+                        map.put(UnicodeString(keyStr), encodeCborValue(v))
+                    }
                 }
                 map
             }
@@ -1586,7 +1593,9 @@ object ConnectionRepository {
             }
             is ByteString -> item.bytes
             is co.nstant.`in`.cbor.model.Array -> {
-                item.getDataItems().map { decodeCborValue(it) }
+                item.getDataItems()
+                    .filter { it != Special.BREAK }
+                    .map { decodeCborValue(it) }
             }
             is co.nstant.`in`.cbor.model.Map -> {
                 val map = mutableMapOf<String, Any?>()
@@ -1611,9 +1620,11 @@ object ConnectionRepository {
         
         if (packet.body != null) {
             val bodyMap = co.nstant.`in`.cbor.model.Map()
-            bodyMap.setChunked(true)
-            for ((key, value) in packet.body) {
-                bodyMap.put(UnicodeString(key), encodeCborValue(value))
+            if (packet.body.isNotEmpty()) {
+                bodyMap.setChunked(true)
+                for ((key, value) in packet.body) {
+                    bodyMap.put(UnicodeString(key), encodeCborValue(value))
+                }
             }
             mapBuilder.put(UnicodeString("body"), bodyMap)
         } else {

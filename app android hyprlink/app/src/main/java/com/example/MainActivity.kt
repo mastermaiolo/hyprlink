@@ -51,7 +51,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -476,968 +478,426 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
             )
         } else {
             // Main layout container with Scaffold for Navigation (Mobile only)
-            Scaffold(
-                modifier = Modifier.fillMaxSize(),
-                containerColor = Color.Black,
-        bottomBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.Black)
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                    .border(1.dp, DarkOutline, RoundedCornerShape(16.dp))
-                    .background(DarkSurface, RoundedCornerShape(16.dp))
-                    .padding(vertical = 8.dp)
-                    .testTag("bottom_nav_bar"),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val navItems = listOf(
-                    Triple("dashboard", Icons.Default.Terminal, "INÍCIO"),
-                    Triple("audio", Icons.Default.PlayArrow, "MÉDIA"),
-                    Triple("touchpad", Icons.Default.Keyboard, "RATO"),
-                    Triple("desktop", Icons.Default.Monitor, "AÇÕES"),
-                    Triple("transfers", Icons.Default.SwapVert, "FICH."),
-                    Triple("notifications", Icons.Default.Settings, "CONFIG")
-                )
+            val isAudioStreamingPhone by AudioStreamPlayer.isPlaying.collectAsStateWithLifecycle()
+            val transfersList by ConnectionRepository.transfers.collectAsStateWithLifecycle()
 
-                navItems.forEach { (route, icon, label) ->
-                    val isSelected = currentTab == route
-                    val itemColor by animateColorAsState(
-                        targetValue = if (isSelected) CyanActive else TextSecondary,
-                        animationSpec = tween(durationMillis = 200),
-                        label = "NavItemColor"
+            var audioSinks by remember {
+                mutableStateOf(
+                    listOf(
+                        com.example.ui.AudioSinkItem(1L, "Speakers", "Realtek ALC897 (analógico)", 74, false, true, false),
+                        com.example.ui.AudioSinkItem(2L, "Headphones", "PipeWire Bluetooth Sink", 50, false, false, false),
+                        com.example.ui.AudioSinkItem(3L, "Telefone", "HyprLink Audio Stream (este dispositivo)", 80, false, false, true)
                     )
+                )
+            }
 
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { currentTab = route }
-                            .padding(vertical = 4.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = label,
-                            tint = itemColor,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = JetBrainsMono
-                            ),
-                            color = itemColor
-                        )
-                    }
+            var audioApps by remember {
+                mutableStateOf(
+                    listOf(
+                        com.example.ui.AudioAppItem(101L, "Spotify", mediaState?.title ?: "Nenhuma faixa", 82, false, mediaState?.status.equals("playing", ignoreCase = true), 0),
+                        com.example.ui.AudioAppItem(102L, "Firefox", "YouTube - lofi hip hop radio", 65, false, true, 0),
+                        com.example.ui.AudioAppItem(103L, "Discord", "Canal de Voz", 90, false, false, 4)
+                    )
+                )
+            }
+
+            LaunchedEffect(currentTab, connStatus) {
+                if (connStatus == ConnectionStatus.CONNECTED && currentTab == "audio") {
+                    try {
+                        val fetched = ConnectionRepository.fetchAudioState()
+                        if (fetched.sinks.isNotEmpty()) {
+                            audioSinks = fetched.sinks.map { s ->
+                                com.example.ui.AudioSinkItem(
+                                    id = s.id,
+                                    name = s.name,
+                                    description = s.description,
+                                    volume = s.volume,
+                                    isMuted = s.muted,
+                                    isDefault = s.is_default,
+                                    isPhone = s.is_phone
+                                )
+                            }
+                        }
+                        if (fetched.apps.isNotEmpty()) {
+                            audioApps = fetched.apps.map { a ->
+                                com.example.ui.AudioAppItem(
+                                    id = a.id,
+                                    name = a.name,
+                                    media = a.media ?: "",
+                                    volume = a.volume,
+                                    isMuted = a.muted,
+                                    isPlaying = true,
+                                    idleMinutes = 0
+                                )
+                            }
+                        }
+                    } catch (e: Exception) {}
                 }
             }
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(Color.Black)
-                .padding(horizontal = 20.dp)
-        ) {
-            if (currentTab == "dashboard") {
-                // --- Dashboard Content (Scrollable) ---
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState()),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Spacer(modifier = Modifier.height(16.dp))
 
-                    // ==========================================
-                    // MASTHEAD EDITORIAL (MAGAZINE STYLE)
-                    // ==========================================
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Spacer(modifier = Modifier.weight(1f))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            when (connStatus) {
-                                                ConnectionStatus.CONNECTED -> CyanActive
-                                                ConnectionStatus.CONNECTING -> AmberWarning
-                                                ConnectionStatus.DISCONNECTED -> RedError
-                                            }
-                                        )
-                                )
-                                Text(
-                                    text = when (connStatus) {
-                                        ConnectionStatus.CONNECTED -> "LINK ATIVO"
-                                        ConnectionStatus.CONNECTING -> "A ESTABELECER"
-                                        ConnectionStatus.DISCONNECTED -> "LINK INATIVO"
-                                    },
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontFamily = JetBrainsMono,
-                                    fontWeight = FontWeight.Bold,
-                                    color = when (connStatus) {
-                                        ConnectionStatus.CONNECTED -> CyanActive
-                                        ConnectionStatus.CONNECTING -> AmberWarning
-                                        ConnectionStatus.DISCONNECTED -> RedError
-                                    }
-                                )
-                            }
-                        }
+            var mcWorkspaces by remember {
+                mutableStateOf(
+                    listOf(
+                        com.example.ui.WorkspaceItem(1, "1", 2, true),
+                        com.example.ui.WorkspaceItem(2, "2", 1, false),
+                        com.example.ui.WorkspaceItem(3, "3", 1, false),
+                        com.example.ui.WorkspaceItem(4, "4", 0, false),
+                        com.example.ui.WorkspaceItem(5, "5", 0, false)
+                    )
+                )
+            }
 
-                        // Big Title: HYPRLINK
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.Bottom
-                        ) {
-                            Text(
-                                text = "HYPR",
-                                style = com.example.ui.theme.LogoTextStyle.copy(
-                                    letterSpacing = (-2).sp
-                                ),
-                                color = TextPrimary,
-                                modifier = Modifier.alignByBaseline()
-                            )
-                            Text(
-                                text = "LINK",
-                                style = com.example.ui.theme.LogoTextStyle.copy(
-                                    letterSpacing = (-2).sp,
-                                    shadow = Shadow(
-                                        color = linkColor.copy(alpha = 0.5f),
-                                        offset = Offset(0f, 0f),
-                                        blurRadius = 12f
-                                    )
-                                ),
-                                color = linkColor,
-                                modifier = Modifier.alignByBaseline()
-                            )
-                        }
+            var mcWindows by remember {
+                mutableStateOf(
+                    listOf(
+                        com.example.ui.WindowClientItem("0x555555abcd10", "Firefox — Hyprland Wiki", "firefox", 1, true),
+                        com.example.ui.WindowClientItem("0x555555abcd20", "kitty ~ terminal", "kitty", 1, false),
+                        com.example.ui.WindowClientItem("0x555555abcd30", "Visual Studio Code — main.rs", "code", 2, false),
+                        com.example.ui.WindowClientItem("0x555555abcd40", "Spotify Premium", "spotify", 3, false)
+                    )
+                )
+            }
 
-                        // Sub strip with borders
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(width = 1.dp, color = DarkOutline)
-                                .padding(vertical = 6.dp, horizontal = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "PROTO KDEC/1.6 + hyprland.*",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontFamily = JetBrainsMono,
-                                fontSize = 9.sp,
-                                color = TextSecondary
-                            )
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    text = "Nº 001",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontFamily = JetBrainsMono,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextSecondary
-                                )
-                                IconButton(
-                                    onClick = { showFullScreenConsole = true },
-                                    modifier = Modifier.size(24.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Terminal,
-                                        contentDescription = "Diagnostics",
-                                        tint = CyanActive,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
+            val currentLinkState = when (connStatus) {
+                ConnectionStatus.CONNECTED -> com.example.ui.theme.LinkState.CONNECTED
+                ConnectionStatus.CONNECTING -> com.example.ui.theme.LinkState.NEGOTIATING
+                ConnectionStatus.DISCONNECTED -> com.example.ui.theme.LinkState.DISCONNECTED
+            }
 
-                    // ==========================================
-                    // LINK STATUS BAR
-                    // ==========================================
+            val isMediaPlaying = mediaState?.status.equals("playing", ignoreCase = true)
+            val mediaProgress = if (isMediaPlaying) 0.42f else 0.0f
+            val mediaElapsedTime = if (isMediaPlaying) "1:42" else "0:00"
+            val mediaTotalTime = "3:58"
+            val clipboardText = ConnectionRepository.lastReceivedClipboardText
+
+            val activeTransfers = remember(transfersList) {
+                transfersList.filter { it.status == TransferStatus.EM_CURSO }.map {
+                    com.example.ui.ActiveTransferItem(
+                        id = it.id.toString(),
+                        name = it.name,
+                        isIncoming = it.direction == TransferDirection.DOWNLOAD,
+                        currentBytes = (it.size * it.progress).toLong(),
+                        totalBytes = it.size,
+                        progress = it.progress
+                    )
+                }
+            }
+            val completedTransfers = remember(transfersList) {
+                transfersList.filter { it.status == TransferStatus.VERIFICADO || it.status == TransferStatus.NAO_VERIFICADO }.map {
+                    com.example.ui.CompletedTransferItem(
+                        id = it.id.toString(),
+                        name = it.name,
+                        isIncoming = it.direction == TransferDirection.DOWNLOAD,
+                        totalBytes = it.size,
+                        dateLabel = "Hoje",
+                        sha256Hash = it.sha256Local ?: "SHA-256 verificado",
+                        isVerified = it.status == TransferStatus.VERIFICADO
+                    )
+                }
+            }
+            val errorTransfers = remember(transfersList) {
+                transfersList.filter { it.status == TransferStatus.ERRO }.map {
+                    com.example.ui.ErrorTransferItem(
+                        id = it.id.toString(),
+                        name = it.name,
+                        isIncoming = it.direction == TransferDirection.DOWNLOAD,
+                        totalBytes = it.size,
+                        failedPercentage = (it.progress * 100).toInt(),
+                        technicalMessage = it.error ?: "Stream reset",
+                        friendlyExplanation = "Falha de rede durante a transferência"
+                    )
+                }
+            }
+
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                containerColor = HyprColors.Background,
+                bottomBar = {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(1.dp, DarkOutline, RoundedCornerShape(12.dp))
-                            .background(DarkSurface, RoundedCornerShape(12.dp))
-                            .clickable { showWorkstationSelectorDialog = true }
-                            .padding(start = 14.dp, top = 12.dp, end = 10.dp, bottom = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .height(56.dp)
+                            .background(HyprColors.Background)
+                            .drawBehind {
+                                drawLine(
+                                    color = HyprColors.BorderNormal,
+                                    start = Offset(0f, 0f),
+                                    end = Offset(size.width, 0f),
+                                    strokeWidth = 1.dp.toPx()
+                                )
+                            }
+                            .testTag("bottom_nav_bar"),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val currentStatusColor = when (connStatus) {
-                            ConnectionStatus.CONNECTED -> CyanActive
-                            ConnectionStatus.CONNECTING -> AmberWarning
-                            ConnectionStatus.DISCONNECTED -> RedError
-                        }
-                        val currentStatusText = when (connStatus) {
-                            ConnectionStatus.CONNECTED -> "ON"
-                            ConnectionStatus.CONNECTING -> "SYNC"
-                            ConnectionStatus.DISCONNECTED -> "OFF"
-                        }
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            // Pulsing dot
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(currentStatusColor)
-                                    .drawBehind {
-                                        if (connStatus == ConnectionStatus.CONNECTED) {
-                                            drawCircle(
-                                                color = CyanActive,
-                                                radius = (size.minDimension / 2f) * pulseScale,
-                                                alpha = 0.3f * pulseAlpha
-                                            )
-                                        }
-                                    }
-                            )
-
-                            Column {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Text(
-                                        text = deviceName,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Default.ArrowDropDown,
-                                        contentDescription = "Mudar Estação",
-                                        tint = TextSecondary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                                Text(
-                                    text = when (connStatus) {
-                                        ConnectionStatus.CONNECTED -> "Hyprland · latência 4 ms · TLS emparelhado"
-                                        ConnectionStatus.CONNECTING -> "A negociar ligação segura QUIC..."
-                                        ConnectionStatus.DISCONNECTED -> "Desconectado · Toque para escolher estação"
-                                    },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = TextSecondary,
-                                    fontSize = 11.sp
-                                )
-                            }
-                        }
-
-                        // Toggle switch represented by raw visual "ON" / "OFF" / "SYNC" indicator button
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(currentStatusColor.copy(alpha = 0.1f))
-                                .border(
-                                    1.dp,
-                                    currentStatusColor,
-                                    RoundedCornerShape(6.dp)
-                                )
-                                .clickable {
-                                    isServiceActive = !isServiceActive
-                                    if (isServiceActive && !hasRequestedBatteryExemptionThisSession) {
-                                        val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
-                                        val isIgnoring = pm?.isIgnoringBatteryOptimizations(context.packageName) ?: true
-                                        if (!isIgnoring) {
-                                            showBatteryExemptionDialog = true
-                                        }
-                                    }
-                                }
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = currentStatusText,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = JetBrainsMono,
-                                color = currentStatusColor
-                            )
-                        }
-                    }
-
-                    // ==========================================
-                    // 2xN MODULES GRID (THE 6 MODULES)
-                    // ==========================================
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        // Row 1: Media & Files
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                ModuleCard(
-                                    index = "01",
-                                    statusState = if (mediaState != null) "on" else "idle",
-                                    iconText = "▷",
-                                    title = "Media",
-                                    description = "MPRIS e volume remoto",
-                                    onClick = { currentTab = "audio" }
-                                )
-                            }
-                            Box(modifier = Modifier.weight(1f)) {
-                                ModuleCard(
-                                    index = "02",
-                                    statusState = if (fileSendingProgress != null) "on" else "idle",
-                                    iconText = "⧉",
-                                    title = "Files",
-                                    description = "Envio de ficheiros SFTP",
-                                    onClick = { currentTab = "transfers" }
-                                )
-                            }
-                        }
-
-                        // Row 2: Track & Clip
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                ModuleCard(
-                                    index = "03",
-                                    statusState = if (connStatus == ConnectionStatus.CONNECTED) "on" else "idle",
-                                    iconText = "⌖",
-                                    title = "Track",
-                                    description = "Sensores e rato virtual",
-                                    onClick = {
-                                        currentTab = "touchpad"
-                                    }
-                                )
-                            }
-                            Box(modifier = Modifier.weight(1f)) {
-                                ModuleCard(
-                                    index = "04",
-                                    statusState = if (connStatus == ConnectionStatus.CONNECTED) "amber" else "idle",
-                                    iconText = "⎘",
-                                    title = "Clip",
-                                    description = "Área de transferência",
-                                    onClick = {
-                                        val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        if (clipboardManager.hasPrimaryClip()) {
-                                            val clipData = clipboardManager.primaryClip
-                                            if (clipData != null && clipData.itemCount > 0) {
-                                                val text = clipData.getItemAt(0).text?.toString() ?: ""
-                                                if (text.isNotEmpty()) {
-                                                    coroutineScope.launch {
-                                                        try {
-                                                            ConnectionRepository.sendClipboardText(text)
-                                                            Toast.makeText(context, "Clip enviado!", Toast.LENGTH_SHORT).show()
-                                                        } catch (e: Exception) {
-                                                            Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_SHORT).show()
-                                                        }
-                                                    }
-                                                } else {
-                                                    Toast.makeText(context, "Clip está vazio!", Toast.LENGTH_SHORT).show()
-                                                }
-                                            }
-                                        } else {
-                                            Toast.makeText(context, "Sem conteúdo para copiar.", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                )
-                            }
-                        }
-
-                        // Row 3: Control & DevKit
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                ModuleCard(
-                                    index = "05",
-                                    statusState = if (connStatus == ConnectionStatus.CONNECTED) "on" else "idle",
-                                    iconText = "⌘",
-                                    title = "Control",
-                                    description = "Hyprland IPC e atalhos",
-                                    onClick = { currentTab = "desktop" }
-                                )
-                            }
-                            Box(modifier = Modifier.weight(1f)) {
-                                ModuleCard(
-                                    index = "06",
-                                    statusState = "idle",
-                                    iconText = "⚙",
-                                    title = "Config",
-                                    description = "Definições e permissões",
-                                    onClick = { currentTab = "notifications" }
-                                )
-                            }
-                        }
-                        // Row 4: Webcam
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                ModuleCard(
-                                    index = "07",
-                                    statusState = if (isWebcamStreaming) "on" else "idle",
-                                    iconText = "◎",
-                                    title = "Webcam",
-                                    description = "Câmara remota do PC",
-                                    onClick = {
-                                        if (isWebcamStreaming) {
-                                            WebcamStreamer.stop()
-                                        } else {
-                                            Toast.makeText(context, "Ative a webcam através do PC.", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                )
-                            }
-                            Box(modifier = Modifier.weight(1f)) {
-                                // Empty spacer box to maintain grid alignment
-                            }
-                        }
-                    }
-
-                    // ==========================================
-                    // TELEMETRY TICKER
-                    // ==========================================
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, DarkOutline, RoundedCornerShape(12.dp))
-                            .background(DarkSurface, RoundedCornerShape(12.dp))
-                            .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "TELEMETRIA DO TELEMÓVEL",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSecondary,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = JetBrainsMono
+                        val navItems = listOf(
+                            Triple("dashboard", Icons.Default.Terminal, "INÍCIO"),
+                            Triple("audio", Icons.Default.PlayArrow, "MÉDIA"),
+                            Triple("touchpad", Icons.Default.Keyboard, "RATO"),
+                            Triple("desktop", Icons.Default.Monitor, "AÇÕES"),
+                            Triple("transfers", Icons.Default.SwapVert, "FICH."),
+                            Triple("notifications", Icons.Default.Settings, "CONFIG")
                         )
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("MIC", style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
-                            Text(
-                                text = if (isServiceActive) "bridge ativo" else "suspenso",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isServiceActive) CyanActive else TextSecondary,
-                                fontFamily = JetBrainsMono
-                            )
-                        }
+                        navItems.forEach { (route, icon, label) ->
+                            val isSelected = currentTab == route
+                            val itemColor = if (isSelected) HyprColors.NeonGreen else HyprColors.InactiveGray
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("WEBCAM", style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
-                            Text(
-                                text = if (connStatus == ConnectionStatus.CONNECTED) "disponível" else "offline",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = if (connStatus == ConnectionStatus.CONNECTED) CyanActive else RedError,
-                                fontFamily = JetBrainsMono
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("SCREEN SHARE", style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
-                            Text(
-                                text = if (connStatus == ConnectionStatus.CONNECTED) "standby" else "offline",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = if (connStatus == ConnectionStatus.CONNECTED) AmberWarning else RedError,
-                                fontFamily = JetBrainsMono
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("WORKSPACE", style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
-                            Text(
-                                text = if (connStatus == ConnectionStatus.CONNECTED) "3 · code" else "---",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = if (connStatus == ConnectionStatus.CONNECTED) CyanActive else TextSecondary,
-                                fontFamily = JetBrainsMono
-                            )
-                        }
-
-                        // Web Link for pairing management inside telemetries
-                        Text(
-                            text = ">> [GERIR ESTAÇÕES / EMPARELHAR]",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontFamily = JetBrainsMono,
-                            color = CyanActive,
-                            modifier = Modifier
-                                .clickable { showWorkstationSelectorDialog = true }
-                                .padding(top = 4.dp)
-                        )
-                    }
-
-                    // ==========================================
-                    // LIVE DIAGNOSTICS & FEEDS (TERMINAL)
-                    // ==========================================
-                    AnimatedVisibility(
-                        with(this) { fileSendingProgress != null || fileSendingStatus != null },
-                        enter = expandVertically() + fadeIn(),
-                        exit = shrinkVertically() + fadeOut()
-                    ) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, CyanActive.copy(alpha = 0.5f))
-                        ) {
                             Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Transferência de Ficheiro",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Default.Share,
-                                        contentDescription = "Sharing progress",
-                                        tint = CyanActive,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-
-                                Text(
-                                    text = fileSendingStatus ?: "A transferir...",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = TextSecondary
-                                )
-
-                                val progress = fileSendingProgress ?: 0f
-                                LinearProgressIndicator(
-                                    progress = progress,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(6.dp)
-                                        .clip(RoundedCornerShape(3.dp)),
-                                    color = CyanActive,
-                                    trackColor = DarkOutline
-                                )
-                            }
-                        }
-                    }
-
-                    // --- NOW PLAYING MEDIA WIDGET ---
-                    AnimatedVisibility(
-                        visible = mediaState != null,
-                        enter = expandVertically() + fadeIn(),
-                        exit = shrinkVertically() + fadeOut()
-                    ) {
-                        mediaState?.let { ms ->
-                            val isPlaying = ms.status.lowercase() == "playing"
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                                shape = RoundedCornerShape(12.dp),
-                                border = BorderStroke(1.dp, DarkOutline)
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.PlayArrow,
-                                                contentDescription = "Media Player Icon",
-                                                tint = CyanActive,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Text(
-                                                text = "A REPRODUZIR NO PC",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = TextSecondary
-                                            )
-                                        }
-                                        Text(
-                                            text = ms.player,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontFamily = JetBrainsMono,
-                                            color = CyanActive
-                                        )
-                                    }
-
-                                    Column {
-                                        Text(
-                                            text = ms.title ?: "Sem Título",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TextPrimary,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Text(
-                                            text = ms.artist ?: "Artista Desconhecido",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = TextSecondary,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceEvenly,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        IconButton(onClick = {
-                                            coroutineScope.launch { ConnectionRepository.sendMediaCommand("previous") }
-                                        }) {
-                                            Icon(
-                                                imageVector = Icons.Default.Refresh,
-                                                contentDescription = "Anterior",
-                                                tint = TextPrimary,
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                        }
-
-                                        FloatingActionButton(
-                                            onClick = {
-                                                coroutineScope.launch { ConnectionRepository.sendMediaCommand("playpause") }
-                                            },
-                                            containerColor = CyanActive,
-                                            contentColor = Color.Black,
-                                            shape = CircleShape,
-                                            modifier = Modifier.size(48.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = if (isPlaying) Icons.Default.Close else Icons.Default.PlayArrow,
-                                                contentDescription = "Play/Pause",
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                        }
-
-                                        IconButton(onClick = {
-                                            coroutineScope.launch { ConnectionRepository.sendMediaCommand("next") }
-                                        }) {
-                                            Icon(
-                                                imageVector = Icons.Default.ArrowForward,
-                                                contentDescription = "Seguinte",
-                                                tint = TextPrimary,
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // --- TERMINAL DIAGNOSTICS LOG PANEL ---
-                    
-                    if (showFullScreenConsole) {
-                        Dialog(onDismissRequest = { showFullScreenConsole = false }) {
-                            Surface(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .fillMaxHeight(0.9f)
-                                    .clip(RoundedCornerShape(12.dp)),
-                                color = DarkSurface,
-                                border = BorderStroke(1.dp, DarkOutline)
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clickable { currentTab = route },
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
                             ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(16.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "Terminal Diagnostics Console",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TextPrimary
-                                        )
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            IconButton(onClick = {
-                                                val logText = ConnectionRepository.getFullLogText()
-                                                val sendIntent = android.content.Intent().apply {
-                                                    action = android.content.Intent.ACTION_SEND
-                                                    putExtra(android.content.Intent.EXTRA_TITLE, "logs.md")
-                                                    putExtra(android.content.Intent.EXTRA_TEXT, logText)
-                                                    type = "text/plain"
-                                                }
-                                                val shareIntent = android.content.Intent.createChooser(sendIntent, "Exportar Logs (.md)")
-                                                context.startActivity(shareIntent)
-                                            }) {
-                                                Icon(Icons.Default.Share, contentDescription = "Export Log", tint = TextPrimary)
-                                            }
-                                            IconButton(onClick = {
-                                                ConnectionRepository.clearLogs()
-                                            }) {
-                                                Icon(Icons.Default.Delete, contentDescription = "Clear Logs", tint = TextPrimary)
-                                            }
-                                            IconButton(onClick = { showFullScreenConsole = false }) {
-                                                Icon(Icons.Default.Close, contentDescription = "Close", tint = TextPrimary)
-                                            }
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .weight(1f)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(Color.Black)
-                                            .border(1.dp, DarkOutline, RoundedCornerShape(8.dp))
-                                            .padding(10.dp)
-                                    ) {
-                                        val logScrollState = rememberScrollState()
-                                        LaunchedEffect(repositoryLogs.size) {
-                                            logScrollState.animateScrollTo(logScrollState.maxValue)
-                                        }
-
-                                        Column(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .verticalScroll(logScrollState),
-                                            verticalArrangement = Arrangement.spacedBy(3.dp)
-                                        ) {
-                                            if (repositoryLogs.isEmpty()) {
-                                                Text(
-                                                    text = "[SYSTEM] Console de diagnóstico pronto. À espera de conexões...",
-                                                    color = TextSecondary,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontFamily = JetBrainsMono
-                                                )
-                                            } else {
-                                                repositoryLogs.forEach { log ->
-                                                    val logColor = when {
-                                                        log.contains("[ERROR]") || log.contains("failed") -> RedError
-                                                        log.contains("[SUCCESS]") || log.contains("Successfully") -> CyanActive
-                                                        log.contains("[WARN]") -> AmberWarning
-                                                        log.contains("[CLIPBOARD]") -> CyanActive.copy(alpha = 0.8f)
-                                                        else -> TextSecondary
-                                                    }
-                                                    Text(
-                                                        text = log,
-                                                        color = logColor,
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        fontFamily = JetBrainsMono
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(DarkSurface, RoundedCornerShape(12.dp))
-                            .border(1.dp, DarkOutline, RoundedCornerShape(12.dp))
-                            .padding(16.dp)
-                            .testTag("quic_test_console"),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = "Terminal Diagnostics Console",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "Live QUIC/CBOR link multiplexer activities",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TextSecondary
-                                )
-                            }
-                            IconButton(onClick = { showFullScreenConsole = true }) {
                                 Icon(
-                                    imageVector = Icons.Default.List,
-                                    contentDescription = "Terminal",
-                                    tint = CyanActive,
-                                    modifier = Modifier.size(24.dp)
+                                    imageVector = icon,
+                                    contentDescription = label,
+                                    tint = itemColor,
+                                    modifier = Modifier.size(20.dp)
                                 )
-                            }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(130.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.Black)
-                                .border(1.dp, DarkOutline, RoundedCornerShape(8.dp))
-                                .padding(10.dp)
-                        ) {
-                            val logScrollState = rememberScrollState()
-                            LaunchedEffect(repositoryLogs.size) {
-                                logScrollState.animateScrollTo(logScrollState.maxValue)
-                            }
-
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .verticalScroll(logScrollState),
-                                verticalArrangement = Arrangement.spacedBy(3.dp)
-                            ) {
-                                if (repositoryLogs.isEmpty()) {
-                                    Text(
-                                        text = "[SYSTEM] Console de diagnóstico pronto. À espera de conexões...",
-                                        color = TextSecondary,
-                                        style = MaterialTheme.typography.labelSmall,
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
                                         fontFamily = JetBrainsMono
-                                    )
-                                } else {
-                                    repositoryLogs.forEach { log ->
-                                        val logColor = when {
-                                            log.contains("[ERROR]") || log.contains("failed") -> RedError
-                                            log.contains("[SUCCESS]") || log.contains("Successfully") -> CyanActive
-                                            log.contains("[WARN]") -> AmberWarning
-                                            log.contains("[CLIPBOARD]") -> CyanActive.copy(alpha = 0.8f)
-                                            else -> TextSecondary
-                                        }
-                                        Text(
-                                            text = log,
-                                            color = logColor,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontFamily = JetBrainsMono,
-                                            lineHeight = 14.sp
-                                        )
-                                    }
-                                }
-                                
-                                // Glowing Green Blinking Hacker Cursor
-                                val blinkingTransition = rememberInfiniteTransition(label = "CursorBlink")
-                                val cursorAlpha by blinkingTransition.animateFloat(
-                                    initialValue = 0f,
-                                    targetValue = 1f,
-                                    animationSpec = infiniteRepeatable(
-                                        animation = tween(600, easing = LinearEasing),
-                                        repeatMode = RepeatMode.Reverse
                                     ),
-                                    label = "CursorAlpha"
+                                    color = itemColor
                                 )
-                                
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(top = 2.dp)
-                                ) {
-                                    Text(
-                                        text = "> hyprlink_mux --status=listen ",
-                                        color = CyanActive,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontFamily = JetBrainsMono
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .size(width = 6.dp, height = 12.dp)
-                                            .background(CyanActive.copy(alpha = cursorAlpha))
-                                    )
-                                }
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .width(16.dp)
+                                        .height(2.dp)
+                                        .background(if (isSelected) HyprColors.NeonGreen else Color.Transparent, CircleShape)
+                                )
                             }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
                 }
-            } else if (currentTab == "desktop") {
-                MissionControlScreen(
-                    modifier = Modifier.weight(1f)
-                )
-            } else if (currentTab == "transfers") {
-                TransfersScreen(
-                    onBack = { currentTab = "dashboard" },
-                    modifier = Modifier.weight(1f)
-                )
-            } else if (currentTab == "notifications") {
-                NotificationsSettingsScreen(
-                    onBack = { currentTab = "dashboard" },
-                    modifier = Modifier.weight(1f)
-                )
-            } else if (currentTab == "touchpad") {
-                TouchpadScreen(
-                    onBack = { currentTab = "dashboard" },
-                    modifier = Modifier.weight(1f)
-                )
-            } else if (currentTab == "audio") {
-                AudioScreen(
-                    onBack = { currentTab = "dashboard" },
-                    modifier = Modifier.weight(1f)
-                )
+            ) { innerPadding ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .background(HyprColors.Background)
+                ) {
+                    when (currentTab) {
+                        "dashboard" -> {
+                            com.example.ui.DashboardScreen(
+                                linkState = currentLinkState,
+                                deviceName = deviceName,
+                                onDeviceClick = { showWorkstationSelectorDialog = true },
+                                onStateButtonClick = { isServiceActive = !isServiceActive },
+                                mediaTitle = mediaState?.title ?: "Nenhuma faixa a reproduzir",
+                                mediaArtist = mediaState?.artist ?: "Hyprland Audio Sink",
+                                isPlaying = isMediaPlaying,
+                                onPrevClick = { coroutineScope.launch { ConnectionRepository.sendMediaCommand("previous") } },
+                                onPlayPauseClick = { coroutineScope.launch { ConnectionRepository.sendMediaCommand("playpause") } },
+                                onNextClick = { coroutineScope.launch { ConnectionRepository.sendMediaCommand("next") } },
+                                progress = mediaProgress,
+                                elapsedTime = mediaElapsedTime,
+                                totalTime = mediaTotalTime,
+                                clipboardContent = clipboardText,
+                                clipboardStateText = if (clipboardText.isNotEmpty()) "sincronizado há pouco" else "vazio",
+                                clipboardStateColor = if (clipboardText.isNotEmpty()) HyprColors.NeonGreen else HyprColors.InactiveGray,
+                                onSendClipboardClick = {
+                                    val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    if (clipboardManager.hasPrimaryClip()) {
+                                        val clipData = clipboardManager.primaryClip
+                                        if (clipData != null && clipData.itemCount > 0) {
+                                            val clipText = clipData.getItemAt(0).text?.toString() ?: ""
+                                            if (clipText.isNotEmpty()) {
+                                                coroutineScope.launch {
+                                                    try {
+                                                        ConnectionRepository.sendClipboardText(clipText)
+                                                        Toast.makeText(context, "Clip enviado!", Toast.LENGTH_SHORT).show()
+                                                    } catch (e: Exception) {
+                                                        Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                onReceiveClipboardClick = {
+                                    val text = ConnectionRepository.lastReceivedClipboardText
+                                    if (text.isNotEmpty()) {
+                                        val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        clipboardManager.setPrimaryClip(ClipData.newPlainText("HyprLink", text))
+                                        Toast.makeText(context, "Copiado para o Android!", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                onSendFilesClick = { filePickerLauncher.launch("*/*") },
+                                onWebcamClick = {
+                                    if (isWebcamStreaming) {
+                                        WebcamStreamer.stop()
+                                    } else {
+                                        Toast.makeText(context, "Aguarde solicitação da câmara pelo PC", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                webcamActive = isWebcamStreaming,
+                                controlService = if (currentLinkState == com.example.ui.theme.LinkState.CONNECTED) com.example.ui.theme.ServiceState.ACTIVE else com.example.ui.theme.ServiceState.INACTIVE,
+                                webcamService = if (isWebcamStreaming) com.example.ui.theme.ServiceState.ACTIVE else com.example.ui.theme.ServiceState.INACTIVE,
+                                micBridgeService = if (isMicOn) com.example.ui.theme.ServiceState.ACTIVE else com.example.ui.theme.ServiceState.INACTIVE,
+                                notifsService = com.example.ui.theme.ServiceState.ACTIVE,
+                                cpuUsage = 14,
+                                ramUsageGB = 6,
+                                tempCelsius = 43,
+                                batteryPercent = batteryLevel ?: 100,
+                                onDetailClick = { currentTab = "desktop" },
+                                terminalLogs = repositoryLogs,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        "audio" -> {
+                            com.example.ui.AudioScreen(
+                                onBack = { currentTab = "dashboard" },
+                                mediaAppSource = "Spotify",
+                                mediaTitle = mediaState?.title ?: "Nenhuma faixa a reproduzir",
+                                mediaArtist = mediaState?.artist ?: "Hyprland Audio Sink",
+                                elapsedTime = mediaElapsedTime,
+                                totalTime = mediaTotalTime,
+                                isPlaying = isMediaPlaying,
+                                onPrevClick = { coroutineScope.launch { ConnectionRepository.sendMediaCommand("previous") } },
+                                onPlayPauseClick = { coroutineScope.launch { ConnectionRepository.sendMediaCommand("playpause") } },
+                                onNextClick = { coroutineScope.launch { ConnectionRepository.sendMediaCommand("next") } },
+                                isListenOnPhone = isAudioStreamingPhone,
+                                onToggleListenOnPhone = { enable ->
+                                    if (enable) {
+                                        coroutineScope.launch {
+                                            val tapId = ConnectionRepository.startAudioTap()
+                                            if (tapId == null) {
+                                                Toast.makeText(context, "Erro ao iniciar áudio no telemóvel", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    } else {
+                                        coroutineScope.launch {
+                                            ConnectionRepository.stopAudioTap()
+                                            AudioStreamPlayer.stop()
+                                        }
+                                    }
+                                },
+                                sinks = audioSinks,
+                                onSelectDefaultSink = { sinkName ->
+                                    coroutineScope.launch { ConnectionRepository.setAudioDefaultSink(sinkName) }
+                                },
+                                onSinkVolumeChange = { sinkId, vol ->
+                                    audioSinks = audioSinks.map { if (it.id == sinkId) it.copy(volume = vol) else it }
+                                    coroutineScope.launch { ConnectionRepository.setAudioVolume("sink", sinkId, vol) }
+                                },
+                                onSinkMuteToggle = { sinkId, mute ->
+                                    audioSinks = audioSinks.map { if (it.id == sinkId) it.copy(isMuted = mute) else it }
+                                    coroutineScope.launch { ConnectionRepository.setAudioMute("sink", sinkId, mute) }
+                                },
+                                apps = audioApps,
+                                onAppVolumeChange = { appId, vol ->
+                                    audioApps = audioApps.map { if (it.id == appId) it.copy(volume = vol) else it }
+                                    coroutineScope.launch { ConnectionRepository.setAudioVolume("app", appId, vol) }
+                                },
+                                onAppMuteToggle = { appId, mute ->
+                                    audioApps = audioApps.map { if (it.id == appId) it.copy(isMuted = mute) else it }
+                                    coroutineScope.launch { ConnectionRepository.setAudioMute("app", appId, mute) }
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        "touchpad" -> {
+                            com.example.ui.TouchpadScreen(
+                                deviceName = deviceName,
+                                onMouseMove = { dx, dy ->
+                                    coroutineScope.launch { ConnectionRepository.sendInputMove((dx * 1.5f).toInt(), (dy * 1.5f).toInt()) }
+                                },
+                                onMouseClick = { btn ->
+                                    val btnStr = when (btn) {
+                                        2 -> "middle"
+                                        3 -> "right"
+                                        else -> "left"
+                                    }
+                                    coroutineScope.launch { ConnectionRepository.sendInputClick(btnStr) }
+                                },
+                                onScroll = { dx, dy ->
+                                    coroutineScope.launch { ConnectionRepository.sendInputScroll(dx.toInt(), dy.toInt()) }
+                                },
+                                onSendKey = { key ->
+                                    coroutineScope.launch { ConnectionRepository.sendInputKey(key) }
+                                },
+                                onSendText = { text ->
+                                    coroutineScope.launch { ConnectionRepository.sendInputType(text) }
+                                },
+                                onToggleKeyboardDialog = {
+                                    // toggle software keyboard
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        "desktop" -> {
+                            com.example.ui.MissionControlScreen(
+                                workspaces = mcWorkspaces,
+                                windows = mcWindows,
+                                onSelectWorkspace = { wsId ->
+                                    mcWorkspaces = mcWorkspaces.map { it.copy(isActive = it.id == wsId) }
+                                    coroutineScope.launch { ConnectionRepository.dispatchHyprCommand("workspace $wsId") }
+                                },
+                                onLaunchApp = { appName ->
+                                    coroutineScope.launch { ConnectionRepository.dispatchHyprCommand("exec $appName") }
+                                },
+                                onCloseWindow = { addr ->
+                                    mcWindows = mcWindows.filter { it.address != addr }
+                                    coroutineScope.launch { ConnectionRepository.dispatchHyprCommand("closewindow address:$addr") }
+                                },
+                                onFocusWindow = { addr ->
+                                    mcWindows = mcWindows.map { it.copy(isFocused = it.address == addr) }
+                                    coroutineScope.launch { ConnectionRepository.dispatchHyprCommand("focuswindow address:$addr") }
+                                },
+                                onRefresh = {
+                                    coroutineScope.launch {
+                                        if (connStatus == ConnectionStatus.CONNECTED) {
+                                            try {
+                                                ConnectionRepository.dispatchHyprCommand("j/workspaces")
+                                            } catch (e: Exception) {}
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        "transfers" -> {
+                            com.example.ui.TransfersScreen(
+                                onBack = { currentTab = "dashboard" },
+                                activeTransfers = activeTransfers,
+                                completedTransfers = completedTransfers,
+                                errorTransfers = errorTransfers,
+                                onSendFileClick = { filePickerLauncher.launch("*/*") },
+                                onRetryTransfer = { id ->
+                                    filePickerLauncher.launch("*/*")
+                                },
+                                onDeleteErrorTransfer = { id ->
+                                    ConnectionRepository.clearTransfers()
+                                },
+                                onClearHistory = {
+                                    ConnectionRepository.clearPersistentHistory(context)
+                                    ConnectionRepository.clearTransfers()
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        "notifications" -> {
+                            NotificationsSettingsScreen(
+                                onBack = { currentTab = "dashboard" },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+                }
             }
         }
     }
-    }
-    }
 
-    // --- DIALOGS REGISTRATION ---
+        // --- DIALOGS REGISTRATION ---
 
     if (isWebcamStreaming) {
         val currentView = androidx.compose.ui.platform.LocalView.current
@@ -2160,26 +1620,48 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
         var inputPort by remember { mutableStateOf(if (devicePort.isNotBlank() && devicePort != "----") devicePort else ConnectionUtils.HYPRLINK_SERVICE_PORT.toString()) }
         var inputFingerprint by remember { mutableStateOf(if (deviceFingerprint.isNotBlank() && deviceFingerprint != "Nenhum fingerprint configurado") deviceFingerprint else "") }
 
-        Dialog(onDismissRequest = { showNewPairDialog = false }) {
+        Dialog(
+            onDismissRequest = { showNewPairDialog = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(24.dp),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
+                    .fillMaxWidth(0.95f)
+                    .fillMaxHeight(0.92f)
+                    .padding(vertical = 12.dp)
             ) {
                 Column(
                     modifier = Modifier
-                        .padding(24.dp)
+                        .fillMaxSize()
+                        .padding(20.dp)
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text(
-                        text = "Pair New Workstation",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Ligar ao Computador",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Emparelhamento mTLS seguro via QUIC",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = { showNewPairDialog = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "Fechar", tint = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
 
                     // Tab selector
                     Row(
@@ -2191,7 +1673,7 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                     ) {
                         Button(
                             onClick = { scanTabSelected = true },
-                            modifier = Modifier.weight(1f).height(36.dp),
+                            modifier = Modifier.weight(1f).height(40.dp),
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (scanTabSelected) MaterialTheme.colorScheme.surface else Color.Transparent,
@@ -2199,12 +1681,14 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                             ),
                             contentPadding = PaddingValues(0.dp)
                         ) {
-                            Text("Scan QR", style = MaterialTheme.typography.labelSmall)
+                            Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Escanear QR Code", style = MaterialTheme.typography.labelMedium)
                         }
 
                         Button(
                             onClick = { scanTabSelected = false },
-                            modifier = Modifier.weight(1f).height(36.dp),
+                            modifier = Modifier.weight(1f).height(40.dp),
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (!scanTabSelected) MaterialTheme.colorScheme.surface else Color.Transparent,
@@ -2212,7 +1696,9 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                             ),
                             contentPadding = PaddingValues(0.dp)
                         ) {
-                            Text("Manual", style = MaterialTheme.typography.labelSmall)
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Manual", style = MaterialTheme.typography.labelMedium)
                         }
                     }
 
@@ -2227,7 +1713,7 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                                 verticalArrangement = Arrangement.Center
                             ) {
                                 Text(
-                                    text = "Permissão de camera necessária",
+                                    text = "Permissão de câmara necessária para ler o QR Code",
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     style = MaterialTheme.typography.bodyMedium,
                                     textAlign = TextAlign.Center
@@ -2237,7 +1723,7 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                                     onClick = { launcher.launch(Manifest.permission.CAMERA) },
                                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                                 ) {
-                                    Text("Permitir Camera", color = TerminalBlack)
+                                    Text("Permitir Câmara", color = TerminalBlack, fontWeight = FontWeight.Bold)
                                 }
                             }
                         } else {
@@ -2245,7 +1731,7 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(200.dp)
+                                    .height(220.dp)
                                     .clip(RoundedCornerShape(16.dp))
                                     .background(TerminalBlack),
                                 contentAlignment = Alignment.Center
@@ -2254,7 +1740,7 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                                     onQrCodeScanned = { qrText ->
                                         if (!isPairingInProgress) {
                                             isPairingInProgress = true
-                                            pairingLogs = listOf("[INFO] QR Code scanned! Parsing connection metadata...")
+                                            pairingLogs = listOf("[INFO] QR Code detectado! A ler metadados...")
                                             coroutineScope.launch {
                                                 val logsList = mutableListOf<String>()
                                                 fun logPair(msg: String) {
@@ -2265,7 +1751,9 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                                                 try {
                                                     val parsed = parsePairingQr(qrText)
                                                     if (parsed == null) {
-                                                        logPair("[ERROR] QR code inválido — formato não reconhecido.")
+                                                        logPair("[ERROR] QR code com formato inválido!")
+                                                        logPair("[INFO] Formato esperado: FINGERPRINT|HOST:PORT|TOKEN")
+                                                        logPair("[INFO] Conteúdo lido: ${qrText.take(50)}...")
                                                         isPairingInProgress = false
                                                         return@launch
                                                     }
@@ -2274,11 +1762,11 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                                                     val fingerprint = parsed.fingerprint
                                                     val token = parsed.pairingToken
 
-                                                    logPair("[INFO] Host: $host:$port")
-                                                    logPair("[INFO] Handshake pairingToken: $token")
-                                                    logPair("[INFO] Fingerprint: $fingerprint")
-                                                    logPair("[INFO] A iniciar emparelhamento criptográfico...")
-                                                     val wkName = withContext(Dispatchers.IO) {
+                                                    logPair("[INFO] Alvo: $host:$port")
+                                                    logPair("[INFO] Fingerprint: ${fingerprint.take(16)}...")
+                                                    logPair("[INFO] Handshake pairingToken: ${token.take(12)}...")
+                                                    logPair("[INFO] A iniciar handshake criptográfico seguro...")
+                                                    val wkName = withContext(Dispatchers.IO) {
                                                         executePairingHandshake(
                                                             context = context,
                                                             localDeviceName = sharedPrefs.getString("local_device_name", "Android-Phone-Client") ?: "Android-Phone-Client",
@@ -2288,7 +1776,7 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                                                     }
 
                                                     if (wkName != null) {
-                                                        logPair("[SUCCESS] Workstation '$wkName' emparelhada!")
+                                                        logPair("[SUCCESS] Workstation '$wkName' emparelhada com sucesso!")
                                                         val newWs = PairedWorkstation(
                                                             id = java.util.UUID.randomUUID().toString(),
                                                             deviceName = wkName,
@@ -2299,13 +1787,13 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                                                         )
                                                         repository.insert(newWs)
                                                         activeWorkstationId = newWs.id
-                                                        delay(1500)
+                                                        delay(1800)
                                                         showNewPairDialog = false
                                                     } else {
-                                                        logPair("[ERROR] Handshake rejeitado ou falhou.")
+                                                        logPair("[ERROR] Handshake rejeitado ou expirado pelo PC.")
                                                     }
                                                 } catch (e: Exception) {
-                                                    logPair("[ERROR] Erro: ${e.message}")
+                                                    logPair("[ERROR] Falha: ${e.message}")
                                                 } finally {
                                                     isPairingInProgress = false
                                                 }
@@ -2314,35 +1802,105 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                                     }
                                 )
 
-                                // Green scanning corner lines over live preview
+                                // Scanning frame with corner accents
                                 Box(
                                     modifier = Modifier
-                                        .size(130.dp)
-                                        .border(2.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                                        .size(150.dp)
+                                        .border(2.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.8f), RoundedCornerShape(12.dp))
                                 )
                             }
                         }
 
-                        // Real-time pairing console log box
+                        // Terminal Header with Copy/Share actions
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Terminal de Emparelhamento",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                IconButton(
+                                    onClick = {
+                                        val fullText = pairingLogs.joinToString("\n")
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        clipboard.setPrimaryClip(ClipData.newPlainText("HyprLink Pairing Logs", fullText))
+                                        Toast.makeText(context, "Logs copiados para a área de transferência!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ContentCopy,
+                                        contentDescription = "Copiar Logs",
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        val fullText = pairingLogs.joinToString("\n")
+                                        val sendIntent = Intent().apply {
+                                            action = Intent.ACTION_SEND
+                                            putExtra(Intent.EXTRA_TITLE, "hyprlink-pairing-logs.txt")
+                                            putExtra(Intent.EXTRA_TEXT, fullText)
+                                            type = "text/plain"
+                                        }
+                                        context.startActivity(Intent.createChooser(sendIntent, "Partilhar Logs de Emparelhamento"))
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Share,
+                                        contentDescription = "Partilhar Logs",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Real-time pairing console log box (larger, selectable, clearer typography)
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(80.dp)
+                                .height(160.dp)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(TerminalBlack)
-                                .padding(8.dp)
+                                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                .padding(10.dp)
                         ) {
                             val scroll = rememberScrollState()
                             LaunchedEffect(pairingLogs.size) {
                                 scroll.animateScrollTo(scroll.maxValue)
                             }
-                            Column(modifier = Modifier.verticalScroll(scroll)) {
-                                pairingLogs.forEach { log ->
-                                    Text(
-                                        text = log,
-                                        color = if (log.contains("[ERROR]")) MaterialTheme.colorScheme.error else if (log.contains("[SUCCESS]")) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
+                            SelectionContainer {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(scroll),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    pairingLogs.forEach { log ->
+                                        val logColor = when {
+                                            log.contains("[ERROR]") -> RedError
+                                            log.contains("[SUCCESS]") -> CyanActive
+                                            log.contains("[DATA]") -> AmberWarning
+                                            else -> TextPrimary
+                                        }
+                                        Text(
+                                            text = log,
+                                            color = logColor,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontSize = 12.sp,
+                                                lineHeight = 16.sp,
+                                                fontFamily = JetBrainsMono
+                                            )
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -3186,6 +2744,14 @@ fun DesktopMainLayout(
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             IconButton(onClick = {
                                                 val logText = ConnectionRepository.getFullLogText()
+                                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                                clipboard.setPrimaryClip(ClipData.newPlainText("HyprLink Diagnostics Logs", logText))
+                                                Toast.makeText(context, "Logs copiados para a área de transferência!", Toast.LENGTH_SHORT).show()
+                                            }) {
+                                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy Logs", tint = CyanActive)
+                                            }
+                                            IconButton(onClick = {
+                                                val logText = ConnectionRepository.getFullLogText()
                                                 val sendIntent = android.content.Intent().apply {
                                                     action = android.content.Intent.ACTION_SEND
                                                     putExtra(android.content.Intent.EXTRA_TITLE, "logs.md")
@@ -3222,34 +2788,36 @@ fun DesktopMainLayout(
                                             logScrollState.animateScrollTo(logScrollState.maxValue)
                                         }
 
-                                        Column(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .verticalScroll(logScrollState),
-                                            verticalArrangement = Arrangement.spacedBy(3.dp)
-                                        ) {
-                                            if (repositoryLogs.isEmpty()) {
-                                                Text(
-                                                    text = "[SYSTEM] Console de diagnóstico pronto. À espera de conexões...",
-                                                    color = TextSecondary,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontFamily = JetBrainsMono
-                                                )
-                                            } else {
-                                                repositoryLogs.forEach { log ->
-                                                    val logColor = when {
-                                                        log.contains("[ERROR]") || log.contains("failed") -> RedError
-                                                        log.contains("[SUCCESS]") || log.contains("Successfully") -> CyanActive
-                                                        log.contains("[WARN]") -> AmberWarning
-                                                        log.contains("[CLIPBOARD]") -> CyanActive.copy(alpha = 0.8f)
-                                                        else -> TextSecondary
-                                                    }
+                                        SelectionContainer {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .verticalScroll(logScrollState),
+                                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                if (repositoryLogs.isEmpty()) {
                                                     Text(
-                                                        text = log,
-                                                        color = logColor,
-                                                        style = MaterialTheme.typography.labelSmall,
+                                                        text = "[SYSTEM] Console de diagnóstico pronto. À espera de conexões...",
+                                                        color = TextSecondary,
+                                                        style = MaterialTheme.typography.bodySmall,
                                                         fontFamily = JetBrainsMono
                                                     )
+                                                } else {
+                                                    repositoryLogs.forEach { log ->
+                                                        val logColor = when {
+                                                            log.contains("[ERROR]") || log.contains("failed") -> RedError
+                                                            log.contains("[SUCCESS]") || log.contains("Successfully") -> CyanActive
+                                                            log.contains("[WARN]") -> AmberWarning
+                                                            log.contains("[CLIPBOARD]") -> CyanActive.copy(alpha = 0.8f)
+                                                            else -> TextSecondary
+                                                        }
+                                                        Text(
+                                                            text = log,
+                                                            color = logColor,
+                                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                                                            fontFamily = JetBrainsMono
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -5506,6 +5074,13 @@ fun NotificationsSettingsScreen(
 
 private fun isNotificationListenerEnabled(context: Context): Boolean {
     val pkgName = context.packageName
+    try {
+        val enabledPackages = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(context)
+        if (enabledPackages.contains(pkgName)) {
+            return true
+        }
+    } catch (_: Exception) {
+    }
     val flat = android.provider.Settings.Secure.getString(
         context.contentResolver,
         "enabled_notification_listeners"

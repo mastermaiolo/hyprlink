@@ -33,32 +33,82 @@ data class ParsedPairingData(
     val pairingToken: String
 )
 
-// --- Helper to parse the QR Payload: fingerprint_hex|host:porta|token_hex ---
-fun parsePairingQr(payload: String): ParsedPairingData? {
-    val parts = payload.split("|")
-    if (parts.size != 3) return null
-    val fingerprint = parts[0].trim()
-    val hostPort = parts[1].trim()
-    val pairingToken = parts[2].trim()
-    
-    val lastColonIndex = hostPort.lastIndexOf(':')
-    if (lastColonIndex == -1) return null
-    
-    var host = hostPort.substring(0, lastColonIndex).trim()
-    val portStr = hostPort.substring(lastColonIndex + 1).trim()
-    val port = portStr.toIntOrNull() ?: return null
-    
-    // Remove IPv6 brackets if present
-    if (host.startsWith("[") && host.endsWith("]")) {
-        host = host.substring(1, host.length - 1).trim()
+// --- Helper to parse the QR Payload ---
+// Formatos aceitos:
+// 1. Canônico: "<FINGERPRINT_HEX>|<HOST>:<PORTA>|<TOKEN_HEX>"
+// 2. Sem delimitadores de fingerprint (com ou sem dois pontos)
+// 3. JSON: {"fingerprint": "...", "host": "...", "port": 7443, "token": "..."}
+// 4. URI: hyprlink://pair?fp=...&host=...&port=7443&token=...
+fun parsePairingQr(rawPayload: String): ParsedPairingData? {
+    val payload = rawPayload.trim()
+
+    // Formato 1: JSON
+    if (payload.startsWith("{") && payload.endsWith("}")) {
+        try {
+            val obj = org.json.JSONObject(payload)
+            val fp = obj.optString("fingerprint", obj.optString("fp", "")).trim()
+            val host = obj.optString("host", obj.optString("ip", "")).trim()
+            val port = obj.optInt("port", ConnectionUtils.HYPRLINK_SERVICE_PORT)
+            val token = obj.optString("pairing_token", obj.optString("token", "")).trim()
+            if (fp.isNotEmpty() && host.isNotEmpty()) {
+                return ParsedPairingData(
+                    fingerprint = fp,
+                    host = host.removePrefix("[").removeSuffix("]"),
+                    port = port,
+                    pairingToken = token
+                )
+            }
+        } catch (ignored: Exception) {}
     }
-    
-    return ParsedPairingData(
-        fingerprint = fingerprint,
-        host = host,
-        port = port,
-        pairingToken = pairingToken
-    )
+
+    // Formato 2: URI hyprlink://pair?...
+    if (payload.startsWith("hyprlink://", ignoreCase = true)) {
+        try {
+            val uri = android.net.Uri.parse(payload)
+            val fp = uri.getQueryParameter("fp") ?: uri.getQueryParameter("fingerprint") ?: ""
+            val host = uri.host ?: uri.getQueryParameter("host") ?: ""
+            val port = if (uri.port > 0) uri.port else (uri.getQueryParameter("port")?.toIntOrNull() ?: ConnectionUtils.HYPRLINK_SERVICE_PORT)
+            val token = uri.getQueryParameter("token") ?: uri.getQueryParameter("pairing_token") ?: ""
+            if (fp.isNotEmpty() && host.isNotEmpty()) {
+                return ParsedPairingData(
+                    fingerprint = fp,
+                    host = host,
+                    port = port,
+                    pairingToken = token
+                )
+            }
+        } catch (ignored: Exception) {}
+    }
+
+    // Formato 3: Canônico pipe-separated "<FINGERPRINT>|<HOST>:<PORT>|<TOKEN>"
+    val parts = payload.split("|")
+    if (parts.size >= 2) {
+        val fingerprint = parts[0].trim()
+        val hostPort = parts[1].trim()
+        val pairingToken = if (parts.size >= 3) parts[2].trim() else ""
+        
+        val lastColonIndex = hostPort.lastIndexOf(':')
+        val host: String
+        val port: Int
+        if (lastColonIndex != -1) {
+            host = hostPort.substring(0, lastColonIndex).trim().removePrefix("[").removeSuffix("]")
+            port = hostPort.substring(lastColonIndex + 1).trim().toIntOrNull() ?: ConnectionUtils.HYPRLINK_SERVICE_PORT
+        } else {
+            host = hostPort.trim().removePrefix("[").removeSuffix("]")
+            port = ConnectionUtils.HYPRLINK_SERVICE_PORT
+        }
+        
+        if (fingerprint.isNotEmpty() && host.isNotEmpty()) {
+            return ParsedPairingData(
+                fingerprint = fingerprint,
+                host = host,
+                port = port,
+                pairingToken = pairingToken
+            )
+        }
+    }
+
+    return null
 }
 
 // --- Helper to format hex into standard SHA-256 visual style with colons ---

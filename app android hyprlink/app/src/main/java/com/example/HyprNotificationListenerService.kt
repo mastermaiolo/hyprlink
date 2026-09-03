@@ -110,7 +110,13 @@ class HyprNotificationListenerService : NotificationListenerService() {
 
         // Extract metadata
         val title = notification.extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
-        val rawText = notification.extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+        var rawText = notification.extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+        if (rawText.isBlank()) {
+            val bigText = notification.extras?.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
+            if (!bigText.isNullOrBlank()) {
+                rawText = bigText
+            }
+        }
         val text = if (rawText.length > 2000) rawText.substring(0, 2000) else rawText
 
         // Resolve readable app name

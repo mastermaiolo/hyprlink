@@ -38,8 +38,10 @@ impl HudState {
 }
 
 pub fn push_log(state: &Arc<Mutex<HudState>>, line: impl Into<String>) {
+    let line = line.into();
+    println!("{line}");
     let mut s = state.lock().unwrap();
-    s.logs.push(line.into());
+    s.logs.push(line);
     let overflow = s.logs.len().saturating_sub(MAX_LOG_LINES);
     if overflow > 0 {
         s.logs.drain(0..overflow);
