@@ -11,11 +11,13 @@ use rustls::pki_types::CertificateDer;
 
 use crate::active::{self, ActiveConn};
 use crate::clip::{self, LastLocalSet};
+use crate::config::SharedConfig;
 use crate::identity::{fingerprint_der, ServerIdentity};
 use crate::input::InputDevice;
 use crate::notif;
 use crate::pairing::PairingStore;
 use crate::protocol::{body_get_bytes, body_get_str, read_frame, write_frame, Packet};
+use crate::share;
 use crate::state::{self, HudState};
 use crate::tls_verifier::AcceptAnyClientCert;
 use crate::{battery, hypr, media};
@@ -28,16 +30,20 @@ pub struct Ctx {
     pub clip_guard: LastLocalSet,
     pub input: Arc<InputDevice>,
     pub notif: notif::Registry,
+    pub incoming_files: share::IncomingRegistry,
+    pub config: SharedConfig,
 }
 
 impl Ctx {
-    pub fn new(hud: Arc<Mutex<HudState>>) -> Self {
+    pub fn new(hud: Arc<Mutex<HudState>>, config: SharedConfig) -> Self {
         Self {
             hud,
             active: active::new_registry(),
             clip_guard: clip::new_guard(),
             input: Arc::new(InputDevice::open()),
             notif: notif::new_registry(),
+            incoming_files: share::new_incoming_registry(),
+            config,
         }
     }
 }
@@ -152,6 +158,28 @@ async fn handle_connection(incoming: quinn::Incoming, pairing: Arc<Mutex<Pairing
 
     // Streams seguintes (incluindo mais chamadas na mesma stream de controlo,
     // se o app reabrir uma nova) são despachadas por tipo.
+    // Streams unidirecionais (ficheiros, por ora) chegam numa tarefa à
+    // parte — não competem com as streams de controlo bidirecionais.
+    {
+        let connection = connection.clone();
+        let ctx = ctx.clone();
+        tokio::spawn(async move {
+            loop {
+                let recv = match connection.accept_uni().await {
+                    Ok(recv) => recv,
+                    Err(_) => break,
+                };
+                tokio::spawn(share::receive_uni_stream(
+                    recv,
+                    ctx.incoming_files.clone(),
+                    ctx.active.clone(),
+                    ctx.hud.clone(),
+                    ctx.config.clone(),
+                ));
+            }
+        });
+    }
+
     loop {
         let (send, recv) = match connection.accept_bi().await {
             Ok(pair) => pair,
@@ -291,6 +319,15 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
         "input.key" => {
             if let Some(key) = body.and_then(|b| body_get_str(b, "key")) {
                 ctx.input.key(key);
+            }
+        }
+
+        "share.file" => {
+            if let Some(b) = body {
+                let name = body_get_str(b, "name").unwrap_or("arquivo").to_string();
+                let size = crate::protocol::body_get_i64(b, "size").unwrap_or(0).max(0) as u64;
+                state::push_log(hud, format!("[i] share.file · recebendo {name} ({size} bytes)"));
+                share::announce_incoming(packet.id, name, size, &ctx.incoming_files);
             }
         }
 

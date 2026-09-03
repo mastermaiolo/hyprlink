@@ -1,6 +1,7 @@
 mod active;
 mod battery;
 mod clip;
+mod config;
 mod gui;
 mod hypr;
 mod identity;
@@ -10,6 +11,7 @@ mod notif;
 mod pairing;
 mod protocol;
 mod server;
+mod share;
 mod state;
 mod tls_verifier;
 
@@ -27,24 +29,27 @@ fn main() -> anyhow::Result<()> {
 
     let token_hex = pairing.lock().unwrap().current_token_hex.clone();
     let hud = state::HudState::new(format!("{local_ip}:{PORT}"), identity.fingerprint_hex.clone(), token_hex.clone());
+    let config = config::load();
 
     print_terminal_qr(&identity.fingerprint_hex, local_ip, &token_hex)?;
 
     {
         let hud = hud.clone();
+        let config = config.clone();
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().expect("falha ao criar runtime tokio");
-            rt.block_on(run_daemon(identity, pairing, hud, local_ip));
+            rt.block_on(run_daemon(identity, pairing, hud, config, local_ip));
         });
     }
 
-    gui::run(hud).map_err(|e| anyhow::anyhow!("erro na GUI: {e}"))
+    gui::run(hud, config).map_err(|e| anyhow::anyhow!("erro na GUI: {e}"))
 }
 
 async fn run_daemon(
     identity: identity::ServerIdentity,
     pairing: Arc<Mutex<pairing::PairingStore>>,
     hud: Arc<Mutex<state::HudState>>,
+    config: config::SharedConfig,
     local_ip: std::net::IpAddr,
 ) {
     let addr: std::net::SocketAddr = format!("0.0.0.0:{PORT}").parse().expect("porta fixa válida");
@@ -56,7 +61,7 @@ async fn run_daemon(
             return;
         }
     };
-    let ctx = server::Ctx::new(hud);
+    let ctx = server::Ctx::new(hud, config);
     server::spawn_background_tasks(ctx.clone());
     server::run(endpoint, pairing, ctx).await;
 }

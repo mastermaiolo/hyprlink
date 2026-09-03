@@ -8,6 +8,7 @@
 //! ponytail: ícones SVG por módulo ficaram de fora desta primeira versão —
 //! número + título já comunica bem. Adicionar quando fizer sentido.
 
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -15,6 +16,7 @@ use iced::widget::{button, column, container, row, scrollable, text, text_editor
 use iced::window;
 use iced::{Alignment, Background, Border, Color, Element, Font, Length, Shadow, Task, Theme, Vector};
 
+use crate::config::{self, SharedConfig};
 use crate::state::{ConnState, HudState};
 
 const GREEN: Color = Color::from_rgb(0.220, 1.0, 0.612);
@@ -34,6 +36,8 @@ struct Hud {
     /// usuário enquanto ele está lendo o histórico.
     console: text_editor::Content,
     console_len: usize,
+    config: SharedConfig,
+    download_dir: PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -42,14 +46,17 @@ enum Message {
     Quit,
     CopyText(String),
     ConsoleAction(text_editor::Action),
+    PickDownloadDir,
+    DownloadDirPicked(Option<PathBuf>),
 }
 
 impl Hud {
-    fn new(shared: Arc<Mutex<HudState>>) -> Self {
+    fn new(shared: Arc<Mutex<HudState>>, config: SharedConfig) -> Self {
         let snapshot = shared.lock().unwrap().clone();
         let console_len = snapshot.logs.len();
         let console = text_editor::Content::with_text(&snapshot.logs.join("\n"));
-        Self { shared, snapshot, console, console_len }
+        let download_dir = config::download_dir(&config);
+        Self { shared, snapshot, console, console_len, config, download_dir }
     }
 
     fn accent(&self) -> Color {
@@ -82,6 +89,26 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
             }
             Task::none()
         }
+        Message::PickDownloadDir => {
+            let starting = hud.download_dir.clone();
+            Task::perform(
+                async move {
+                    rfd::AsyncFileDialog::new()
+                        .set_directory(&starting)
+                        .set_title("Pasta de destino dos ficheiros recebidos")
+                        .pick_folder()
+                        .await
+                        .map(|handle| handle.path().to_path_buf())
+                },
+                Message::DownloadDirPicked,
+            )
+        }
+        Message::DownloadDirPicked(Some(dir)) => {
+            config::set_download_dir(&hud.config, &dir);
+            hud.download_dir = dir;
+            Task::none()
+        }
+        Message::DownloadDirPicked(None) => Task::none(),
     }
 }
 
@@ -142,11 +169,40 @@ fn module_row(num: &str, title: &str, sub: &str, status: (&'static str, Color)) 
     .into()
 }
 
-fn module_list() -> Element<'static, Message> {
+/// A linha de FILES é clicável: abre o seletor de pasta nativo (portal XDG)
+/// pra escolher onde os ficheiros recebidos são salvos.
+fn files_row(download_dir: &std::path::Path) -> Element<'static, Message> {
+    let sub = format!("Recebe em {}", download_dir.display());
+    button(
+        row![
+            text("02").size(9).color(TEXT_2).width(16),
+            column![
+                text("FILES").size(12).color(TEXT).font(Font::MONOSPACE),
+                text(sub).size(9).color(TEXT_2),
+            ]
+            .spacing(2)
+            .width(Length::Fill),
+            text("alterar").size(9).color(TEXT_2),
+        ]
+        .spacing(10)
+        .align_y(Alignment::Center),
+    )
+    .padding([7, 10])
+    .style(|_, _| button::Style {
+        background: Some(Background::Color(Color::from_rgba(1.0, 1.0, 1.0, 0.045))),
+        border: Border { color: Color::from_rgba(1.0, 1.0, 1.0, 0.08), width: 1.0, radius: 10.0.into() },
+        text_color: TEXT,
+        ..Default::default()
+    })
+    .on_press(Message::PickDownloadDir)
+    .into()
+}
+
+fn module_list(download_dir: &std::path::Path) -> Element<'static, Message> {
     let off = ("OFF", RED);
     let rows = column![
         module_row("01", "CLIP", "Área de transferência", off),
-        module_row("02", "FILES", "Envio de ficheiros", off),
+        files_row(download_dir),
         module_row("03", "NOTIF", "Espelhamento", off),
         module_row("04", "MEDIA", "Nenhum leitor ativo", off),
         module_row("05", "BATT", "Telemetria de energia", off),
@@ -269,7 +325,7 @@ fn view(hud: &Hud) -> Element<'_, Message> {
             .style(|_| glass(14.0));
 
             row![
-                column![connbar, module_list()].spacing(14),
+                column![connbar, module_list(&hud.download_dir)].spacing(14),
                 container(console(&hud.console))
                     .width(Length::Fill)
                     .height(Length::Fill)
@@ -316,7 +372,7 @@ fn view(hud: &Hud) -> Element<'_, Message> {
                 ..Default::default()
             });
 
-            row![module_list(), pairing_card].spacing(14).height(Length::Fill).into()
+            row![module_list(&hud.download_dir), pairing_card].spacing(14).height(Length::Fill).into()
         }
     };
 
@@ -366,8 +422,8 @@ fn style(_hud: &Hud, theme: &Theme) -> iced::theme::Style {
     }
 }
 
-pub fn run(shared: Arc<Mutex<HudState>>) -> iced::Result {
-    iced::application(move || Hud::new(shared.clone()), update, view)
+pub fn run(shared: Arc<Mutex<HudState>>, config: SharedConfig) -> iced::Result {
+    iced::application(move || Hud::new(shared.clone(), config.clone()), update, view)
         .title("HyprLink")
         .style(style)
         .subscription(subscription)
