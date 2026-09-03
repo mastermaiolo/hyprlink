@@ -32,6 +32,7 @@ pub struct Ctx {
     pub notif: notif::Registry,
     pub incoming_files: share::IncomingRegistry,
     pub config: SharedConfig,
+    pub tap: crate::tap::TapHandle,
 }
 
 impl Ctx {
@@ -44,6 +45,7 @@ impl Ctx {
             notif: notif::new_registry(),
             incoming_files: share::new_incoming_registry(),
             config,
+            tap: crate::tap::new_handle(),
         }
     }
 }
@@ -270,6 +272,23 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
             if let Some(name) = body.and_then(|b| body_get_str(b, "name")) {
                 audio::set_default_sink(name);
             }
+            reply(&mut send, packet.id, "audio.ack", Some(ok_bool(true))).await;
+        }
+        "audio.tap_start" => {
+            let ready_body = Value::Map(vec![
+                (Value::Text("id".into()), Value::Integer(packet.id.into())),
+                (Value::Text("rate".into()), Value::Integer(48000.into())),
+                (Value::Text("channels".into()), Value::Integer(2.into())),
+            ]);
+            reply(&mut send, packet.id, "audio.tap_ready", Some(ready_body)).await;
+            let _ = send.finish();
+            if let Some(connection) = ctx.active.lock().unwrap().clone() {
+                tokio::spawn(crate::tap::start(connection, packet.id, ctx.tap.clone(), ctx.hud.clone()));
+            }
+            return; // já fechou o stream de controlo acima
+        }
+        "audio.tap_stop" => {
+            crate::tap::stop(&ctx.tap);
             reply(&mut send, packet.id, "audio.ack", Some(ok_bool(true))).await;
         }
 

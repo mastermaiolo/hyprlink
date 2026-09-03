@@ -14,6 +14,7 @@ mod protocol;
 mod server;
 mod share;
 mod state;
+mod tap;
 mod tls_verifier;
 
 use std::sync::{Arc, Mutex};
