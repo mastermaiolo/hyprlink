@@ -13,6 +13,7 @@ use crate::active::{self, ActiveConn};
 use crate::clip::{self, LastLocalSet};
 use crate::identity::{fingerprint_der, ServerIdentity};
 use crate::input::InputDevice;
+use crate::notif;
 use crate::pairing::PairingStore;
 use crate::protocol::{body_get_bytes, body_get_str, read_frame, write_frame, Packet};
 use crate::state::{self, HudState};
@@ -26,6 +27,7 @@ pub struct Ctx {
     pub active: ActiveConn,
     pub clip_guard: LastLocalSet,
     pub input: Arc<InputDevice>,
+    pub notif: notif::Registry,
 }
 
 impl Ctx {
@@ -35,6 +37,7 @@ impl Ctx {
             active: active::new_registry(),
             clip_guard: clip::new_guard(),
             input: Arc::new(InputDevice::open()),
+            notif: notif::new_registry(),
         }
     }
 }
@@ -73,6 +76,7 @@ pub fn spawn_background_tasks(ctx: Ctx) {
     tokio::spawn(hypr::watch_events(ctx.active.clone(), ctx.hud.clone()));
     tokio::spawn(battery::poll_and_push(ctx.active.clone()));
     tokio::spawn(media::poll_and_push(ctx.active.clone(), ctx.hud.clone()));
+    tokio::spawn(notif::watch(ctx.active.clone(), ctx.notif.clone(), ctx.hud.clone()));
 }
 
 pub async fn run(endpoint: quinn::Endpoint, pairing: Arc<Mutex<PairingStore>>, ctx: Ctx) {
@@ -223,6 +227,36 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
         "media.command" => {
             let cmd = body.and_then(|b| body_get_str(b, "command")).unwrap_or("").to_string();
             media::handle_command(&cmd).await;
+        }
+
+        "notification.post" => {
+            if let Some(b) = body {
+                let key = body_get_str(b, "key").unwrap_or("").to_string();
+                let app = body_get_str(b, "app").unwrap_or("HyprLink").to_string();
+                let title = body_get_str(b, "title").unwrap_or("").to_string();
+                let text = body_get_str(b, "text").unwrap_or("").to_string();
+                let actions: Vec<(i64, String)> = crate::protocol::body_get(b, "actions")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|item| {
+                                let idx = crate::protocol::body_get(item, "idx")?
+                                    .as_integer()
+                                    .and_then(|i| i64::try_from(i).ok())?;
+                                let label = crate::protocol::body_get(item, "label")?.as_text()?.to_string();
+                                Some((idx, label))
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                state::push_log(hud, format!("[i] notification.post · {app}: {title}"));
+                notif::post(&app, &title, &text, &key, &actions, &ctx.notif).await;
+            }
+        }
+        "notification.dismissed" => {
+            if let Some(key) = body.and_then(|b| body_get_str(b, "key")) {
+                notif::dismiss_local(key, &ctx.notif).await;
+            }
         }
 
         "input.move" => {

@@ -6,6 +6,7 @@ mod hypr;
 mod identity;
 mod input;
 mod media;
+mod notif;
 mod pairing;
 mod protocol;
 mod server;

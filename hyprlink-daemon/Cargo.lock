@@ -1711,6 +1711,7 @@ dependencies = [
  "anyhow",
  "ciborium",
  "dirs",
+ "futures-util",
  "iced",
  "image",
  "qrcode",
