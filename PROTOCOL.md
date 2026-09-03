@@ -227,3 +227,17 @@ início de sessão de streaming.
   especificados em lugar nenhum do projeto original — são decisões de
   implementação do daemon Rust (ver plano de fases em
   `/home/maggio/.claude/plans/bubbly-frolicking-wilkes.md`).
+- **`hyprctl dispatch` nem sempre aceita a sintaxe clássica.** Em forks de
+  Hyprland baseados em Lua (confirmado num, apelidado "ryoku" pelo usuário
+  de desenvolvimento), `hyprctl dispatch <dispatcher> <args>` foi substituído
+  por avaliação de uma expressão Lua (`hl.dispatch(...)`) e o clássico falha
+  com exit code != 0 e uma mensagem tipo
+  `[string "return hl.dispatch(...)"]: ')' expected`. `hypr::dispatch` em
+  `hypr.rs` tenta o clássico primeiro (funciona em qualquer Hyprland padrão)
+  e só cai pro fallback Lua se ele falhar — sintaxe confirmada ao vivo:
+  - `workspace <n>` → `hl.dsp.focus({workspace = <n>})`
+  - `focuswindow address:0x..` → `hl.dsp.focus({window = "address:0x.."})`
+  - `closewindow address:0x..` → `hl.dsp.window.close({address = "address:0x.."})`
+  Isso cobre só os 3 dispatchers que o Mission Control do app realmente usa;
+  outros dispatchers (`exec`, `reload`, etc.) não têm tradução e falham em
+  forks assim — não é um problema pra usuários de Hyprland padrão.

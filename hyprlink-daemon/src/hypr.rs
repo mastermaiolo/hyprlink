@@ -18,6 +18,15 @@ fn run_hyprctl(args: &[&str]) -> String {
         .unwrap_or_default()
 }
 
+/// Como `run_hyprctl`, mas diferencia sucesso de falha (o clássico
+/// `hyprctl dispatch <disp> <args>` funciona em qualquer Hyprland padrão;
+/// alguns forks — ex. Hyprland-Lua — substituem isso por avaliação de Lua e
+/// retornam código de saída != 0 quando recebem a sintaxe clássica).
+fn run_hyprctl_checked(args: &[&str]) -> Option<String> {
+    let output = std::process::Command::new("hyprctl").args(args).output().ok()?;
+    output.status.success().then(|| String::from_utf8_lossy(&output.stdout).to_string())
+}
+
 pub fn workspaces_json() -> String {
     let data = run_hyprctl(&["workspaces", "-j"]);
     if data.trim().is_empty() { "[]".to_string() } else { data }
@@ -32,13 +41,34 @@ pub fn clients_json() -> String {
 /// espaço separa o dispatcher do argumento, igual ao app manda.
 pub fn dispatch(cmd: &str) -> String {
     let (disp, arg) = cmd.split_once(' ').unwrap_or((cmd, ""));
-    let out = if arg.is_empty() {
-        run_hyprctl(&["dispatch", disp])
-    } else {
-        run_hyprctl(&["dispatch", disp, arg])
-    };
+    let classic: Vec<&str> = if arg.is_empty() { vec!["dispatch", disp] } else { vec!["dispatch", disp, arg] };
+    if let Some(out) = run_hyprctl_checked(&classic) {
+        return finish(out);
+    }
+    // Fallback: forks tipo Hyprland-Lua ("ryoku") trocam o dispatch clássico
+    // por avaliação de `hl.dispatch(...)` — cobre os 3 dispatchers que o
+    // Mission Control do app realmente usa (workspace/focuswindow/closewindow).
+    // Ver PROTOCOL.md §6.
+    if let Some(lua_expr) = lua_fallback(disp, arg) {
+        if let Some(out) = run_hyprctl_checked(&["dispatch", &lua_expr]) {
+            return finish(out);
+        }
+    }
+    "erro: dispatch falhou (Hyprland recusou a sintaxe clássica e o fallback Lua)".to_string()
+}
+
+fn finish(out: String) -> String {
     let out = out.trim();
     if out.is_empty() { "ok".to_string() } else { out.to_string() }
+}
+
+fn lua_fallback(disp: &str, arg: &str) -> Option<String> {
+    match disp {
+        "workspace" if arg.parse::<i64>().is_ok() => Some(format!("hl.dsp.focus({{workspace = {arg}}})")),
+        "focuswindow" => Some(format!("hl.dsp.focus({{window = \"{arg}\"}})")),
+        "closewindow" => Some(format!("hl.dsp.window.close({{address = \"{arg}\"}})")),
+        _ => None,
+    }
 }
 
 fn socket2_path() -> Option<String> {
@@ -77,5 +107,28 @@ pub async fn watch_events(active: ActiveConn, hud: Arc<Mutex<HudState>>) {
                 tokio::time::sleep(std::time::Duration::from_secs(3)).await;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::lua_fallback;
+
+    /// Sintaxe confirmada ao vivo contra um Hyprland-Lua real (fork "ryoku")
+    /// em 2026-09-03 — ver PROTOCOL.md §6. Se isso quebrar, o fallback
+    /// silenciosamente para de funcionar nesses forks.
+    #[test]
+    fn lua_fallback_matches_verified_syntax() {
+        assert_eq!(lua_fallback("workspace", "2").as_deref(), Some("hl.dsp.focus({workspace = 2})"));
+        assert_eq!(
+            lua_fallback("focuswindow", "address:0x559fbda7b900").as_deref(),
+            Some(r#"hl.dsp.focus({window = "address:0x559fbda7b900"})"#)
+        );
+        assert_eq!(
+            lua_fallback("closewindow", "address:0x559fc0665c80").as_deref(),
+            Some(r#"hl.dsp.window.close({address = "address:0x559fc0665c80"})"#)
+        );
+        assert_eq!(lua_fallback("workspace", "e+1"), None); // não numérico, não arriscamos
+        assert_eq!(lua_fallback("exec", "kitty"), None); // dispatcher sem tradução conhecida
     }
 }
