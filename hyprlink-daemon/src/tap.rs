@@ -99,13 +99,16 @@ pub async fn start(connection: quinn::Connection, id: u64, handle: TapHandle, hu
         return;
     };
     if send.write_all(&id.to_be_bytes()).await.is_err() {
+        push_log(&hud, "[!] audio tap: falha ao escrever o id no stream".to_string());
         stop(&handle);
         return;
     }
+    push_log(&hud, format!("[i] audio tap: stream aberto (id={id})"));
 
     // pull_sample() bloqueia — roda numa thread própria, encaminha os
     // buffers pro stream QUIC via canal assíncrono.
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
+    let hud_thread = hud.clone();
     std::thread::spawn(move || {
         loop {
             match appsink.pull_sample() {
@@ -116,17 +119,29 @@ pub async fn start(connection: quinn::Connection, id: u64, handle: TapHandle, hu
                         break;
                     }
                 }
-                Err(_) => break, // EOS ou pipeline parado
+                Err(e) => {
+                    push_log(&hud_thread, format!("[!] audio tap: pull_sample parou: {e}"));
+                    break;
+                }
             }
         }
     });
 
     tokio::spawn(async move {
+        let mut total: u64 = 0;
+        let mut last_logged: u64 = 0;
         while let Some(chunk) = rx.recv().await {
-            if send.write_all(&chunk).await.is_err() {
+            if let Err(e) = send.write_all(&chunk).await {
+                push_log(&hud, format!("[!] audio tap: escrita no stream falhou: {e}"));
                 break;
             }
+            total += chunk.len() as u64;
+            if total.saturating_sub(last_logged) >= 1_000_000 {
+                last_logged = total;
+                push_log(&hud, format!("[i] audio tap: {} KB enviados", total / 1024));
+            }
         }
+        push_log(&hud, format!("[i] audio tap: encerrado ({} KB no total)", total / 1024));
         let _ = send.finish();
     });
 }
