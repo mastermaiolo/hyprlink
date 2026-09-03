@@ -21,13 +21,12 @@ pub fn new_handle() -> TapHandle {
     Arc::new(Mutex::new(None))
 }
 
-fn default_monitor_source() -> Option<String> {
-    let default_sink = std::process::Command::new("pactl")
+fn default_sink_name() -> Option<String> {
+    std::process::Command::new("pactl")
         .args(["get-default-sink"])
         .output()
         .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())?;
-    Some(format!("{default_sink}.monitor"))
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
 }
 
 /// Para o tap em andamento, se houver (chamado por `audio.tap_stop` e
@@ -49,13 +48,21 @@ pub async fn start(connection: quinn::Connection, id: u64, handle: TapHandle, hu
         return;
     }
 
-    let Some(monitor) = default_monitor_source() else {
+    let Some(sink) = default_sink_name() else {
         push_log(&hud, "[!] audio tap: sem sink padrão detetado".to_string());
         return;
     };
 
+    // ponytail: "target-object=<sink>.monitor" NÃO existe como nó nativo do
+    // PipeWire (é convenção do PulseAudio) — sem correspondência, o
+    // WirePlumber liga a captura à fonte padrão (o MICROFONE físico), não ao
+    // monitor do sink. A forma certa de "escutar" um sink no PipeWire nativo:
+    // apontar target-object pro próprio nó do sink e marcar a stream com
+    // `stream.capture.sink=true`, que instrui o session manager a ligar nas
+    // portas de monitor dele em vez das portas de entrada normais.
     let pipeline_str = format!(
-        "pipewiresrc target-object=\"{monitor}\" ! audioconvert ! audioresample \
+        "pipewiresrc target-object=\"{sink}\" stream-properties=\"props,stream.capture.sink=true\" \
+         ! audioconvert ! audioresample \
          ! audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved \
          ! appsink name=hyprlink_tap sync=false max-buffers=8 drop=true"
     );
@@ -91,7 +98,7 @@ pub async fn start(connection: quinn::Connection, id: u64, handle: TapHandle, hu
         return;
     }
     *handle.lock().unwrap() = Some(pipeline.clone());
-    push_log(&hud, format!("[+] audio tap iniciado · monitor {monitor}"));
+    push_log(&hud, format!("[+] audio tap iniciado · monitor de {sink}"));
 
     let Ok(mut send) = connection.open_uni().await else {
         push_log(&hud, "[!] audio tap: não foi possível abrir o stream".to_string());
@@ -158,11 +165,12 @@ mod tests {
     #[ignore]
     fn manual_pipeline() {
         gst::init().expect("GStreamer deveria inicializar");
-        let monitor = default_monitor_source().expect("deveria haver um sink padrão");
-        println!("monitor: {monitor}");
+        let sink = default_sink_name().expect("deveria haver um sink padrão");
+        println!("sink: {sink}");
 
         let pipeline_str = format!(
-            "pipewiresrc target-object=\"{monitor}\" ! audioconvert ! audioresample \
+            "pipewiresrc target-object=\"{sink}\" stream-properties=\"props,stream.capture.sink=true\" \
+             ! audioconvert ! audioresample \
              ! audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved \
              ! appsink name=hyprlink_tap sync=false max-buffers=8 drop=true"
         );
