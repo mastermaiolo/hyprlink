@@ -64,10 +64,9 @@ object AudioStreamPlayer {
                 var totalBytesRead = 0L
                 var intervalBytes = 0
                 var intervalPeak = 0
-                // read() não garante retornar múltiplos de 2 bytes (amostra 16-bit) —
-                // guarda o byte baixo órfão de uma leitura pra parear com o primeiro
-                // byte da próxima, senão o cálculo de pico desalinha e vira lixo.
                 var pendingLowByte = -1
+                var firstReadLogged = false
+                val loopStartMs = System.currentTimeMillis()
 
                 while (isActive) {
                     val n = inp.read(buffer)
@@ -76,6 +75,10 @@ object AudioStreamPlayer {
                         break
                     }
                     if (n > 0) {
+                        if (!firstReadLogged) {
+                            firstReadLogged = true
+                            ConnectionRepository.appendLog("[AUDIO] Primeira leitura: $n bytes em ${System.currentTimeMillis() - loopStartMs}ms")
+                        }
                         totalBytesRead += n
                         intervalBytes += n
 
@@ -90,6 +93,7 @@ object AudioStreamPlayer {
                             pendingLowByte = -1
                             i = 1
                         }
+
                         while (i + 1 < n) {
                             val sample = ((buffer[i + 1].toInt() shl 8) or (buffer[i].toInt() and 0xFF)).toShort()
                             val absVal = kotlin.math.abs(sample.toInt())
@@ -98,6 +102,7 @@ object AudioStreamPlayer {
                             }
                             i += 2
                         }
+
                         if (i < n) {
                             pendingLowByte = buffer[i].toInt() and 0xFF
                         }
@@ -112,7 +117,12 @@ object AudioStreamPlayer {
 
                         var written = 0
                         while (written < n && isActive) {
+                            val writeStartMs = System.currentTimeMillis()
                             val result = track.write(buffer, written, n - written)
+                            val writeMs = System.currentTimeMillis() - writeStartMs
+                            if (writeMs > 200) {
+                                ConnectionRepository.appendLog("[AUDIO] track.write demorou ${writeMs}ms (pediu ${n - written} bytes, devolveu $result)")
+                            }
                             if (result < 0) {
                                 ConnectionRepository.appendLog("[AUDIO] Error writing to AudioTrack: $result")
                                 break
@@ -149,6 +159,10 @@ object AudioStreamPlayer {
 
     @Synchronized
     fun stop() {
+        val caller = Thread.currentThread().stackTrace.getOrNull(3)?.let {
+            "${it.className}.${it.methodName}:${it.lineNumber}"
+        } ?: "desconhecido"
+        ConnectionRepository.appendLog("[AUDIO] stop() chamado de: $caller")
         playJob?.cancel()
         playJob = null
         val streamToClose = activeStream

@@ -16,6 +16,7 @@ mod share;
 mod state;
 mod tap;
 mod tls_verifier;
+mod webcam;
 
 use std::sync::{Arc, Mutex};
 
@@ -36,6 +37,9 @@ fn main() -> anyhow::Result<()> {
     // QUIC (frame CONNECTION_CLOSE de verdade) no botão de fechar — sem isso
     // o telemóvel fica "conectado" até o idle timeout expirar sozinho.
     let active = active::new_registry();
+    // Compartilhado com a GUI pra ela poder pedir "iniciar/parar stream" no
+    // ecrã da webcam sem precisar de todo o `Ctx` do servidor.
+    let pending_webcam = webcam::new_pending();
 
     print_terminal_qr(&identity.fingerprint_hex, local_ip, &token_hex)?;
 
@@ -43,13 +47,14 @@ fn main() -> anyhow::Result<()> {
         let hud = hud.clone();
         let config = config.clone();
         let active = active.clone();
+        let pending_webcam = pending_webcam.clone();
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().expect("falha ao criar runtime tokio");
-            rt.block_on(run_daemon(identity, pairing, hud, config, active, local_ip));
+            rt.block_on(run_daemon(identity, pairing, hud, config, active, pending_webcam, local_ip));
         });
     }
 
-    gui::run(hud, config, active).map_err(|e| anyhow::anyhow!("erro na GUI: {e}"))
+    gui::run(hud, config, active, pending_webcam).map_err(|e| anyhow::anyhow!("erro na GUI: {e}"))
 }
 
 async fn run_daemon(
@@ -58,6 +63,7 @@ async fn run_daemon(
     hud: Arc<Mutex<state::HudState>>,
     config: config::SharedConfig,
     active: active::ActiveConn,
+    pending_webcam: webcam::PendingWebcam,
     local_ip: std::net::IpAddr,
 ) {
     let addr: std::net::SocketAddr = format!("0.0.0.0:{PORT}").parse().expect("porta fixa válida");
@@ -69,7 +75,7 @@ async fn run_daemon(
             return;
         }
     };
-    let ctx = server::Ctx::new(hud, config, active);
+    let ctx = server::Ctx::new(hud, config, active, pending_webcam);
     server::spawn_background_tasks(ctx.clone());
     server::run(endpoint, pairing, ctx).await;
 }

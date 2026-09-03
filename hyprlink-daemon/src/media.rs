@@ -9,7 +9,7 @@ use zbus::zvariant::OwnedValue;
 use zbus::{Connection, Proxy};
 
 use crate::active::{push, ActiveConn};
-use crate::state::HudState;
+use crate::state::{self, HudState};
 
 const PLAYER_PATH: &str = "/org/mpris/MediaPlayer2";
 const PLAYER_IFACE: &str = "org.mpris.MediaPlayer2.Player";
@@ -121,16 +121,29 @@ fn to_body(np: &NowPlaying) -> Value {
 
 /// Poll baixo (2s) do player MPRIS ativo, empurra `media.state` só quando
 /// algo muda de verdade.
-pub async fn poll_and_push(active: ActiveConn, _hud: Arc<Mutex<HudState>>) {
+pub async fn poll_and_push(active: ActiveConn, hud: Arc<Mutex<HudState>>) {
     let mut last_key: Option<(String, String, Option<String>)> = None;
     loop {
         if let Ok(conn) = Connection::session().await {
-            if let Some(np) = snapshot(&conn).await {
-                let key = (np.player.clone(), np.status.clone(), np.title.clone());
-                if last_key.as_ref() != Some(&key) {
-                    last_key = Some(key);
-                    push(&active, "media.state", Some(to_body(&np))).await;
+            match snapshot(&conn).await {
+                Some(np) => {
+                    let key = (np.player.clone(), np.status.clone(), np.title.clone());
+                    if last_key.as_ref() != Some(&key) {
+                        last_key = Some(key);
+                        let label = match (&np.title, &np.artist) {
+                            (Some(t), Some(a)) => format!("{a} — {t}"),
+                            (Some(t), None) => t.clone(),
+                            _ => format!("{} ({})", np.player, np.status),
+                        };
+                        state::set_media_status(&hud, Some(label));
+                        push(&active, "media.state", Some(to_body(&np))).await;
+                    }
                 }
+                None if last_key.is_some() => {
+                    last_key = None;
+                    state::set_media_status(&hud, None);
+                }
+                None => {}
             }
         }
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;

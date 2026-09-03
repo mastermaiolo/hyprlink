@@ -349,6 +349,7 @@ object ConnectionRepository {
 
     fun clearActiveConnection() {
         activeConnection = null
+        AudioStreamPlayer.stop()
         setStatus(ConnectionStatus.DISCONNECTED)
     }
 

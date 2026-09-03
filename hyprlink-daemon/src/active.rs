@@ -31,12 +31,16 @@ fn next_id() -> u64 {
 
 /// Abre um stream bidirecional novo e empurra um pacote `D→P` (push
 /// espontâneo, sem esperar resposta) — mesma semântica que o app usa pros
-/// pushes que ele nos manda.
-pub async fn push(active: &ActiveConn, kind: &str, body: Option<Value>) {
+/// pushes que ele nos manda. Devolve o `id` usado (ex: webcam precisa dele
+/// pra pré-registrar qual uni-stream esperar de volta) — a maioria dos
+/// chamadores ignora, o que é seguro (não é `#[must_use]`).
+pub async fn push(active: &ActiveConn, kind: &str, body: Option<Value>) -> Option<u64> {
     let connection = { active.lock().unwrap().clone() };
-    let Some(connection) = connection else { return };
-    let Ok((mut send, _recv)) = connection.open_bi().await else { return };
-    let packet = Packet::new(next_id(), kind, body, false);
+    let connection = connection?;
+    let (mut send, _recv) = connection.open_bi().await.ok()?;
+    let id = next_id();
+    let packet = Packet::new(id, kind, body, false);
     let _ = write_frame(&mut send, &packet.encode()).await;
     let _ = send.finish();
+    Some(id)
 }

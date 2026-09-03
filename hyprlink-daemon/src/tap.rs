@@ -13,7 +13,7 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app::AppSink;
 
-use crate::state::{push_log, HudState};
+use crate::state::{self, push_log, HudState};
 
 pub type TapHandle = Arc<Mutex<Option<gst::Pipeline>>>;
 
@@ -31,9 +31,10 @@ fn default_sink_name() -> Option<String> {
 
 /// Para o tap em andamento, se houver (chamado por `audio.tap_stop` e
 /// também antes de iniciar um novo tap, pra nunca ter dois ao mesmo tempo).
-pub fn stop(handle: &TapHandle) {
+pub fn stop(handle: &TapHandle, hud: &Arc<Mutex<HudState>>) {
     if let Some(pipeline) = handle.lock().unwrap().take() {
         let _ = pipeline.set_state(gst::State::Null);
+        state::set_audio_tap_active(hud, false);
     }
 }
 
@@ -42,12 +43,13 @@ pub fn stop(handle: &TapHandle) {
 /// task (falha de escrita/EOF). Sem isso, um restart rápido (tap_stop
 /// seguido de tap_start) corre risco de a limpeza atrasada da sessão antiga
 /// matar o pipeline novo que já está tocando.
-fn stop_if_current(handle: &TapHandle, pipeline: &gst::Pipeline) {
+fn stop_if_current(handle: &TapHandle, pipeline: &gst::Pipeline, hud: &Arc<Mutex<HudState>>) {
     let mut guard = handle.lock().unwrap();
     if guard.as_ref() == Some(pipeline) {
         let old = guard.take().unwrap();
         drop(guard);
         let _ = old.set_state(gst::State::Null);
+        state::set_audio_tap_active(hud, false);
     }
 }
 
@@ -55,7 +57,7 @@ fn stop_if_current(handle: &TapHandle, pipeline: &gst::Pipeline) {
 /// telemóvel via `audio.tap_ready`), escreve o id de 8 bytes e então PCM cru
 /// (16-bit LE, 48kHz, estéreo) indefinidamente até `stop()` ser chamado.
 pub async fn start(connection: quinn::Connection, id: u64, handle: TapHandle, hud: Arc<Mutex<HudState>>) {
-    stop(&handle);
+    stop(&handle, &hud);
 
     if let Err(e) = gst::init() {
         push_log(&hud, format!("[!] audio tap: GStreamer não inicializou: {e}"));
@@ -112,6 +114,7 @@ pub async fn start(connection: quinn::Connection, id: u64, handle: TapHandle, hu
         return;
     }
     *handle.lock().unwrap() = Some(pipeline.clone());
+    state::set_audio_tap_active(&hud, true);
     push_log(&hud, format!("[+] audio tap iniciado · monitor de {sink}"));
 
     // ponytail: set_state(Playing) só reporta falha síncrona — se o
@@ -138,12 +141,12 @@ pub async fn start(connection: quinn::Connection, id: u64, handle: TapHandle, hu
 
     let Ok(mut send) = connection.open_uni().await else {
         push_log(&hud, "[!] audio tap: não foi possível abrir o stream".to_string());
-        stop(&handle);
+        stop(&handle, &hud);
         return;
     };
     if send.write_all(&id.to_be_bytes()).await.is_err() {
         push_log(&hud, "[!] audio tap: falha ao escrever o id no stream".to_string());
-        stop(&handle);
+        stop(&handle, &hud);
         return;
     }
     push_log(&hud, format!("[i] audio tap: stream aberto (id={id})"));
@@ -192,7 +195,7 @@ pub async fn start(connection: quinn::Connection, id: u64, handle: TapHandle, hu
         // Playing mesmo depois da escrita QUIC falhar (peer desconectou). Só
         // mata se ainda for ESTE pipeline — um restart rápido (tap_stop +
         // tap_start) já pode ter posto um pipeline novo no handle.
-        stop_if_current(&handle_cleanup, &pipeline_cleanup);
+        stop_if_current(&handle_cleanup, &pipeline_cleanup, &hud);
     });
 }
 

@@ -8,7 +8,7 @@ use tokio::io::AsyncBufReadExt;
 use tokio::net::UnixStream;
 
 use crate::active::{push, ActiveConn};
-use crate::state::{push_log, HudState};
+use crate::state::{self, push_log, HudState};
 
 fn run_hyprctl(args: &[&str]) -> String {
     std::process::Command::new("hyprctl")
@@ -96,6 +96,9 @@ pub async fn watch_events(active: ActiveConn, hud: Arc<Mutex<HudState>>) {
                 loop {
                     match lines.next_line().await {
                         Ok(Some(line)) => {
+                            if let Some(ws) = line.strip_prefix("workspace>>") {
+                                state::set_workspace(&hud, ws.to_string());
+                            }
                             let body = Value::Map(vec![(Value::Text("event".into()), Value::Text(line))]);
                             push(&active, "hypr.event", Some(body)).await;
                         }

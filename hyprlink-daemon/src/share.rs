@@ -43,22 +43,19 @@ fn sanitize_filename(name: &str) -> String {
     }
 }
 
-/// Trata um stream unidirecional recebido: os primeiros 8 bytes são o id de
-/// correlação com um `share.file` já anunciado (com uma pequena espera —
-/// o anúncio e o stream de bytes podem chegar em tarefas concorrentes).
+/// Trata um stream unidirecional recebido: `id` é o id de correlação com um
+/// `share.file` já anunciado (já lido pelo chamador — o roteador em
+/// `server.rs` precisa decidir entre ficheiro/webcam antes de despachar),
+/// com uma pequena espera — o anúncio e o stream de bytes podem chegar em
+/// tarefas concorrentes.
 pub async fn receive_uni_stream(
     mut recv: quinn::RecvStream,
+    id: u64,
     registry: IncomingRegistry,
     active: ActiveConn,
     hud: Arc<Mutex<HudState>>,
     config: SharedConfig,
 ) {
-    let mut id_buf = [0u8; 8];
-    if recv.read_exact(&mut id_buf).await.is_err() {
-        return;
-    }
-    let id = u64::from_be_bytes(id_buf);
-
     let mut pending = None;
     for _ in 0..20 {
         if let Some(p) = registry.lock().unwrap().remove(&id) {

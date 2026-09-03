@@ -20,6 +20,7 @@ use crate::protocol::{body_get_bytes, body_get_str, read_frame, write_frame, Pac
 use crate::share;
 use crate::state::{self, HudState};
 use crate::tls_verifier::AcceptAnyClientCert;
+use crate::webcam;
 use crate::{audio, battery, hypr, media};
 
 /// Estado partilhado entre todas as streams/tarefas de fundo de uma sessão.
@@ -33,10 +34,12 @@ pub struct Ctx {
     pub incoming_files: share::IncomingRegistry,
     pub config: SharedConfig,
     pub tap: crate::tap::TapHandle,
+    pub webcam: webcam::WebcamHandle,
+    pub pending_webcam: webcam::PendingWebcam,
 }
 
 impl Ctx {
-    pub fn new(hud: Arc<Mutex<HudState>>, config: SharedConfig, active: ActiveConn) -> Self {
+    pub fn new(hud: Arc<Mutex<HudState>>, config: SharedConfig, active: ActiveConn, pending_webcam: webcam::PendingWebcam) -> Self {
         Self {
             hud,
             active,
@@ -46,6 +49,8 @@ impl Ctx {
             incoming_files: share::new_incoming_registry(),
             config,
             tap: crate::tap::new_handle(),
+            webcam: webcam::new_handle(),
+            pending_webcam,
         }
     }
 }
@@ -114,7 +119,8 @@ pub async fn run(endpoint: quinn::Endpoint, pairing: Arc<Mutex<PairingStore>>, c
                 state::push_log(&ctx.hud, format!("[!] conexão encerrada: {e}"));
                 state::set_pairing(&ctx.hud);
                 active::clear(&ctx.active);
-                crate::tap::stop(&ctx.tap);
+                crate::tap::stop(&ctx.tap, &ctx.hud);
+                webcam::stop(&ctx.webcam, &ctx.hud);
             }
         });
     }
@@ -189,13 +195,7 @@ async fn handle_connection(incoming: quinn::Incoming, pairing: Arc<Mutex<Pairing
                     Ok(recv) => recv,
                     Err(_) => break,
                 };
-                tokio::spawn(share::receive_uni_stream(
-                    recv,
-                    ctx.incoming_files.clone(),
-                    ctx.active.clone(),
-                    ctx.hud.clone(),
-                    ctx.config.clone(),
-                ));
+                tokio::spawn(route_uni_stream(recv, ctx.clone()));
             }
         });
     }
@@ -211,8 +211,38 @@ async fn handle_connection(incoming: quinn::Incoming, pairing: Arc<Mutex<Pairing
     state::push_log(&ctx.hud, format!("[!] {device_name} desconectou"));
     state::set_pairing(&ctx.hud);
     active::clear(&ctx.active);
-    crate::tap::stop(&ctx.tap);
+    crate::tap::stop(&ctx.tap, &ctx.hud);
+                webcam::stop(&ctx.webcam, &ctx.hud);
+    webcam::stop(&ctx.webcam, &ctx.hud);
     Ok(())
+}
+
+/// Lê o id de correlação (8 bytes, comum a todo uni-stream) e decide se é
+/// vídeo de webcam (id bate com um `webcam.start` pendente) ou ficheiro —
+/// única leitura do cabeçalho, pra não competir com `share::receive_uni_stream`.
+async fn route_uni_stream(mut recv: quinn::RecvStream, ctx: Ctx) {
+    let mut id_buf = [0u8; 8];
+    if recv.read_exact(&mut id_buf).await.is_err() {
+        return;
+    }
+    let id = u64::from_be_bytes(id_buf);
+
+    let webcam_res = {
+        let mut pending = ctx.pending_webcam.lock().unwrap();
+        match *pending {
+            Some((pending_id, width, height)) if pending_id == id => {
+                *pending = None;
+                Some((width, height))
+            }
+            _ => None,
+        }
+    };
+
+    if let Some((width, height)) = webcam_res {
+        webcam::feed(recv, ctx.webcam.clone(), ctx.hud.clone(), width, height).await;
+    } else {
+        share::receive_uni_stream(recv, id, ctx.incoming_files.clone(), ctx.active.clone(), ctx.hud.clone(), ctx.config.clone()).await;
+    }
 }
 
 async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::RecvStream, ctx: Ctx) {
@@ -245,6 +275,7 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
         "clipboard.set" => {
             if let Some(text) = body.and_then(|b| body_get_str(b, "text")) {
                 clip::set_from_remote(text, &ctx.clip_guard).await;
+                state::push_clip_entry(hud, "telemóvel → PC", text.to_string());
                 state::push_log(hud, "[i] clipboard.set · telemóvel → PC".to_string());
             }
         }
@@ -307,8 +338,22 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
             return; // já fechou o stream de controlo acima
         }
         "audio.tap_stop" => {
-            crate::tap::stop(&ctx.tap);
+            crate::tap::stop(&ctx.tap, &ctx.hud);
             reply(&mut send, packet.id, "audio.ack", Some(ok_bool(true))).await;
+        }
+
+        "webcam.error" => {
+            let message = body.and_then(|b| body_get_str(b, "message")).unwrap_or("erro desconhecido");
+            state::push_log(hud, format!("[!] webcam (telemóvel): {message}"));
+            webcam::stop(&ctx.webcam, hud);
+        }
+        "webcam.transform" => {
+            if let (Some(rotation), Some(mirror)) = (
+                body.and_then(|b| crate::protocol::body_get_i64(b, "rotation")),
+                body.and_then(|b| crate::protocol::body_get(b, "mirror")).and_then(|v| v.as_bool()),
+            ) {
+                webcam::apply_transform(&ctx.webcam, rotation, mirror);
+            }
         }
 
         "battery.request" => {
@@ -320,6 +365,7 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                 body.and_then(|b| crate::protocol::body_get_i64(b, "level")),
                 body.and_then(|b| crate::protocol::body_get(b, "charging")).and_then(|v| v.as_bool()),
             ) {
+                state::set_phone_battery(hud, level);
                 state::push_log(hud, format!("[i] bateria do telemóvel: {level}% · carregando={charging}"));
             }
         }
@@ -349,6 +395,7 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                             .collect()
                     })
                     .unwrap_or_default();
+                state::push_notif_entry(hud, app.clone(), title.clone(), text.clone());
                 state::push_log(hud, format!("[i] notification.post · {app}: {title}"));
                 notif::post(&app, &title, &text, &key, &actions, &ctx.notif).await;
             }

@@ -7,7 +7,16 @@ use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 
 use crate::active::{push, ActiveConn};
-use crate::state::{push_log, HudState};
+use crate::state::{self, push_log, HudState};
+
+pub fn preview(text: &str) -> String {
+    let clean = text.trim();
+    if clean.chars().count() > 40 {
+        format!("{}…", clean.chars().take(40).collect::<String>())
+    } else {
+        clean.to_string()
+    }
+}
 
 /// Último texto que o próprio daemon escreveu no clipboard local (via pedido
 /// do telemóvel) — evita reenviar o mesmo conteúdo de volta assim que o
@@ -63,6 +72,7 @@ pub async fn watch(active: ActiveConn, guard: LastLocalSet, hud: Arc<Mutex<HudSt
                 *guard.lock().unwrap() = None;
                 continue;
             }
+            state::push_clip_entry(&hud, "PC → telemóvel", text.clone());
             let body = Value::Map(vec![(Value::Text("text".into()), Value::Text(text))]);
             push(&active, "clipboard.set", Some(body)).await;
         }

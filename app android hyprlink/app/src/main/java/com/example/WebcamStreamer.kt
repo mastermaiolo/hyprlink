@@ -42,6 +42,7 @@ object WebcamStreamer {
 
     private var encoderPreview: Preview? = null
     private var screenPreview: Preview? = null
+    private var camera: androidx.camera.core.Camera? = null
 
     // Lentes: todas as câmaras que o dispositivo expõe via CameraX
     // (frontal, traseira principal e, em muitos aparelhos, ultra-wide/
@@ -359,10 +360,20 @@ object WebcamStreamer {
         val selector = cameraInfos.getOrNull(lensIndex)?.cameraSelector ?: CameraSelector.DEFAULT_BACK_CAMERA
         try {
             provider.unbindAll()
-            provider.bindToLifecycle(ProcessLifecycleOwner.get(), selector, *useCases)
+            camera = provider.bindToLifecycle(ProcessLifecycleOwner.get(), selector, *useCases)
         } catch (e: Exception) {
             reportError("Falha ao vincular use cases da câmara: ${e.message}")
         }
+    }
+
+    fun focusAt(point: androidx.camera.core.MeteringPoint) {
+        val action = androidx.camera.core.FocusMeteringAction.Builder(
+            point,
+            androidx.camera.core.FocusMeteringAction.FLAG_AF or androidx.camera.core.FocusMeteringAction.FLAG_AE
+        )
+            .setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+        camera?.cameraControl?.startFocusAndMetering(action)
     }
 
     // Pode ser chamado de qualquer thread — despacha o teardown do
@@ -383,6 +394,7 @@ object WebcamStreamer {
         _isMicOn.value = false
         streamJob?.cancel()
         streamJob = null
+        camera = null
         cameraProvider?.unbindAll()
         cameraProvider = null
         encoderPreview = null

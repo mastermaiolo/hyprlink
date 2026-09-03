@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Archivo:wght@600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05060a}
+a{color:#3DFF9E}a:hover{color:#8affc6}
+@keyframes breathe{0%,100%{opacity:.45;transform:scale(1)}50%{opacity:1;transform:scale(1.5)}}
+@keyframes scan{0%{opacity:.25}50%{opacity:.7}100%{opacity:.25}}
+</style>
+</helmet>
+
+<section style="padding:56px 60px 40px;font-family:'JetBrains Mono',monospace;color:#E4E4E4;display:flex;flex-direction:column;gap:14px">
+
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;max-width:1900px">
+    <div>
+      <div style="font-size:10px;letter-spacing:.2em;color:#6E6E6E">RONDA 6 · ECRÃ POR MÓDULO</div>
+      <div style="font-family:Archivo,sans-serif;font-weight:700;font-size:26px;margin-top:10px;letter-spacing:-.01em">Os 10 módulos abertos em detalhe</div>
+    </div>
+    <div style="font-size:11px;color:#4E4E4E;text-align:right;line-height:1.8">ao abrir um módulo a sidebar recolhe para uma régua numerada<br>CLIP · FILES · NOTIF têm histórico pesquisável</div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:44px;align-items:flex-start;margin-top:18px">
+
+    <!-- ===== 6a CLIP ===== -->
+    <div id="6a" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;font-weight:700;color:#3DFF9E;border:1px solid #1E3E30;background:#071510;border-radius:5px;padding:4px 9px">6a</span><span style="font-size:12px;color:#B4B4B4">01 CLIP · histórico da área de transferência</span></div>
+      <div style="width:900px;height:800px;box-sizing:border-box;border-radius:28px;border:1px solid rgba(255,255,255,.10);background:linear-gradient(140deg,rgba(8,9,12,.86),rgba(8,9,12,.78));box-shadow:0 40px 90px rgba(0,0,0,.7);padding:26px 28px;display:flex;flex-direction:column;gap:18px;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:50%;background:#3DFF9E;box-shadow:0 0 12px rgba(61,255,158,.8);animation:breathe 2.8s ease-in-out infinite"></span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#fff">HYPR</span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#3DFF9E;margin-left:-8px">LINK</span></div>
+          <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;color:#6E6E6E">‹ VOLTAR</span><div style="width:30px;height:30px;border:1px solid #262626;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#8A8A8A">×</div></div>
+        </div>
+        <div style="display:flex;gap:16px;flex:1;min-height:0">
+          <div style="width:44px;flex:none;display:flex;flex-direction:column;gap:8px;align-items:center;padding-top:2px">
+            <span style="width:34px;height:34px;border-radius:9px;border:1px solid #3DFF9E;background:#08221A;display:flex;align-items:center;justify-content:center;font-size:13px;color:#3DFF9E">⧉</span>
+            <span style="font-size:10px;color:#3A3A3A">02</span><span style="font-size:10px;color:#3A3A3A">03</span><span style="font-size:10px;color:#3A3A3A">04</span><span style="font-size:10px;color:#3A3A3A">05</span><span style="font-size:10px;color:#3A3A3A">06</span><span style="font-size:10px;color:#3A3A3A">07</span><span style="font-size:10px;color:#3A3A3A">08</span><span style="font-size:10px;color:#3A3A3A">09</span><span style="font-size:10px;color:#3A3A3A">10</span>
+          </div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:1px solid #1C1C1C;padding-bottom:12px">
+              <div><div style="font-family:Archivo,sans-serif;font-weight:700;font-size:20px;color:#fff">CLIP</div><div style="font-size:11px;color:#3DFF9E;margin-top:6px">SINCRONIZAÇÃO BIDIRECIONAL ATIVA</div></div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="font-size:10px;color:#8A8A8A;border:1px solid #262626;border-radius:6px;padding:6px 10px">sincronizar automaticamente ✓</span></div>
+            </div>
+            <div style="border:1px solid #1E3E30;background:#071510;border-radius:14px;padding:15px 17px">
+              <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:10px;letter-spacing:.14em;color:#3DFF9E">ATUAL · TEXTO · 214 B</span><span style="font-size:10px;color:#6E6E6E">há 3 s · do PC</span></div>
+              <div style="font-size:12px;color:#E4E4E4;line-height:1.7;margin-top:11px">systemctl --user restart hyprlink-daemon.service</div>
+              <div style="display:flex;gap:8px;margin-top:14px">
+                <span style="font-size:11px;color:#3DFF9E;border:1px solid #1E3E30;border-radius:7px;padding:7px 13px">enviar ao telemóvel</span>
+                <span style="font-size:11px;color:#8A8A8A;border:1px solid #262626;border-radius:7px;padding:7px 13px">copiar</span>
+                <span style="font-size:11px;color:#8A8A8A;border:1px solid #262626;border-radius:7px;padding:7px 13px">fixar</span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font-size:10px;letter-spacing:.16em;color:#5E5E5E">HISTÓRICO · 48 ITENS · 7 DIAS</div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="font-size:10px;color:#6E6E6E;border:1px solid #1C1C1C;border-radius:6px;padding:5px 24px 5px 9px">pesquisar…</span><span style="font-size:10px;color:#6E6E6E;border:1px solid #1C1C1C;border-radius:6px;padding:5px 9px">limpar</span></div>
+            </div>
+            <div style="flex:1;min-height:0;border:1px solid #1C1C1C;background:#070707;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-bottom:1px solid #141414;background:rgba(61,255,158,.03)"><span style="font-size:12px;color:#3DFF9E;width:14px">⧉</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#E4E4E4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">https://wiki.hyprland.org/Configuring/Variables/</div><div style="font-size:10px;color:#4E4E4E;margin-top:4px">URL · do telemóvel · há 2 min</div></div><span style="font-size:10px;color:#3DFF9E">fixado</span></div>
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-bottom:1px solid #141414"><span style="font-size:12px;color:#5E5E5E;width:14px">≡</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#B4B4B4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">ssh maggio@192.168.1.34 -p 2222</div><div style="font-size:10px;color:#4E4E4E;margin-top:4px">TEXTO · do PC · há 14 min</div></div><span style="font-size:10px;color:#5E5E5E">copiar</span></div>
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-bottom:1px solid #141414"><span style="font-size:12px;color:#5E5E5E;width:14px">▣</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#B4B4B4">captura-2026-09-03.png · 412 KB</div><div style="font-size:10px;color:#4E4E4E;margin-top:4px">IMAGEM · do telemóvel · há 38 min</div></div><span style="font-size:10px;color:#5E5E5E">abrir</span></div>
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-bottom:1px solid #141414"><span style="font-size:12px;color:#5E5E5E;width:14px">≡</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#B4B4B4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">K9F2-8QRT-04XZ</div><div style="font-size:10px;color:#4E4E4E;margin-top:4px">TEXTO · do PC · há 1 h</div></div><span style="font-size:10px;color:#5E5E5E">copiar</span></div>
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-bottom:1px solid #141414"><span style="font-size:12px;color:#5E5E5E;width:14px">⧉</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#B4B4B4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">https://github.com/maggio/hyprlink/issues/12</div><div style="font-size:10px;color:#4E4E4E;margin-top:4px">URL · do telemóvel · ontem 23:41</div></div><span style="font-size:10px;color:#5E5E5E">copiar</span></div>
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-bottom:1px solid #141414"><span style="font-size:12px;color:#5E5E5E;width:14px">≡</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#B4B4B4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">cargo build --release --features image,tokio</div><div style="font-size:10px;color:#4E4E4E;margin-top:4px">TEXTO · do PC · ontem 22:07</div></div><span style="font-size:10px;color:#5E5E5E">copiar</span></div>
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;opacity:.55"><span style="font-size:12px;color:#5E5E5E;width:14px">≡</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#B4B4B4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">IBAN PT50 0002 0123 1234 5678 9015 4</div><div style="font-size:10px;color:#4E4E4E;margin-top:4px">TEXTO · do telemóvel · 01/09 18:22</div></div><span style="font-size:10px;color:#5E5E5E">copiar</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 6b FILES ===== -->
+    <div id="6b" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;font-weight:700;color:#3DFF9E;border:1px solid #1E3E30;background:#071510;border-radius:5px;padding:4px 9px">6b</span><span style="font-size:12px;color:#B4B4B4">02 FILES · fila, progresso e histórico de transferências</span></div>
+      <div style="width:900px;height:800px;box-sizing:border-box;border-radius:28px;border:1px solid rgba(255,255,255,.10);background:linear-gradient(140deg,rgba(8,9,12,.86),rgba(8,9,12,.78));box-shadow:0 40px 90px rgba(0,0,0,.7);padding:26px 28px;display:flex;flex-direction:column;gap:18px;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:50%;background:#3DFF9E;box-shadow:0 0 12px rgba(61,255,158,.8);animation:breathe 2.8s ease-in-out infinite"></span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#fff">HYPR</span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#3DFF9E;margin-left:-8px">LINK</span></div>
+          <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;color:#6E6E6E">‹ VOLTAR</span><div style="width:30px;height:30px;border:1px solid #262626;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#8A8A8A">×</div></div>
+        </div>
+        <div style="display:flex;gap:16px;flex:1;min-height:0">
+          <div style="width:44px;flex:none;display:flex;flex-direction:column;gap:8px;align-items:center;padding-top:2px">
+            <span style="font-size:10px;color:#3A3A3A">01</span>
+            <span style="width:34px;height:34px;border-radius:9px;border:1px solid #3DFF9E;background:#08221A;display:flex;align-items:center;justify-content:center;font-size:13px;color:#3DFF9E">⇄</span>
+            <span style="font-size:10px;color:#3A3A3A">03</span><span style="font-size:10px;color:#3A3A3A">04</span><span style="font-size:10px;color:#3A3A3A">05</span><span style="font-size:10px;color:#3A3A3A">06</span><span style="font-size:10px;color:#3A3A3A">07</span><span style="font-size:10px;color:#3A3A3A">08</span><span style="font-size:10px;color:#3A3A3A">09</span><span style="font-size:10px;color:#3A3A3A">10</span>
+          </div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:1px solid #1C1C1C;padding-bottom:12px">
+              <div><div style="font-family:Archivo,sans-serif;font-weight:700;font-size:20px;color:#fff">FILES</div><div style="font-size:11px;color:#8A8A8A;margin-top:6px">SFTP SOBRE QUIC · 1 A TRANSFERIR</div></div>
+              <span style="font-size:11px;color:#3DFF9E;border:1px solid #1E3E30;border-radius:7px;padding:7px 13px">enviar ficheiro…</span>
+            </div>
+            <div style="border:1px solid #262626;background:rgba(255,255,255,.045);border-radius:12px;padding:13px 16px;display:flex;align-items:center;justify-content:space-between">
+              <div><div style="font-size:10px;letter-spacing:.14em;color:#5E5E5E">PASTA DE DESTINO</div><div style="font-size:12px;color:#E4E4E4;margin-top:7px">~/Downloads/hyprlink</div></div>
+              <span style="font-size:11px;color:#8A8A8A;border:1px solid #262626;border-radius:7px;padding:7px 13px">escolher pasta</span>
+            </div>
+            <div style="border:1px solid #3A2C12;background:#150F03;border-radius:14px;padding:15px 17px">
+              <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;color:#E4E4E4">relatorio-q3.pdf</span><span style="font-size:10px;color:#C99A50">a receber · 3.1 MB/s · falta 3 s</span></div>
+              <div style="height:4px;background:#211C14;border-radius:2px;margin-top:11px"><div style="width:14%;height:100%;background:#FFB020;border-radius:2px"></div></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px"><span style="font-size:10px;color:#6E6E6E">1.8 / 12.4 MB · retomado no bloco 118</span><div style="display:flex;gap:8px"><span style="font-size:10px;color:#8A8A8A;border:1px solid #3A2C12;border-radius:6px;padding:5px 9px">pausar</span><span style="font-size:10px;color:#8A8A8A;border:1px solid #3A2C12;border-radius:6px;padding:5px 9px">cancelar</span></div></div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font-size:10px;letter-spacing:.16em;color:#5E5E5E">HISTÓRICO · 132 TRANSFERÊNCIAS</div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="font-size:10px;color:#6E6E6E;border:1px solid #1C1C1C;border-radius:6px;padding:5px 9px">tudo</span><span style="font-size:10px;color:#6E6E6E;border:1px solid #1C1C1C;border-radius:6px;padding:5px 9px">recebidos</span><span style="font-size:10px;color:#6E6E6E;border:1px solid #1C1C1C;border-radius:6px;padding:5px 9px">enviados</span></div>
+            </div>
+            <div style="flex:1;min-height:0;border:1px solid #1C1C1C;background:#070707;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-bottom:1px solid #141414"><span style="font-size:11px;color:#3DFF9E;width:12px">↓</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#E4E4E4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">IMG_20260902_1841.jpg</div><div style="font-size:10px;color:#4E4E4E;margin-top:4px">recebido · 4.2 MB · 12 s · ontem 18:41</div></div><span style="font-size:10px;color:#5E5E5E">abrir pasta</span></div>
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-bottom:1px solid #141414"><span style="font-size:11px;color:#8A8A8A;width:12px">↑</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#B4B4B4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">firmware-v42.bin</div><div style="font-size:10px;color:#4E4E4E;margin-top:4px">enviado · 28.7 MB · 1 min 04 s · ontem 17:02</div></div><span style="font-size:10px;color:#5E5E5E">reenviar</span></div>
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-bottom:1px solid #141414"><span style="font-size:11px;color:#FF4757;width:12px">↓</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#B4B4B4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">backup-notas.zip</div><div style="font-size:10px;color:#C98A94;margin-top:4px">falhou · ligação perdida a 61% · ontem 15:58</div></div><span style="font-size:10px;color:#FF4757">retomar</span></div>
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-bottom:1px solid #141414"><span style="font-size:11px;color:#3DFF9E;width:12px">↓</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#B4B4B4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">recibo-agosto.pdf</div><div style="font-size:10px;color:#4E4E4E;margin-top:4px">recebido · 318 KB · 2 s · 01/09 11:20</div></div><span style="font-size:10px;color:#5E5E5E">abrir pasta</span></div>
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;opacity:.55"><span style="font-size:11px;color:#8A8A8A;width:12px">↑</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#B4B4B4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">playlist-offline.m3u</div><div style="font-size:10px;color:#4E4E4E;margin-top:4px">enviado · 2 KB · 1 s · 31/08 09:04</div></div><span style="font-size:10px;color:#5E5E5E">reenviar</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 6c NOTIF ===== -->
+    <div id="6c" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;font-weight:700;color:#3DFF9E;border:1px solid #1E3E30;background:#071510;border-radius:5px;padding:4px 9px">6c</span><span style="font-size:12px;color:#B4B4B4">03 NOTIF · espelho, filtros por app e histórico</span></div>
+      <div style="width:900px;height:800px;box-sizing:border-box;border-radius:28px;border:1px solid rgba(255,255,255,.10);background:linear-gradient(140deg,rgba(8,9,12,.86),rgba(8,9,12,.78));box-shadow:0 40px 90px rgba(0,0,0,.7);padding:26px 28px;display:flex;flex-direction:column;gap:18px;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:50%;background:#3DFF9E;box-shadow:0 0 12px rgba(61,255,158,.8);animation:breathe 2.8s ease-in-out infinite"></span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#fff">HYPR</span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#3DFF9E;margin-left:-8px">LINK</span></div>
+          <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;color:#6E6E6E">‹ VOLTAR</span><div style="width:30px;height:30px;border:1px solid #262626;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#8A8A8A">×</div></div>
+        </div>
+        <div style="display:flex;gap:16px;flex:1;min-height:0">
+          <div style="width:44px;flex:none;display:flex;flex-direction:column;gap:8px;align-items:center;padding-top:2px">
+            <span style="font-size:10px;color:#3A3A3A">01</span><span style="font-size:10px;color:#3A3A3A">02</span>
+            <span style="width:34px;height:34px;border-radius:9px;border:1px solid #3DFF9E;background:#08221A;display:flex;align-items:center;justify-content:center;font-size:13px;color:#3DFF9E">◔</span>
+            <span style="font-size:10px;color:#3A3A3A">04</span><span style="font-size:10px;color:#3A3A3A">05</span><span style="font-size:10px;color:#3A3A3A">06</span><span style="font-size:10px;color:#3A3A3A">07</span><span style="font-size:10px;color:#3A3A3A">08</span><span style="font-size:10px;color:#3A3A3A">09</span><span style="font-size:10px;color:#3A3A3A">10</span>
+          </div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:1px solid #1C1C1C;padding-bottom:12px">
+              <div><div style="font-family:Archivo,sans-serif;font-weight:700;font-size:20px;color:#fff">NOTIF</div><div style="font-size:11px;color:#3DFF9E;margin-top:6px">ESPELHO ATIVO · 12 HOJE</div></div>
+              <div style="display:flex;gap:8px"><span style="font-size:10px;color:#8A8A8A;border:1px solid #262626;border-radius:6px;padding:6px 10px">enviar para o mako ✓</span><span style="font-size:10px;color:#8A8A8A;border:1px solid #262626;border-radius:6px;padding:6px 10px">silenciar 1 h</span></div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:7px">
+              <span style="font-size:10px;color:#3DFF9E;border:1px solid #1E3E30;background:#071510;border-radius:999px;padding:6px 12px">todas · 12</span>
+              <span style="font-size:10px;color:#8A8A8A;border:1px solid #262626;border-radius:999px;padding:6px 12px">whatsapp · 5</span>
+              <span style="font-size:10px;color:#8A8A8A;border:1px solid #262626;border-radius:999px;padding:6px 12px">gmail · 3</span>
+              <span style="font-size:10px;color:#8A8A8A;border:1px solid #262626;border-radius:999px;padding:6px 12px">signal · 2</span>
+              <span style="font-size:10px;color:#8A8A8A;border:1px solid #262626;border-radius:999px;padding:6px 12px">sistema · 2</span>
+              <span style="font-size:10px;color:#5E5E5E;border:1px solid #1C1C1C;border-radius:999px;padding:6px 12px">gerir bloqueios</span>
+            </div>
+            <div style="border:1px solid #1E3E30;background:#071510;border-radius:14px;padding:15px 17px">
+              <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:10px;letter-spacing:.14em;color:#3DFF9E">A CHEGAR AGORA</span><span style="font-size:10px;color:#6E6E6E">há 4 s</span></div>
+              <div style="font-size:13px;color:#fff;margin-top:11px">Marta Silva</div>
+              <div style="font-size:11px;color:#8AC9AB;margin-top:6px">consegues ver o log do daemon? travou outra vez</div>
+              <div style="display:flex;gap:8px;margin-top:13px"><span style="font-size:11px;color:#3DFF9E;border:1px solid #1E3E30;border-radius:7px;padding:7px 13px">responder</span><span style="font-size:11px;color:#8A8A8A;border:1px solid #262626;border-radius:7px;padding:7px 13px">dispensar</span><span style="font-size:11px;color:#8A8A8A;border:1px solid #262626;border-radius:7px;padding:7px 13px">copiar texto</span></div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font-size:10px;letter-spacing:.16em;color:#5E5E5E">HISTÓRICO · 7 DIAS · 214 NOTIFICAÇÕES</div>
+              <div style="display:flex;gap:8px"><span style="font-size:10px;color:#6E6E6E;border:1px solid #1C1C1C;border-radius:6px;padding:5px 24px 5px 9px">pesquisar…</span><span style="font-size:10px;color:#6E6E6E;border:1px solid #1C1C1C;border-radius:6px;padding:5px 9px">limpar</span></div>
+            </div>
+            <div style="flex:1;min-height:0;border:1px solid #1C1C1C;background:#070707;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+              <div style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column">
+              <div style="display:flex;align-items:flex-start;gap:12px;padding:13px 15px;border-bottom:1px solid #141414"><span style="font-size:10px;color:#5E5E5E;width:56px;flex:none;padding-top:1px">whatsapp</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#E4E4E4;line-height:1.55">Grupo Casa</div><div style="font-size:11px;color:#8A8A8A;line-height:1.65;margin-top:4px;text-wrap:pretty">«alguém trouxe o carregador? deixei o meu no escritório outra vez e o telemóvel está nos 12%, se alguém passar pela sala tragam o cabo curto»</div></div><span style="font-size:10px;color:#4E4E4E;flex:none;padding-top:1px">02:58</span></div>
+              <div style="display:flex;align-items:flex-start;gap:12px;padding:13px 15px;border-bottom:1px solid #141414"><span style="font-size:10px;color:#5E5E5E;width:56px;flex:none;padding-top:1px">gmail</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#E4E4E4;line-height:1.55">Fatura de setembro disponível</div><div style="font-size:11px;color:#8A8A8A;line-height:1.65;margin-top:4px;text-wrap:pretty">O seu recibo de 34,90 € já está na área de cliente.</div></div><span style="font-size:10px;color:#4E4E4E;flex:none;padding-top:1px">01:12</span></div>
+              <div style="display:flex;align-items:flex-start;gap:12px;padding:13px 15px;border-bottom:1px solid #141414"><span style="font-size:10px;color:#5E5E5E;width:56px;flex:none;padding-top:1px">signal</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#E4E4E4;line-height:1.55">Rui</div><div style="font-size:11px;color:#8A8A8A;line-height:1.65;margin-top:4px;text-wrap:pretty">chamada perdida</div></div><span style="font-size:10px;color:#4E4E4E;flex:none;padding-top:1px">00:44</span></div>
+              <div style="display:flex;align-items:flex-start;gap:12px;padding:13px 15px;border-bottom:1px solid #141414"><span style="font-size:10px;color:#5E5E5E;width:56px;flex:none;padding-top:1px">sistema</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#E4E4E4;line-height:1.55">Bateria a 15%</div><div style="font-size:11px;color:#8A8A8A;line-height:1.65;margin-top:4px;text-wrap:pretty">ligado ao carregador</div></div><span style="font-size:10px;color:#4E4E4E;flex:none;padding-top:1px">ontem 23:31</span></div>
+              <div style="display:flex;align-items:flex-start;gap:12px;padding:13px 15px;border-bottom:1px solid #141414"><span style="font-size:10px;color:#5E5E5E;width:56px;flex:none;padding-top:1px">whatsapp</span><div style="flex:1;min-width:0"><div style="font-size:11px;color:#E4E4E4;line-height:1.55">Marta Silva</div><div style="font-size:11px;color:#8A8A8A;line-height:1.65;margin-top:4px;text-wrap:pretty">«o QR não lê no escuro, dá para aumentar o contraste do cartão de pareamento? no meu telemóvel o scanner só apanha quando ponho o brilho no máximo»</div></div><span style="font-size:10px;color:#4E4E4E;flex:none;padding-top:1px">ontem 22:05</span></div>
+              </div>
+              <div style="flex:none;padding:9px 15px;border-top:1px solid #141414;display:flex;align-items:center;justify-content:space-between;background:#0A0A0A"><span style="font-size:10px;color:#4E4E4E">209 entradas mais antigas</span><span style="font-size:10px;color:#6E6E6E">ver tudo</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 6d MEDIA ===== -->
+    <div id="6d" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;font-weight:700;color:#3DFF9E;border:1px solid #1E3E30;background:#071510;border-radius:5px;padding:4px 9px">6d</span><span style="font-size:12px;color:#B4B4B4">04 MEDIA · MPRIS e volume remoto</span></div>
+      <div style="width:900px;height:800px;box-sizing:border-box;border-radius:28px;border:1px solid rgba(255,255,255,.10);background:linear-gradient(140deg,rgba(8,9,12,.86),rgba(8,9,12,.78));box-shadow:0 40px 90px rgba(0,0,0,.7);padding:26px 28px;display:flex;flex-direction:column;gap:18px;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:50%;background:#3DFF9E;box-shadow:0 0 12px rgba(61,255,158,.8);animation:breathe 2.8s ease-in-out infinite"></span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#fff">HYPR</span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#3DFF9E;margin-left:-8px">LINK</span></div>
+          <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;color:#6E6E6E">‹ VOLTAR</span><div style="width:30px;height:30px;border:1px solid #262626;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#8A8A8A">×</div></div>
+        </div>
+        <div style="display:flex;gap:16px;flex:1;min-height:0">
+          <div style="width:44px;flex:none;display:flex;flex-direction:column;gap:8px;align-items:center;padding-top:2px">
+            <span style="font-size:10px;color:#3A3A3A">01</span><span style="font-size:10px;color:#3A3A3A">02</span><span style="font-size:10px;color:#3A3A3A">03</span>
+            <span style="width:34px;height:34px;border-radius:9px;border:1px solid #3DFF9E;background:#08221A;display:flex;align-items:center;justify-content:center;font-size:13px;color:#3DFF9E">▷</span>
+            <span style="font-size:10px;color:#3A3A3A">05</span><span style="font-size:10px;color:#3A3A3A">06</span><span style="font-size:10px;color:#3A3A3A">07</span><span style="font-size:10px;color:#3A3A3A">08</span><span style="font-size:10px;color:#3A3A3A">09</span><span style="font-size:10px;color:#3A3A3A">10</span>
+          </div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:16px">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:1px solid #1C1C1C;padding-bottom:12px">
+              <div><div style="font-family:Archivo,sans-serif;font-weight:700;font-size:20px;color:#fff">MEDIA</div><div style="font-size:11px;color:#3DFF9E;margin-top:6px">MPRIS · SPOTIFY</div></div>
+              <span style="font-size:10px;color:#8A8A8A;border:1px solid #262626;border-radius:6px;padding:6px 10px">trocar de player</span>
+            </div>
+            <div style="border:1px solid #1E3E30;background:#071510;border-radius:14px;padding:20px;display:flex;gap:18px;align-items:center">
+              <div style="width:96px;height:96px;flex:none;border-radius:10px;border:1px solid #1E3E30;background:#0C1A15;display:flex;align-items:center;justify-content:center;font-size:11px;color:#3A5A4C">CAPA</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:15px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Windowlicker</div>
+                <div style="font-size:11px;color:#8AC9AB;margin-top:6px">Aphex Twin · Windowlicker EP</div>
+                <div style="height:3px;background:#14211C;border-radius:2px;margin-top:15px"><div style="width:38%;height:100%;background:#3DFF9E;border-radius:2px"></div></div>
+                <div style="display:flex;justify-content:space-between;font-size:10px;color:#6E6E6E;margin-top:7px"><span>2:11</span><span>5:52</span></div>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px">
+              <span style="flex:1;text-align:center;font-size:13px;color:#8A8A8A;border:1px solid #262626;border-radius:10px;padding:13px 0">⏮</span>
+              <span style="flex:1;text-align:center;font-size:13px;color:#3DFF9E;border:1px solid #3DFF9E;background:#08221A;border-radius:10px;padding:13px 0">⏸</span>
+              <span style="flex:1;text-align:center;font-size:13px;color:#8A8A8A;border:1px solid #262626;border-radius:10px;padding:13px 0">⏭</span>
+              <span style="flex:1;text-align:center;font-size:11px;color:#8A8A8A;border:1px solid #262626;border-radius:10px;padding:13px 0">shuffle</span>
+              <span style="flex:1;text-align:center;font-size:11px;color:#8A8A8A;border:1px solid #262626;border-radius:10px;padding:13px 0">repetir</span>
+            </div>
+            <div style="border:1px solid #262626;background:rgba(255,255,255,.045);border-radius:14px;padding:16px 18px">
+              <div style="display:flex;justify-content:space-between;font-size:10px;color:#8A8A8A"><span>VOLUME DO PLAYER</span><span style="color:#3DFF9E">64%</span></div>
+              <div style="position:relative;height:4px;background:#1C1C1C;border-radius:2px;margin-top:10px"><div style="position:absolute;inset:0 36% 0 0;background:#3DFF9E;border-radius:2px"></div><div style="position:absolute;left:64%;top:-4px;width:11px;height:11px;border-radius:50%;background:#3DFF9E;transform:translateX(-50%)"></div></div>
+            </div>
+            <div style="flex:1;min-height:0;border:1px solid #1C1C1C;background:#070707;border-radius:14px;padding:14px 16px">
+              <div style="font-size:10px;letter-spacing:.16em;color:#5E5E5E">PLAYERS DETETADOS</div>
+              <div style="display:flex;flex-direction:column;gap:9px;margin-top:13px">
+                <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px"><span style="color:#3DFF9E">spotify</span><span style="color:#6E6E6E">a tocar · controlado</span></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px"><span style="color:#B4B4B4">mpv</span><span style="color:#6E6E6E">em pausa</span></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px"><span style="color:#8A8A8A">firefox · youtube</span><span style="color:#6E6E6E">parado</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 6e BATT ===== -->
+    <div id="6e" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;font-weight:700;color:#3DFF9E;border:1px solid #1E3E30;background:#071510;border-radius:5px;padding:4px 9px">6e</span><span style="font-size:12px;color:#B4B4B4">05 BATT · bateria do telemóvel e alertas</span></div>
+      <div style="width:900px;height:800px;box-sizing:border-box;border-radius:28px;border:1px solid rgba(255,255,255,.10);background:linear-gradient(140deg,rgba(8,9,12,.86),rgba(8,9,12,.78));box-shadow:0 40px 90px rgba(0,0,0,.7);padding:26px 28px;display:flex;flex-direction:column;gap:18px;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:50%;background:#3DFF9E;box-shadow:0 0 12px rgba(61,255,158,.8);animation:breathe 2.8s ease-in-out infinite"></span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#fff">HYPR</span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#3DFF9E;margin-left:-8px">LINK</span></div>
+          <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;color:#6E6E6E">‹ VOLTAR</span><div style="width:30px;height:30px;border:1px solid #262626;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#8A8A8A">×</div></div>
+        </div>
+        <div style="display:flex;gap:16px;flex:1;min-height:0">
+          <div style="width:44px;flex:none;display:flex;flex-direction:column;gap:8px;align-items:center;padding-top:2px">
+            <span style="font-size:10px;color:#3A3A3A">01</span><span style="font-size:10px;color:#3A3A3A">02</span><span style="font-size:10px;color:#3A3A3A">03</span><span style="font-size:10px;color:#3A3A3A">04</span>
+            <span style="width:34px;height:34px;border-radius:9px;border:1px solid #3DFF9E;background:#08221A;display:flex;align-items:center;justify-content:center;font-size:13px;color:#3DFF9E">▮</span>
+            <span style="font-size:10px;color:#3A3A3A">06</span><span style="font-size:10px;color:#3A3A3A">07</span><span style="font-size:10px;color:#3A3A3A">08</span><span style="font-size:10px;color:#3A3A3A">09</span><span style="font-size:10px;color:#3A3A3A">10</span>
+          </div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:16px">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:1px solid #1C1C1C;padding-bottom:12px">
+              <div><div style="font-family:Archivo,sans-serif;font-weight:700;font-size:20px;color:#fff">BATT</div><div style="font-size:11px;color:#3DFF9E;margin-top:6px">A CARREGAR · 90%</div></div>
+              <span style="font-size:10px;color:#6E6E6E">atualizado há 6 s</span>
+            </div>
+            <div style="border:1px solid #1E3E30;background:#071510;border-radius:14px;padding:22px 24px;display:flex;align-items:center;justify-content:space-between">
+              <div>
+                <div style="font-family:Archivo,sans-serif;font-weight:700;font-size:56px;line-height:1;color:#3DFF9E;text-shadow:0 0 26px rgba(61,255,158,.35)">90%</div>
+                <div style="font-size:11px;color:#8AC9AB;margin-top:12px">cheia em ~18 min · 21 W</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:11px;text-align:right">
+                <div><div style="font-size:10px;color:#4E4E4E;letter-spacing:.1em">TEMPERATURA</div><div style="font-size:13px;color:#B4B4B4;margin-top:5px">31 °C</div></div>
+                <div><div style="font-size:10px;color:#4E4E4E;letter-spacing:.1em">SAÚDE</div><div style="font-size:13px;color:#B4B4B4;margin-top:5px">96%</div></div>
+                <div><div style="font-size:10px;color:#4E4E4E;letter-spacing:.1em">CICLOS</div><div style="font-size:13px;color:#B4B4B4;margin-top:5px">214</div></div>
+              </div>
+            </div>
+            <div style="border:1px solid #1C1C1C;background:#070707;border-radius:14px;padding:16px 18px">
+              <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:10px;letter-spacing:.16em;color:#5E5E5E">ÚLTIMAS 12 HORAS</span><span style="font-size:10px;color:#6E6E6E">mín. 22% às 21:40</span></div>
+              <div style="display:flex;align-items:flex-end;gap:6px;height:110px;margin-top:16px">
+                <div style="flex:1;height:74%;background:#1E3E30;border-radius:2px 2px 0 0"></div>
+                <div style="flex:1;height:66%;background:#1E3E30;border-radius:2px 2px 0 0"></div>
+                <div style="flex:1;height:58%;background:#1E3E30;border-radius:2px 2px 0 0"></div>
+                <div style="flex:1;height:47%;background:#1E3E30;border-radius:2px 2px 0 0"></div>
+                <div style="flex:1;height:36%;background:#3A2C12;border-radius:2px 2px 0 0"></div>
+                <div style="flex:1;height:24%;background:#3A2C12;border-radius:2px 2px 0 0"></div>
+                <div style="flex:1;height:22%;background:#3A2C12;border-radius:2px 2px 0 0"></div>
+                <div style="flex:1;height:41%;background:#3DFF9E;border-radius:2px 2px 0 0"></div>
+                <div style="flex:1;height:58%;background:#3DFF9E;border-radius:2px 2px 0 0"></div>
+                <div style="flex:1;height:72%;background:#3DFF9E;border-radius:2px 2px 0 0"></div>
+                <div style="flex:1;height:84%;background:#3DFF9E;border-radius:2px 2px 0 0"></div>
+                <div style="flex:1;height:90%;background:#3DFF9E;border-radius:2px 2px 0 0"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;color:#4E4E4E;margin-top:9px"><span>15:00</span><span>21:00</span><span>03:05</span></div>
+            </div>
+            <div style="flex:1;min-height:0;border:1px solid #262626;background:rgba(255,255,255,.045);border-radius:14px;padding:16px 18px">
+              <div style="font-size:10px;letter-spacing:.16em;color:#5E5E5E">ALERTAS NO DESKTOP</div>
+              <div style="display:flex;flex-direction:column;gap:12px;margin-top:14px">
+                <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#B4B4B4"><span>avisar abaixo de 20%</span><span style="color:#3DFF9E">ativo</span></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#B4B4B4"><span>avisar quando carregada a 100%</span><span style="color:#3DFF9E">ativo</span></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#8A8A8A"><span>avisar acima de 40 °C</span><span style="color:#5E5E5E">desligado</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 6f CONTROL ===== -->
+    <div id="6f" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;font-weight:700;color:#3DFF9E;border:1px solid #1E3E30;background:#071510;border-radius:5px;padding:4px 9px">6f</span><span style="font-size:12px;color:#B4B4B4">06 CONTROL · Hyprland IPC, workspaces e atalhos</span></div>
+      <div style="width:900px;height:800px;box-sizing:border-box;border-radius:28px;border:1px solid rgba(255,255,255,.10);background:linear-gradient(140deg,rgba(8,9,12,.86),rgba(8,9,12,.78));box-shadow:0 40px 90px rgba(0,0,0,.7);padding:26px 28px;display:flex;flex-direction:column;gap:18px;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:50%;background:#3DFF9E;box-shadow:0 0 12px rgba(61,255,158,.8);animation:breathe 2.8s ease-in-out infinite"></span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#fff">HYPR</span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#3DFF9E;margin-left:-8px">LINK</span></div>
+          <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;color:#6E6E6E">‹ VOLTAR</span><div style="width:30px;height:30px;border:1px solid #262626;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#8A8A8A">×</div></div>
+        </div>
+        <div style="display:flex;gap:16px;flex:1;min-height:0">
+          <div style="width:44px;flex:none;display:flex;flex-direction:column;gap:8px;align-items:center;padding-top:2px">
+            <span style="font-size:10px;color:#3A3A3A">01</span><span style="font-size:10px;color:#3A3A3A">02</span><span style="font-size:10px;color:#3A3A3A">03</span><span style="font-size:10px;color:#3A3A3A">04</span><span style="font-size:10px;color:#3A3A3A">05</span>
+            <span style="width:34px;height:34px;border-radius:9px;border:1px solid #3DFF9E;background:#08221A;display:flex;align-items:center;justify-content:center;font-size:13px;color:#3DFF9E">⌘</span>
+            <span style="font-size:10px;color:#3A3A3A">07</span><span style="font-size:10px;color:#3A3A3A">08</span><span style="font-size:10px;color:#3A3A3A">09</span><span style="font-size:10px;color:#3A3A3A">10</span>
+          </div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:16px">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:1px solid #1C1C1C;padding-bottom:12px">
+              <div><div style="font-family:Archivo,sans-serif;font-weight:700;font-size:20px;color:#fff">CONTROL</div><div style="font-size:11px;color:#3DFF9E;margin-top:6px">SOCKET HYPRLAND IPC LIGADO</div></div>
+              <span style="font-size:10px;color:#8A8A8A;border:1px solid #262626;border-radius:6px;padding:6px 10px">recarregar config</span>
+            </div>
+            <div style="border:1px solid #1E3E30;background:#071510;border-radius:14px;padding:16px 18px">
+              <div style="font-size:10px;letter-spacing:.16em;color:#3DFF9E">WORKSPACES</div>
+              <div style="display:flex;gap:8px;margin-top:14px">
+                <span style="width:40px;height:40px;border-radius:9px;border:1px solid #1E3E30;color:#6E6E6E;font-size:12px;display:flex;align-items:center;justify-content:center">1</span>
+                <span style="width:40px;height:40px;border-radius:9px;border:1px solid #1E3E30;color:#6E6E6E;font-size:12px;display:flex;align-items:center;justify-content:center">2</span>
+                <span style="width:40px;height:40px;border-radius:9px;background:#3DFF9E;color:#04150D;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">3</span>
+                <span style="width:40px;height:40px;border-radius:9px;border:1px solid #1E3E30;color:#6E6E6E;font-size:12px;display:flex;align-items:center;justify-content:center">4</span>
+                <span style="width:40px;height:40px;border-radius:9px;border:1px solid #1C1C1C;color:#3A3A3A;font-size:12px;display:flex;align-items:center;justify-content:center">5</span>
+                <span style="width:40px;height:40px;border-radius:9px;border:1px solid #1C1C1C;color:#3A3A3A;font-size:12px;display:flex;align-items:center;justify-content:center">6</span>
+              </div>
+              <div style="font-size:11px;color:#8AC9AB;margin-top:14px">3 · code — 4 janelas · foco: kitty</div>
+            </div>
+            <div style="flex:1;min-height:0;border:1px solid #1C1C1C;background:#070707;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #141414"><span style="font-size:10px;letter-spacing:.16em;color:#5E5E5E">ATALHOS EXPOSTOS AO TELEMÓVEL · 9</span><span style="font-size:10px;color:#6E6E6E">editar</span></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid #141414"><span style="font-size:11px;color:#B4B4B4">bloquear ecrã</span><span style="font-size:10px;color:#6E6E6E">hyprlock</span></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid #141414"><span style="font-size:11px;color:#B4B4B4">captura de ecrã</span><span style="font-size:10px;color:#6E6E6E">grimblast copy area</span></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid #141414"><span style="font-size:11px;color:#B4B4B4">abrir terminal</span><span style="font-size:10px;color:#6E6E6E">kitty</span></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid #141414"><span style="font-size:11px;color:#B4B4B4">suspender</span><span style="font-size:10px;color:#6E6E6E">systemctl suspend</span></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 16px"><span style="font-size:11px;color:#B4B4B4">alternar layout</span><span style="font-size:10px;color:#6E6E6E">hyprctl dispatch togglesplit</span></div>
+            </div>
+            <div style="border:1px solid #262626;background:rgba(255,255,255,.045);border-radius:12px;padding:12px 15px;display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:11px;color:#6E6E6E">hyprctl dispatch …</span>
+              <span style="font-size:10px;color:#3DFF9E;border:1px solid #1E3E30;border-radius:7px;padding:6px 12px">executar</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 6g AUDIO ===== -->
+    <div id="6g" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;font-weight:700;color:#3DFF9E;border:1px solid #1E3E30;background:#071510;border-radius:5px;padding:4px 9px">6g</span><span style="font-size:12px;color:#B4B4B4">07 AUDIO · tap do PC e mixer por aplicação</span></div>
+      <div style="width:900px;height:800px;box-sizing:border-box;border-radius:28px;border:1px solid rgba(255,255,255,.10);background:linear-gradient(140deg,rgba(8,9,12,.86),rgba(8,9,12,.78));box-shadow:0 40px 90px rgba(0,0,0,.7);padding:26px 28px;display:flex;flex-direction:column;gap:18px;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:50%;background:#3DFF9E;box-shadow:0 0 12px rgba(61,255,158,.8);animation:breathe 2.8s ease-in-out infinite"></span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#fff">HYPR</span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#3DFF9E;margin-left:-8px">LINK</span></div>
+          <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;color:#6E6E6E">‹ VOLTAR</span><div style="width:30px;height:30px;border:1px solid #262626;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#8A8A8A">×</div></div>
+        </div>
+        <div style="display:flex;gap:16px;flex:1;min-height:0">
+          <div style="width:44px;flex:none;display:flex;flex-direction:column;gap:8px;align-items:center;padding-top:2px">
+            <span style="font-size:10px;color:#3A3A3A">01</span><span style="font-size:10px;color:#3A3A3A">02</span><span style="font-size:10px;color:#3A3A3A">03</span><span style="font-size:10px;color:#3A3A3A">04</span><span style="font-size:10px;color:#3A3A3A">05</span><span style="font-size:10px;color:#3A3A3A">06</span>
+            <span style="width:34px;height:34px;border-radius:9px;border:1px solid #3DFF9E;background:#08221A;display:flex;align-items:center;justify-content:center;font-size:13px;color:#3DFF9E">≋</span>
+            <span style="font-size:10px;color:#3A3A3A">08</span><span style="font-size:10px;color:#3A3A3A">09</span><span style="font-size:10px;color:#3A3A3A">10</span>
+          </div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:16px">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:1px solid #1C1C1C;padding-bottom:12px">
+              <div><div style="font-family:Archivo,sans-serif;font-weight:700;font-size:20px;color:#fff">AUDIO</div><div style="font-size:11px;color:#3DFF9E;margin-top:6px">TAP ATIVO · OPUS 48 kHz · 62 ms</div></div>
+              <span style="font-size:10px;color:#3DFF9E;border:1px solid #1E3E30;background:#071510;border-radius:6px;padding:6px 10px">parar tap</span>
+            </div>
+            <div style="border:1px solid #1E3E30;background:#071510;border-radius:14px;padding:18px 20px">
+              <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:10px;letter-spacing:.14em;color:#3DFF9E">SAÍDA ENCAMINHADA</span><span style="font-size:10px;color:#6E6E6E">978 KB enviados · 4 min</span></div>
+              <div style="display:flex;align-items:flex-end;gap:3px;height:56px;margin-top:16px">
+                <div style="flex:1;height:22%;background:#1E3E30"></div><div style="flex:1;height:48%;background:#1E3E30"></div><div style="flex:1;height:74%;background:#3DFF9E"></div><div style="flex:1;height:36%;background:#1E3E30"></div><div style="flex:1;height:62%;background:#3DFF9E"></div><div style="flex:1;height:88%;background:#3DFF9E"></div><div style="flex:1;height:41%;background:#1E3E30"></div><div style="flex:1;height:28%;background:#1E3E30"></div><div style="flex:1;height:66%;background:#3DFF9E"></div><div style="flex:1;height:52%;background:#1E3E30"></div><div style="flex:1;height:34%;background:#1E3E30"></div><div style="flex:1;height:70%;background:#3DFF9E"></div><div style="flex:1;height:44%;background:#1E3E30"></div><div style="flex:1;height:24%;background:#1E3E30"></div><div style="flex:1;height:58%;background:#3DFF9E"></div><div style="flex:1;height:38%;background:#1E3E30"></div>
+              </div>
+            </div>
+            <div style="flex:1;min-height:0;border:1px solid #1C1C1C;background:#070707;border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:18px">
+              <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:10px;letter-spacing:.16em;color:#5E5E5E">MIXER · POR APLICAÇÃO</span><span style="font-size:10px;color:#6E6E6E">marca a 100%</span></div>
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:#B4B4B4"><span>MESTRE</span><span style="color:#3DFF9E">72%</span></div>
+                <div style="position:relative;height:4px;background:#14211C;border-radius:2px;margin-top:9px"><div style="position:absolute;inset:0 28% 0 0;background:#3DFF9E;border-radius:2px"></div><div style="position:absolute;left:72%;top:-5px;width:13px;height:13px;border-radius:50%;background:#3DFF9E;transform:translateX(-50%)"></div><div style="position:absolute;left:80%;top:-4px;width:1px;height:12px;background:#3A3A3A"></div></div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:#B4B4B4"><span>SPOTIFY</span><span style="color:#FFB020">118%</span></div>
+                <div style="position:relative;height:4px;background:#211C14;border-radius:2px;margin-top:9px"><div style="position:absolute;inset:0 12% 0 0;background:#FFB020;border-radius:2px"></div><div style="position:absolute;left:88%;top:-5px;width:13px;height:13px;border-radius:50%;background:#FFB020;transform:translateX(-50%)"></div><div style="position:absolute;left:66%;top:-4px;width:1px;height:12px;background:#5E5E5E"></div></div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:#B4B4B4"><span>FIREFOX</span><span style="color:#8A8A8A">45%</span></div>
+                <div style="position:relative;height:4px;background:#1C1C1C;border-radius:2px;margin-top:9px"><div style="position:absolute;inset:0 55% 0 0;background:#8A8A8A;border-radius:2px"></div><div style="position:absolute;left:45%;top:-5px;width:13px;height:13px;border-radius:50%;background:#8A8A8A;transform:translateX(-50%)"></div><div style="position:absolute;left:66%;top:-4px;width:1px;height:12px;background:#3A3A3A"></div></div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:#8A8A8A"><span>MICROFONE DO TELEMÓVEL → PC</span><span style="color:#5E5E5E">silenciado</span></div>
+                <div style="position:relative;height:4px;background:#1C1C1C;border-radius:2px;margin-top:9px"><div style="position:absolute;left:0;top:-5px;width:13px;height:13px;border-radius:50%;background:#5E5E5E"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 6h WEBCAM ===== -->
+    <div id="6h" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;font-weight:700;color:#5E5E5E;border:1px solid #262626;background:#0B0B0B;border-radius:5px;padding:4px 9px">6h</span><span style="font-size:12px;color:#B4B4B4">08 WEBCAM · inativo, pronto a iniciar</span></div>
+      <div style="width:900px;height:800px;box-sizing:border-box;border-radius:28px;border:1px solid rgba(255,255,255,.10);background:linear-gradient(140deg,rgba(8,9,12,.86),rgba(8,9,12,.78));box-shadow:0 40px 90px rgba(0,0,0,.7);padding:26px 28px;display:flex;flex-direction:column;gap:18px;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:50%;background:#3DFF9E;box-shadow:0 0 12px rgba(61,255,158,.8);animation:breathe 2.8s ease-in-out infinite"></span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#fff">HYPR</span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#3DFF9E;margin-left:-8px">LINK</span></div>
+          <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;color:#6E6E6E">‹ VOLTAR</span><div style="width:30px;height:30px;border:1px solid #262626;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#8A8A8A">×</div></div>
+        </div>
+        <div style="display:flex;gap:16px;flex:1;min-height:0">
+          <div style="width:44px;flex:none;display:flex;flex-direction:column;gap:8px;align-items:center;padding-top:2px">
+            <span style="font-size:10px;color:#3A3A3A">01</span><span style="font-size:10px;color:#3A3A3A">02</span><span style="font-size:10px;color:#3A3A3A">03</span><span style="font-size:10px;color:#3A3A3A">04</span><span style="font-size:10px;color:#3A3A3A">05</span><span style="font-size:10px;color:#3A3A3A">06</span><span style="font-size:10px;color:#3A3A3A">07</span>
+            <span style="width:34px;height:34px;border-radius:9px;border:1px solid #5E5E5E;background:#0B0B0B;display:flex;align-items:center;justify-content:center;font-size:13px;color:#8A8A8A">◎</span>
+            <span style="font-size:10px;color:#3A3A3A">09</span><span style="font-size:10px;color:#3A3A3A">10</span>
+          </div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:16px">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:1px solid #1C1C1C;padding-bottom:12px">
+              <div><div style="font-family:Archivo,sans-serif;font-weight:700;font-size:20px;color:#fff">WEBCAM</div><div style="font-size:11px;color:#8A8A8A;margin-top:6px">SEM STREAM · MÓDULO EM REPOUSO</div></div>
+              <span style="font-size:11px;color:#3DFF9E;border:1px solid #1E3E30;background:#071510;border-radius:7px;padding:7px 13px">iniciar stream</span>
+            </div>
+            <div style="flex:1;min-height:0;border:1px solid #1C1C1C;background:#070707;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px">
+              <div style="font-size:26px;color:#2A2A2A">◎</div>
+              <div style="font-size:13px;color:#8A8A8A">Pré-visualização desligada</div>
+              <div style="font-size:11px;color:#5E5E5E;text-align:center;line-height:1.8">A câmara do PC só é aberta quando pedida.<br>O telemóvel recebe o stream H.264 pelo mesmo túnel QUIC.</div>
+            </div>
+            <div style="display:flex;gap:12px">
+              <div style="flex:1;border:1px solid #262626;background:rgba(255,255,255,.045);border-radius:12px;padding:13px 15px"><div style="font-size:10px;letter-spacing:.12em;color:#5E5E5E">DISPOSITIVO</div><div style="font-size:12px;color:#E4E4E4;margin-top:8px">/dev/video0 · Integrated</div></div>
+              <div style="flex:1;border:1px solid #262626;background:rgba(255,255,255,.045);border-radius:12px;padding:13px 15px"><div style="font-size:10px;letter-spacing:.12em;color:#5E5E5E">RESOLUÇÃO</div><div style="font-size:12px;color:#E4E4E4;margin-top:8px">1280×720 · 30 fps</div></div>
+              <div style="flex:1;border:1px solid #262626;background:rgba(255,255,255,.045);border-radius:12px;padding:13px 15px"><div style="font-size:10px;letter-spacing:.12em;color:#5E5E5E">CODEC</div><div style="font-size:12px;color:#E4E4E4;margin-top:8px">H.264 · 2.5 Mbps</div></div>
+            </div>
+            <div style="border:1px solid #1C1C1C;background:rgba(255,255,255,.025);border-radius:12px;padding:13px 15px;display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:11px;color:#6E6E6E">último uso · ontem 19:12 · 2 min 41 s</span>
+              <span style="font-size:10px;color:#8A8A8A;border:1px solid #262626;border-radius:6px;padding:6px 10px">permissões</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 6i TRACK ===== -->
+    <div id="6i" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;font-weight:700;color:#5E5E5E;border:1px solid #262626;background:#0B0B0B;border-radius:5px;padding:4px 9px">6i</span><span style="font-size:12px;color:#B4B4B4">09 TRACK · rato virtual e sensibilidade</span></div>
+      <div style="width:900px;height:800px;box-sizing:border-box;border-radius:28px;border:1px solid rgba(255,255,255,.10);background:linear-gradient(140deg,rgba(8,9,12,.86),rgba(8,9,12,.78));box-shadow:0 40px 90px rgba(0,0,0,.7);padding:26px 28px;display:flex;flex-direction:column;gap:18px;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:50%;background:#3DFF9E;box-shadow:0 0 12px rgba(61,255,158,.8);animation:breathe 2.8s ease-in-out infinite"></span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#fff">HYPR</span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#3DFF9E;margin-left:-8px">LINK</span></div>
+          <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;color:#6E6E6E">‹ VOLTAR</span><div style="width:30px;height:30px;border:1px solid #262626;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#8A8A8A">×</div></div>
+        </div>
+        <div style="display:flex;gap:16px;flex:1;min-height:0">
+          <div style="width:44px;flex:none;display:flex;flex-direction:column;gap:8px;align-items:center;padding-top:2px">
+            <span style="font-size:10px;color:#3A3A3A">01</span><span style="font-size:10px;color:#3A3A3A">02</span><span style="font-size:10px;color:#3A3A3A">03</span><span style="font-size:10px;color:#3A3A3A">04</span><span style="font-size:10px;color:#3A3A3A">05</span><span style="font-size:10px;color:#3A3A3A">06</span><span style="font-size:10px;color:#3A3A3A">07</span><span style="font-size:10px;color:#3A3A3A">08</span>
+            <span style="width:34px;height:34px;border-radius:9px;border:1px solid #5E5E5E;background:#0B0B0B;display:flex;align-items:center;justify-content:center;font-size:13px;color:#8A8A8A">◈</span>
+            <span style="font-size:10px;color:#3A3A3A">10</span>
+          </div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:16px">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:1px solid #1C1C1C;padding-bottom:12px">
+              <div><div style="font-family:Archivo,sans-serif;font-weight:700;font-size:20px;color:#fff">TRACK</div><div style="font-size:11px;color:#8A8A8A;margin-top:6px">RATO VIRTUAL EM REPOUSO · uinput pronto</div></div>
+              <span style="font-size:10px;color:#8A8A8A;border:1px solid #262626;border-radius:6px;padding:6px 10px">testar movimento</span>
+            </div>
+            <div style="flex:1;min-height:0;border:1px solid #1C1C1C;background:#070707;border-radius:14px;position:relative;overflow:hidden">
+              <div style="position:absolute;inset:0;background-image:linear-gradient(#0E0E0E 1px,transparent 1px),linear-gradient(90deg,#0E0E0E 1px,transparent 1px);background-size:44px 44px"></div>
+              <div style="position:absolute;left:16px;top:14px;font-size:10px;letter-spacing:.14em;color:#5E5E5E">ESPELHO DO CURSOR · 2560×1440</div>
+              <div style="position:absolute;left:58%;top:44%;width:9px;height:9px;border-radius:50%;background:#3DFF9E;box-shadow:0 0 16px rgba(61,255,158,.7)"></div>
+              <div style="position:absolute;left:58%;top:44%;width:34px;height:34px;border-radius:50%;border:1px solid #1E3E30;transform:translate(-13px,-13px)"></div>
+              <div style="position:absolute;right:16px;bottom:14px;font-size:10px;color:#5E5E5E">x 1482 · y 631</div>
+            </div>
+            <div style="border:1px solid #262626;background:rgba(255,255,255,.045);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:16px">
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:#B4B4B4"><span>SENSIBILIDADE</span><span style="color:#8A8A8A">1.8×</span></div>
+                <div style="position:relative;height:4px;background:#1C1C1C;border-radius:2px;margin-top:9px"><div style="position:absolute;inset:0 42% 0 0;background:#8A8A8A;border-radius:2px"></div><div style="position:absolute;left:58%;top:-5px;width:13px;height:13px;border-radius:50%;background:#8A8A8A;transform:translateX(-50%)"></div></div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:#B4B4B4"><span>VELOCIDADE DE SCROLL</span><span style="color:#8A8A8A">3 linhas</span></div>
+                <div style="position:relative;height:4px;background:#1C1C1C;border-radius:2px;margin-top:9px"><div style="position:absolute;inset:0 70% 0 0;background:#8A8A8A;border-radius:2px"></div><div style="position:absolute;left:30%;top:-5px;width:13px;height:13px;border-radius:50%;background:#8A8A8A;transform:translateX(-50%)"></div></div>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px">
+              <span style="flex:1;text-align:center;font-size:11px;color:#8A8A8A;border:1px solid #262626;border-radius:10px;padding:12px 0">aceleração ✓</span>
+              <span style="flex:1;text-align:center;font-size:11px;color:#8A8A8A;border:1px solid #262626;border-radius:10px;padding:12px 0">inverter scroll</span>
+              <span style="flex:1;text-align:center;font-size:11px;color:#8A8A8A;border:1px solid #262626;border-radius:10px;padding:12px 0">teclado virtual ✓</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 6j CONFIG ===== -->
+    <div id="6j" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;font-weight:700;color:#5E5E5E;border:1px solid #262626;background:#0B0B0B;border-radius:5px;padding:4px 9px">6j</span><span style="font-size:12px;color:#B4B4B4">10 CONFIG · daemon, rede e emparelhamentos</span></div>
+      <div style="width:900px;height:800px;box-sizing:border-box;border-radius:28px;border:1px solid rgba(255,255,255,.10);background:linear-gradient(140deg,rgba(8,9,12,.86),rgba(8,9,12,.78));box-shadow:0 40px 90px rgba(0,0,0,.7);padding:26px 28px;display:flex;flex-direction:column;gap:18px;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:50%;background:#3DFF9E;box-shadow:0 0 12px rgba(61,255,158,.8);animation:breathe 2.8s ease-in-out infinite"></span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#fff">HYPR</span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:18px;color:#3DFF9E;margin-left:-8px">LINK</span></div>
+          <div style="display:flex;align-items:center;gap:12px"><span style="font-size:11px;color:#6E6E6E">‹ VOLTAR</span><div style="width:30px;height:30px;border:1px solid #262626;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#8A8A8A">×</div></div>
+        </div>
+        <div style="display:flex;gap:16px;flex:1;min-height:0">
+          <div style="width:44px;flex:none;display:flex;flex-direction:column;gap:8px;align-items:center;padding-top:2px">
+            <span style="font-size:10px;color:#3A3A3A">01</span><span style="font-size:10px;color:#3A3A3A">02</span><span style="font-size:10px;color:#3A3A3A">03</span><span style="font-size:10px;color:#3A3A3A">04</span><span style="font-size:10px;color:#3A3A3A">05</span><span style="font-size:10px;color:#3A3A3A">06</span><span style="font-size:10px;color:#3A3A3A">07</span><span style="font-size:10px;color:#3A3A3A">08</span><span style="font-size:10px;color:#3A3A3A">09</span>
+            <span style="width:34px;height:34px;border-radius:9px;border:1px solid #8A8A8A;background:#0F0F0F;display:flex;align-items:center;justify-content:center;font-size:13px;color:#E4E4E4">⚙</span>
+          </div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;border-bottom:1px solid #1C1C1C;padding-bottom:12px">
+              <div><div style="font-family:Archivo,sans-serif;font-weight:700;font-size:20px;color:#fff">CONFIG</div><div style="font-size:11px;color:#8A8A8A;margin-top:6px">DAEMON 1.6 · PROTO KDEC/1.6</div></div>
+              <span style="font-size:10px;color:#8A8A8A;border:1px solid #262626;border-radius:6px;padding:6px 10px">reiniciar daemon</span>
+            </div>
+            <div style="border:1px solid #1C1C1C;background:#070707;border-radius:14px;overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #141414;font-size:10px;letter-spacing:.16em;color:#5E5E5E">REDE</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #141414"><span style="font-size:11px;color:#B4B4B4">porta de escuta</span><span style="font-size:11px;color:#E4E4E4">4711</span></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #141414"><span style="font-size:11px;color:#B4B4B4">interface</span><span style="font-size:11px;color:#E4E4E4">0.0.0.0 · todas</span></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px"><span style="font-size:11px;color:#B4B4B4">descoberta mDNS</span><span style="font-size:11px;color:#3DFF9E">ativa</span></div>
+            </div>
+            <div style="border:1px solid #1C1C1C;background:#070707;border-radius:14px;overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #141414;font-size:10px;letter-spacing:.16em;color:#5E5E5E">DISPOSITIVOS EMPARELHADOS · 2</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #141414"><div><div style="font-size:11px;color:#E4E4E4">Pixel 8 · maggio</div><div style="font-size:10px;color:#4E4E4E;margin-top:4px">fp 4A7C…E11B · ligado agora</div></div><span style="font-size:10px;color:#FF4757">revogar</span></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px"><div><div style="font-size:11px;color:#B4B4B4">Tab S9 · sala</div><div style="font-size:10px;color:#4E4E4E;margin-top:4px">fp 91BD…772C · visto ontem</div></div><span style="font-size:10px;color:#5E5E5E">revogar</span></div>
+            </div>
+            <div style="flex:1;min-height:0;border:1px solid #1C1C1C;background:#070707;border-radius:14px;overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #141414;font-size:10px;letter-spacing:.16em;color:#5E5E5E">DAEMON</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #141414"><span style="font-size:11px;color:#B4B4B4">arrancar com a sessão</span><span style="font-size:11px;color:#3DFF9E">ativo</span></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #141414"><span style="font-size:11px;color:#B4B4B4">nível de log</span><span style="font-size:11px;color:#E4E4E4">info</span></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #141414"><span style="font-size:11px;color:#B4B4B4">manter histórico</span><span style="font-size:11px;color:#E4E4E4">7 dias</span></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px"><span style="font-size:11px;color:#8A8A8A">apagar todos os históricos</span><span style="font-size:10px;color:#FF4757">apagar</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="padding:40px 60px 90px;font-family:'JetBrains Mono',monospace;color:#E4E4E4;display:flex;flex-direction:column;gap:14px">
+
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;max-width:1900px">
+    <div>
+      <div style="font-size:10px;letter-spacing:.2em;color:#6E6E6E">RONDA 5 · GUI DESKTOP (RUST + ICED)</div>
+      <div style="font-family:Archivo,sans-serif;font-weight:700;font-size:26px;margin-top:10px;letter-spacing:-.01em">Janela 900×800 na linguagem visual do app Android</div>
+    </div>
+    <div style="font-size:11px;color:#4E4E4E;text-align:right;line-height:1.8">sem decorações do SO · transparente + blur do Hyprland<br>mono do sistema no lugar de JetBrains Mono · acento único por estado</div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:44px;align-items:flex-start;margin-top:18px">
+
+    <!-- ============ 5a · CONECTADO ============ -->
+    <div id="5a" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="font-size:11px;font-weight:700;color:#3DFF9E;border:1px solid #1E3E30;background:#071510;border-radius:5px;padding:4px 9px">5a</span>
+        <span style="font-size:12px;color:#B4B4B4">Estado conectado · consola + grade de módulos com estado real</span>
+      </div>
+
+      <div style="width:900px;height:800px;box-sizing:border-box;border-radius:28px;border:1px solid rgba(255,255,255,.10);background:linear-gradient(140deg,rgba(8,9,12,.86),rgba(8,9,12,.78));box-shadow:0 40px 90px rgba(0,0,0,.7);padding:26px 28px;display:flex;flex-direction:column;gap:18px;overflow:hidden">
+
+        <!-- header -->
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:baseline;gap:10px">
+            <span style="width:8px;height:8px;border-radius:50%;background:#3DFF9E;box-shadow:0 0 12px rgba(61,255,158,.8);animation:breathe 2.8s ease-in-out infinite;align-self:center"></span>
+            <span style="font-family:Archivo,sans-serif;font-weight:700;font-size:22px;letter-spacing:-.01em;color:#fff">HYPR</span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:22px;letter-spacing:-.01em;color:#3DFF9E;text-shadow:0 0 18px rgba(61,255,158,.45);margin-left:-9px">LINK</span>
+            <span style="font-size:10px;color:#4E4E4E;letter-spacing:.14em;margin-left:8px">DAEMON 1.6</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="display:flex;align-items:center;gap:8px;border:1px solid #1E3E30;background:#071510;border-radius:999px;padding:6px 13px">
+              <span style="width:7px;height:7px;border-radius:50%;background:#3DFF9E;animation:breathe 2.8s ease-in-out infinite"></span>
+              <span style="font-size:11px;letter-spacing:.12em;color:#3DFF9E">LINK ATIVO</span>
+            </div>
+            <div style="width:30px;height:30px;border:1px solid #262626;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#8A8A8A">×</div>
+          </div>
+        </div>
+
+        <!-- device card -->
+        <div style="border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.045);border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="display:flex;align-items:center;gap:9px">
+              <span style="width:7px;height:7px;border-radius:50%;background:#3DFF9E;animation:breathe 2.8s ease-in-out infinite"></span>
+              <span style="font-size:14px;font-weight:700;color:#fff">Pixel 8 · maggio</span>
+            </div>
+            <div style="font-size:11px;color:#6E6E6E;margin-top:7px;padding-left:16px">TLS emparelhado · fp 4A7C…E11B · latência 4 ms</div>
+          </div>
+          <div style="display:flex;gap:14px;text-align:right">
+            <div><div style="font-size:10px;color:#4E4E4E;letter-spacing:.1em">CPU</div><div style="font-size:13px;color:#B4B4B4;margin-top:5px">18%</div></div>
+            <div><div style="font-size:10px;color:#4E4E4E;letter-spacing:.1em">RAM</div><div style="font-size:13px;color:#B4B4B4;margin-top:5px">7.4G</div></div>
+            <div><div style="font-size:10px;color:#4E4E4E;letter-spacing:.1em">WS</div><div style="font-size:13px;color:#3DFF9E;margin-top:5px">3</div></div>
+          </div>
+        </div>
+
+        <!-- body -->
+        <div style="display:flex;gap:18px;flex:1;min-height:0">
+
+          <!-- sidebar módulos -->
+          <div style="width:296px;flex:none;display:flex;flex-direction:column;gap:5px;min-height:0">
+            <div style="font-size:10px;letter-spacing:.18em;color:#5E5E5E;padding:0 2px 3px">MÓDULOS · 7 ATIVOS</div>
+
+            <div style="border:1px solid #1E3E30;background:#071510;border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px">
+              <span style="font-size:10px;color:#5E5E5E;width:16px">01</span>
+              <span style="font-size:13px;color:#3DFF9E;width:16px;text-align:center">⧉</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;letter-spacing:.06em;color:#fff">CLIP</div>
+                <div style="font-size:10px;color:#6E6E6E;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">3 itens sincronizados</div>
+              </div>
+              <span style="width:6px;height:6px;border-radius:50%;background:#3DFF9E;animation:breathe 2.8s ease-in-out infinite"></span>
+              <span style="font-size:11px;color:#3A3A3A">›</span>
+            </div>
+
+            <div style="border:1px solid #262626;background:rgba(255,255,255,.045);border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px">
+              <span style="font-size:10px;color:#5E5E5E;width:16px">02</span>
+              <span style="font-size:13px;color:#8A8A8A;width:16px;text-align:center">⇄</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;letter-spacing:.06em;color:#E4E4E4">FILES</div>
+                <div style="font-size:10px;color:#6E6E6E;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">~/Downloads/hyprlink</div>
+              </div>
+              <span style="font-size:10px;color:#FFB020">14%</span>
+              <span style="font-size:11px;color:#3A3A3A">›</span>
+            </div>
+
+            <div style="border:1px solid #1E3E30;background:#071510;border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px">
+              <span style="font-size:10px;color:#5E5E5E;width:16px">03</span>
+              <span style="font-size:13px;color:#3DFF9E;width:16px;text-align:center">◔</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;letter-spacing:.06em;color:#fff">NOTIF</div>
+                <div style="font-size:10px;color:#6E6E6E;margin-top:3px">espelho ativo · 12 hoje</div>
+              </div>
+              <span style="width:6px;height:6px;border-radius:50%;background:#3DFF9E;animation:breathe 2.8s ease-in-out infinite"></span>
+              <span style="font-size:11px;color:#3A3A3A">›</span>
+            </div>
+
+            <div style="border:1px solid #1E3E30;background:#071510;border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px">
+              <span style="font-size:10px;color:#5E5E5E;width:16px">04</span>
+              <span style="font-size:13px;color:#3DFF9E;width:16px;text-align:center">▷</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;letter-spacing:.06em;color:#fff">MEDIA</div>
+                <div style="font-size:10px;color:#6E6E6E;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">MPRIS · Spotify a tocar</div>
+              </div>
+              <span style="width:6px;height:6px;border-radius:50%;background:#3DFF9E;animation:breathe 2.8s ease-in-out infinite"></span>
+              <span style="font-size:11px;color:#3A3A3A">›</span>
+            </div>
+
+            <div style="border:1px solid #1E3E30;background:#071510;border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px">
+              <span style="font-size:10px;color:#5E5E5E;width:16px">05</span>
+              <span style="font-size:13px;color:#3DFF9E;width:16px;text-align:center">▮</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;letter-spacing:.06em;color:#fff">BATT</div>
+                <div style="font-size:10px;color:#6E6E6E;margin-top:3px">90% · a carregar</div>
+              </div>
+              <span style="width:6px;height:6px;border-radius:50%;background:#3DFF9E;animation:breathe 2.8s ease-in-out infinite"></span>
+              <span style="font-size:11px;color:#3A3A3A">›</span>
+            </div>
+
+            <div style="border:1px solid #1E3E30;background:#071510;border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px">
+              <span style="font-size:10px;color:#5E5E5E;width:16px">06</span>
+              <span style="font-size:13px;color:#3DFF9E;width:16px;text-align:center">⌘</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;letter-spacing:.06em;color:#fff">CONTROL</div>
+                <div style="font-size:10px;color:#6E6E6E;margin-top:3px">Hyprland IPC · 9 atalhos</div>
+              </div>
+              <span style="width:6px;height:6px;border-radius:50%;background:#3DFF9E;animation:breathe 2.8s ease-in-out infinite"></span>
+              <span style="font-size:11px;color:#3A3A3A">›</span>
+            </div>
+
+            <div style="border:1px solid #3DFF9E;background:#08221A;border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px;box-shadow:0 0 0 1px rgba(61,255,158,.18)">
+              <span style="font-size:10px;color:#5E5E5E;width:16px">07</span>
+              <span style="font-size:13px;color:#3DFF9E;width:16px;text-align:center">≋</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;letter-spacing:.06em;color:#fff">AUDIO</div>
+                <div style="font-size:10px;color:#8AC9AB;margin-top:3px">tap ativo · 978 KB enviados</div>
+              </div>
+              <span style="width:6px;height:6px;border-radius:50%;background:#3DFF9E;animation:breathe 2.8s ease-in-out infinite"></span>
+              <span style="font-size:11px;color:#3DFF9E">›</span>
+            </div>
+
+            <div style="border:1px solid #1C1C1C;background:rgba(255,255,255,.025);border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px">
+              <span style="font-size:10px;color:#3A3A3A;width:16px">08</span>
+              <span style="font-size:13px;color:#5E5E5E;width:16px;text-align:center">◎</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;letter-spacing:.06em;color:#8A8A8A">WEBCAM</div>
+                <div style="font-size:10px;color:#4E4E4E;margin-top:3px">sem stream</div>
+              </div>
+              <span style="width:6px;height:6px;border-radius:50%;background:#5E5E5E"></span>
+              <span style="font-size:11px;color:#2A2A2A">›</span>
+            </div>
+
+            <div style="border:1px solid #1C1C1C;background:rgba(255,255,255,.025);border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px">
+              <span style="font-size:10px;color:#3A3A3A;width:16px">09</span>
+              <span style="font-size:13px;color:#5E5E5E;width:16px;text-align:center">◈</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;letter-spacing:.06em;color:#8A8A8A">TRACK</div>
+                <div style="font-size:10px;color:#4E4E4E;margin-top:3px">rato virtual em repouso</div>
+              </div>
+              <span style="width:6px;height:6px;border-radius:50%;background:#5E5E5E"></span>
+              <span style="font-size:11px;color:#2A2A2A">›</span>
+            </div>
+
+            <div style="border:1px solid #262626;background:rgba(255,255,255,.045);border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px">
+              <span style="font-size:10px;color:#5E5E5E;width:16px">10</span>
+              <span style="font-size:13px;color:#8A8A8A;width:16px;text-align:center">⚙</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;letter-spacing:.06em;color:#E4E4E4">CONFIG</div>
+                <div style="font-size:10px;color:#6E6E6E;margin-top:3px">porta 4711 · autoarranque</div>
+              </div>
+              <span style="font-size:11px;color:#3A3A3A">›</span>
+            </div>
+          </div>
+
+          <!-- coluna direita -->
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:14px">
+
+            <!-- detalhe do módulo selecionado -->
+            <div style="border:1px solid #1E3E30;background:#071510;border-radius:14px;padding:14px 16px">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="font-size:11px;letter-spacing:.14em;color:#3DFF9E">07 AUDIO · MIXER REMOTO</div>
+                <div style="font-size:10px;color:#6E6E6E">sink: hyprlink-tap</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:11px;margin-top:14px">
+                <div>
+                  <div style="display:flex;justify-content:space-between;font-size:10px;color:#8A8A8A"><span>MESTRE</span><span style="color:#3DFF9E">72%</span></div>
+                  <div style="position:relative;height:4px;background:#14211C;border-radius:2px;margin-top:7px">
+                    <div style="position:absolute;inset:0 28% 0 0;background:#3DFF9E;border-radius:2px"></div>
+                    <div style="position:absolute;left:72%;top:-4px;width:11px;height:11px;border-radius:50%;background:#3DFF9E;transform:translateX(-50%)"></div>
+                    <div style="position:absolute;left:80%;top:-3px;width:1px;height:10px;background:#3A3A3A"></div>
+                  </div>
+                </div>
+                <div>
+                  <div style="display:flex;justify-content:space-between;font-size:10px;color:#8A8A8A"><span>SPOTIFY</span><span style="color:#FFB020">118%</span></div>
+                  <div style="position:relative;height:4px;background:#211C14;border-radius:2px;margin-top:7px">
+                    <div style="position:absolute;inset:0 12% 0 0;background:#FFB020;border-radius:2px"></div>
+                    <div style="position:absolute;left:88%;top:-4px;width:11px;height:11px;border-radius:50%;background:#FFB020;transform:translateX(-50%)"></div>
+                    <div style="position:absolute;left:66%;top:-3px;width:1px;height:10px;background:#5E5E5E"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- transferência -->
+            <div style="border:1px solid #3A2C12;background:#150F03;border-radius:14px;padding:13px 16px">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="font-size:11px;color:#E4E4E4">relatorio-q3.pdf</div>
+                <div style="font-size:10px;color:#C99A50">1.8 / 12.4 MB · 3.1 MB/s</div>
+              </div>
+              <div style="height:3px;background:#211C14;border-radius:2px;margin-top:10px">
+                <div style="width:14%;height:100%;background:#FFB020;border-radius:2px"></div>
+              </div>
+            </div>
+
+            <!-- consola -->
+            <div style="flex:1;min-height:0;border:1px solid #1E3E30;background:#070707;border-radius:14px;display:flex;flex-direction:column;overflow:hidden">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #14211C">
+                <div style="font-size:11px;letter-spacing:.14em;color:#3DFF9E">CONSOLA DE DIAGNÓSTICO</div>
+                <div style="display:flex;gap:8px">
+                  <span style="font-size:10px;color:#6E6E6E;border:1px solid #1C1C1C;border-radius:6px;padding:4px 8px">copiar log</span>
+                  <span style="font-size:10px;color:#6E6E6E;border:1px solid #1C1C1C;border-radius:6px;padding:4px 8px">limpar</span>
+                </div>
+              </div>
+              <div style="flex:1;min-height:0;overflow:hidden;padding:12px 16px;font-size:11px;line-height:1.85;color:#6E6E6E">
+                <div>03:04:58 <span style="color:#3DFF9E">[+]</span> handshake QUIC concluído · mTLS ok</div>
+                <div>03:04:58 <span style="color:#8A8A8A">[i]</span> peer maggio-ryoku · 192.168.1.34:4711</div>
+                <div>03:05:01 <span style="color:#8A8A8A">[i]</span> clip: 214 B → android</div>
+                <div>03:05:07 <span style="color:#3DFF9E">[+]</span> audio tap aberto · 48 kHz opus</div>
+                <div>03:05:12 <span style="color:#8A8A8A">[i]</span> audio tap: 978 KB enviados</div>
+                <div>03:05:19 <span style="color:#8A8A8A">[i]</span> notif espelhada · com.whatsapp</div>
+                <div>03:05:24 <span style="color:#FFB020">[!]</span> sftp: retomar relatorio-q3.pdf em 14%</div>
+                <div>03:05:26 <span style="color:#8A8A8A">[i]</span> hyprland ipc: workspace 3</div>
+                <div style="color:#8A8A8A">03:05:31 <span style="color:#3DFF9E">[+]</span> batt: 90% charging<span style="color:#3DFF9E;animation:scan 1.2s linear infinite">▌</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 5b · A EMPARELHAR ============ -->
+    <div id="5b" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="font-size:11px;font-weight:700;color:#FFB020;border:1px solid #3A2C12;background:#150F03;border-radius:5px;padding:4px 9px">5b</span>
+        <span style="font-size:12px;color:#B4B4B4">Estado a emparelhar · QR + linhas copiáveis, acento âmbar</span>
+      </div>
+
+      <div style="width:900px;height:800px;box-sizing:border-box;border-radius:28px;border:1px solid rgba(255,255,255,.10);background:linear-gradient(140deg,rgba(8,9,12,.86),rgba(8,9,12,.78));box-shadow:0 40px 90px rgba(0,0,0,.7);padding:26px 28px;display:flex;flex-direction:column;gap:18px;overflow:hidden">
+
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:baseline;gap:10px">
+            <span style="width:8px;height:8px;border-radius:50%;background:#FFB020;box-shadow:0 0 12px rgba(255,176,32,.8);animation:breathe 1.5s ease-in-out infinite;align-self:center"></span>
+            <span style="font-family:Archivo,sans-serif;font-weight:700;font-size:22px;letter-spacing:-.01em;color:#fff">HYPR</span><span style="font-family:Archivo,sans-serif;font-weight:700;font-size:22px;letter-spacing:-.01em;color:#FFB020;text-shadow:0 0 18px rgba(255,176,32,.4);margin-left:-9px">LINK</span>
+            <span style="font-size:10px;color:#4E4E4E;letter-spacing:.14em;margin-left:8px">DAEMON 1.6</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="display:flex;align-items:center;gap:8px;border:1px solid #3A2C12;background:#150F03;border-radius:999px;padding:6px 13px">
+              <span style="width:7px;height:7px;border-radius:50%;background:#FFB020;animation:breathe 1.5s ease-in-out infinite"></span>
+              <span style="font-size:11px;letter-spacing:.12em;color:#FFB020">A AGUARDAR PAREAMENTO</span>
+            </div>
+            <div style="width:30px;height:30px;border:1px solid #262626;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#8A8A8A">×</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:18px;flex:1;min-height:0">
+
+          <!-- sidebar em repouso -->
+          <div style="width:296px;flex:none;display:flex;flex-direction:column;gap:6px">
+            <div style="font-size:10px;letter-spacing:.18em;color:#5E5E5E;padding:0 2px 4px">MÓDULOS · EM ESPERA</div>
+            <div style="border:1px solid #1C1C1C;background:rgba(255,255,255,.025);border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px"><span style="font-size:10px;color:#3A3A3A;width:16px">01</span><span style="font-size:13px;color:#5E5E5E;width:16px;text-align:center">⧉</span><div style="flex:1"><div style="font-size:12px;letter-spacing:.06em;color:#8A8A8A">CLIP</div><div style="font-size:10px;color:#4E4E4E;margin-top:3px">área de transferência</div></div><span style="width:6px;height:6px;border-radius:50%;background:#5E5E5E"></span></div>
+            <div style="border:1px solid #262626;background:rgba(255,255,255,.045);border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px"><span style="font-size:10px;color:#5E5E5E;width:16px">02</span><span style="font-size:13px;color:#8A8A8A;width:16px;text-align:center">⇄</span><div style="flex:1;min-width:0"><div style="font-size:12px;letter-spacing:.06em;color:#E4E4E4">FILES</div><div style="font-size:10px;color:#6E6E6E;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">escolher pasta de destino</div></div><span style="font-size:11px;color:#3A3A3A">›</span></div>
+            <div style="border:1px solid #1C1C1C;background:rgba(255,255,255,.025);border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px"><span style="font-size:10px;color:#3A3A3A;width:16px">03</span><span style="font-size:13px;color:#5E5E5E;width:16px;text-align:center">◔</span><div style="flex:1"><div style="font-size:12px;letter-spacing:.06em;color:#8A8A8A">NOTIF</div><div style="font-size:10px;color:#4E4E4E;margin-top:3px">espelho de notificações</div></div><span style="width:6px;height:6px;border-radius:50%;background:#5E5E5E"></span></div>
+            <div style="border:1px solid #1C1C1C;background:rgba(255,255,255,.025);border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px"><span style="font-size:10px;color:#3A3A3A;width:16px">04</span><span style="font-size:13px;color:#5E5E5E;width:16px;text-align:center">▷</span><div style="flex:1"><div style="font-size:12px;letter-spacing:.06em;color:#8A8A8A">MEDIA</div><div style="font-size:10px;color:#4E4E4E;margin-top:3px">MPRIS e volume remoto</div></div><span style="width:6px;height:6px;border-radius:50%;background:#5E5E5E"></span></div>
+            <div style="border:1px solid #1C1C1C;background:rgba(255,255,255,.025);border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px"><span style="font-size:10px;color:#3A3A3A;width:16px">05</span><span style="font-size:13px;color:#5E5E5E;width:16px;text-align:center">▮</span><div style="flex:1"><div style="font-size:12px;letter-spacing:.06em;color:#8A8A8A">BATT</div><div style="font-size:10px;color:#4E4E4E;margin-top:3px">bateria do telemóvel</div></div><span style="width:6px;height:6px;border-radius:50%;background:#5E5E5E"></span></div>
+            <div style="border:1px solid #1C1C1C;background:rgba(255,255,255,.025);border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px"><span style="font-size:10px;color:#3A3A3A;width:16px">06</span><span style="font-size:13px;color:#5E5E5E;width:16px;text-align:center">⌘</span><div style="flex:1"><div style="font-size:12px;letter-spacing:.06em;color:#8A8A8A">CONTROL</div><div style="font-size:10px;color:#4E4E4E;margin-top:3px">Hyprland IPC e atalhos</div></div><span style="width:6px;height:6px;border-radius:50%;background:#5E5E5E"></span></div>
+            <div style="border:1px solid #1C1C1C;background:rgba(255,255,255,.025);border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px"><span style="font-size:10px;color:#3A3A3A;width:16px">07</span><span style="font-size:13px;color:#5E5E5E;width:16px;text-align:center">≋</span><div style="flex:1"><div style="font-size:12px;letter-spacing:.06em;color:#8A8A8A">AUDIO</div><div style="font-size:10px;color:#4E4E4E;margin-top:3px">tap de áudio do PC</div></div><span style="width:6px;height:6px;border-radius:50%;background:#5E5E5E"></span></div>
+            <div style="border:1px solid #1C1C1C;background:rgba(255,255,255,.025);border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px"><span style="font-size:10px;color:#3A3A3A;width:16px">08</span><span style="font-size:13px;color:#5E5E5E;width:16px;text-align:center">◎</span><div style="flex:1"><div style="font-size:12px;letter-spacing:.06em;color:#8A8A8A">WEBCAM</div><div style="font-size:10px;color:#4E4E4E;margin-top:3px">câmara remota do PC</div></div><span style="width:6px;height:6px;border-radius:50%;background:#5E5E5E"></span></div>
+            <div style="border:1px solid #1C1C1C;background:rgba(255,255,255,.025);border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px"><span style="font-size:10px;color:#3A3A3A;width:16px">09</span><span style="font-size:13px;color:#5E5E5E;width:16px;text-align:center">◈</span><div style="flex:1"><div style="font-size:12px;letter-spacing:.06em;color:#8A8A8A">TRACK</div><div style="font-size:10px;color:#4E4E4E;margin-top:3px">sensores e rato virtual</div></div><span style="width:6px;height:6px;border-radius:50%;background:#5E5E5E"></span></div>
+            <div style="border:1px solid #262626;background:rgba(255,255,255,.045);border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:11px"><span style="font-size:10px;color:#5E5E5E;width:16px">10</span><span style="font-size:13px;color:#8A8A8A;width:16px;text-align:center">⚙</span><div style="flex:1"><div style="font-size:12px;letter-spacing:.06em;color:#E4E4E4">CONFIG</div><div style="font-size:10px;color:#6E6E6E;margin-top:3px">porta 4711 · autoarranque</div></div><span style="font-size:11px;color:#3A3A3A">›</span></div>
+          </div>
+
+          <!-- card de pareamento -->
+          <div style="flex:1;min-width:0;border:1px solid #3A2C12;background:#150F03;border-radius:14px;padding:26px 28px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px">
+            <div style="text-align:center">
+              <div style="font-size:11px;letter-spacing:.16em;color:#FFB020">EMPARELHAR DISPOSITIVO</div>
+              <div style="font-size:12px;color:#8A8A8A;margin-top:9px;line-height:1.7">Abra o HyprLink no telemóvel e leia o código.<br>A ligação usa QUIC + mTLS na rede local.</div>
+            </div>
+
+            <div style="width:196px;height:196px;background:#fff;border-radius:10px;padding:12px;box-sizing:border-box;display:grid;grid-template-columns:repeat(11,1fr);grid-template-rows:repeat(11,1fr);gap:2px">
+              <div style="grid-column:1/4;grid-row:1/4;border:3px solid #000;border-radius:2px"></div>
+              <div style="grid-column:9/12;grid-row:1/4;border:3px solid #000;border-radius:2px"></div>
+              <div style="grid-column:1/4;grid-row:9/12;border:3px solid #000;border-radius:2px"></div>
+              <div style="grid-column:5;grid-row:2;background:#000"></div>
+              <div style="grid-column:7;grid-row:1;background:#000"></div>
+              <div style="grid-column:6;grid-row:4;background:#000"></div>
+              <div style="grid-column:5;grid-row:5;background:#000"></div>
+              <div style="grid-column:8;grid-row:5;background:#000"></div>
+              <div style="grid-column:10;grid-row:5;background:#000"></div>
+              <div style="grid-column:2;grid-row:6;background:#000"></div>
+              <div style="grid-column:6;grid-row:6;background:#000"></div>
+              <div style="grid-column:9;grid-row:6;background:#000"></div>
+              <div style="grid-column:4;grid-row:7;background:#000"></div>
+              <div style="grid-column:7;grid-row:7;background:#000"></div>
+              <div style="grid-column:11;grid-row:7;background:#000"></div>
+              <div style="grid-column:5;grid-row:8;background:#000"></div>
+              <div style="grid-column:8;grid-row:8;background:#000"></div>
+              <div style="grid-column:6;grid-row:9;background:#000"></div>
+              <div style="grid-column:9;grid-row:10;background:#000"></div>
+              <div style="grid-column:7;grid-row:11;background:#000"></div>
+              <div style="grid-column:10;grid-row:9;background:#000"></div>
+              <div style="grid-column:5;grid-row:11;background:#000"></div>
+            </div>
+
+            <div style="width:100%;display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;align-items:center;justify-content:space-between;border:1px solid #3A2C12;background:rgba(255,255,255,.03);border-radius:9px;padding:10px 13px">
+                <span style="font-size:10px;letter-spacing:.12em;color:#8A8A8A">FINGERPRINT</span>
+                <span style="display:flex;align-items:center;gap:10px;font-size:11px;color:#E4E4E4">4A7C…E11B <span style="color:#FFB020;font-size:10px">copiar</span></span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;border:1px solid #3A2C12;background:rgba(255,255,255,.03);border-radius:9px;padding:10px 13px">
+                <span style="font-size:10px;letter-spacing:.12em;color:#8A8A8A">HOST : PORTA</span>
+                <span style="display:flex;align-items:center;gap:10px;font-size:11px;color:#E4E4E4">192.168.1.20:4711 <span style="color:#FFB020;font-size:10px">copiar</span></span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;border:1px solid #3A2C12;background:rgba(255,255,255,.03);border-radius:9px;padding:10px 13px">
+                <span style="font-size:10px;letter-spacing:.12em;color:#8A8A8A">TOKEN</span>
+                <span style="display:flex;align-items:center;gap:10px;font-size:11px;color:#E4E4E4">K9F2-8QRT-04XZ <span style="color:#FFB020;font-size:10px">copiar</span></span>
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:9px;font-size:11px;color:#6E6E6E">
+              <span style="width:6px;height:6px;border-radius:50%;background:#FFB020;animation:breathe 1.5s ease-in-out infinite"></span>
+              à escuta em 0.0.0.0:4711 · token expira em 04:12
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:900px;border-left:2px solid #1E3E30;padding:4px 0 4px 18px;margin-top:26px;font-size:12px;color:#8A8A8A;line-height:1.85">
+    O que muda em relação à GUI atual: estado por módulo deixa de ser <span style="color:#FF4757">OFF</span> hardcoded e passa a refletir o daemon — verde para os 7 que já funcionam, cinza para os que ainda não (nunca vermelho); cada linha ganha ícone, subtítulo com dado real e chevron de clique-para-detalhe; o painel de detalhe mostra o módulo selecionado (aqui o mixer de áudio com marca dos 100%); a transferência SFTP tem barra de progresso na GUI; e a consola passa a colorir severidade como a do Android (<span style="color:#3DFF9E">[+]</span> <span style="color:#8A8A8A">[i]</span> <span style="color:#FFB020">[!]</span>).
+  </div>
+</section>
+
+</x-dc>
+</body>
+</html>

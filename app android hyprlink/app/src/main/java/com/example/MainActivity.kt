@@ -18,6 +18,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -912,6 +913,8 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
             onDismissRequest = { /* Cannot dismiss via tap, must use Stop button */ },
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
         ) {
+            var previewView by remember { mutableStateOf<androidx.camera.view.PreviewView?>(null) }
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -920,15 +923,27 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                 // Full-screen camera preview
                 androidx.compose.ui.viewinterop.AndroidView(
                     factory = { ctx ->
-                        androidx.camera.view.PreviewView(ctx).apply {
+                        androidx.camera.view.PreviewView(ctx).also { previewView = it }.apply {
                             implementationMode = androidx.camera.view.PreviewView.ImplementationMode.COMPATIBLE
                             WebcamStreamer.attachPreview(this.surfaceProvider)
                         }
                     },
                     onRelease = {
+                        previewView = null
                         WebcamStreamer.detachPreview()
                     },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onTap = { offset ->
+                                    val point = previewView?.meteringPointFactory?.createPoint(offset.x, offset.y)
+                                    if (point != null) {
+                                        WebcamStreamer.focusAt(point)
+                                    }
+                                }
+                            )
+                        }
                 )
 
                 // Top floating status pill (avoids notch and camera hole)
