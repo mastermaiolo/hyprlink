@@ -1,8 +1,9 @@
-//! HUD flutuante (vidro fosco, cantos arredondados) via iced + iced_layershell.
-//! Layout e paleta seguem o mockup aprovado (ver Artifact "HyprLink Desktop HUD"):
-//! fundo translúcido (o blur de verdade é o compositor Hyprland, via
-//! `layerrule = blur, hyprlink-hud`), acento colorido pelo estado da ligação
-//! (verde=conectado, amarelo=conectando/pareando, vermelho=indisponível).
+//! HUD flutuante (vidro fosco, cantos arredondados) via iced puro — janela
+//! normal (não layer-shell), pra poder ser movida e ficar presa a uma única
+//! workspace, com blur "de graça" pelo `decoration:blur` do Hyprland (que já
+//! se aplica a qualquer janela com transparência, sem precisar de layerrule).
+//! Acento colorido pelo estado da ligação (verde=conectado,
+//! amarelo=conectando/pareando, vermelho=indisponível).
 //!
 //! ponytail: ícones SVG por módulo ficaram de fora desta primeira versão —
 //! número + título já comunica bem. Adicionar quando fizer sentido.
@@ -11,10 +12,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use iced::widget::{button, column, container, row, scrollable, text, Space};
+use iced::window;
 use iced::{Alignment, Background, Border, Color, Element, Font, Length, Shadow, Task, Theme, Vector};
-use iced_layershell::reexport::{Anchor, KeyboardInteractivity, Layer};
-use iced_layershell::settings::{LayerShellSettings, Settings};
-use iced_layershell::to_layer_message;
 
 use crate::state::{ConnState, HudState};
 
@@ -32,7 +31,6 @@ struct Hud {
     snapshot: HudState,
 }
 
-#[to_layer_message]
 #[derive(Debug, Clone)]
 enum Message {
     Tick,
@@ -55,10 +53,6 @@ impl Hud {
     }
 }
 
-fn namespace() -> String {
-    "hyprlink-hud".to_string()
-}
-
 fn update(hud: &mut Hud, message: Message) -> Task<Message> {
     match message {
         Message::Tick => {
@@ -70,7 +64,6 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
             std::process::exit(0)
         }
         Message::CopyText(value) => iced::clipboard::write(value),
-        _ => Task::none(),
     }
 }
 
@@ -362,17 +355,20 @@ fn style(_hud: &Hud, theme: &Theme) -> iced::theme::Style {
     }
 }
 
-pub fn run(shared: Arc<Mutex<HudState>>) -> Result<(), iced_layershell::Error> {
-    iced_layershell::application(move || Hud::new(shared.clone()), namespace, update, view)
+pub fn run(shared: Arc<Mutex<HudState>>) -> iced::Result {
+    iced::application(move || Hud::new(shared.clone()), update, view)
+        .title("HyprLink")
         .style(style)
         .subscription(subscription)
-        .settings(Settings {
-            layer_settings: LayerShellSettings {
-                size: Some((PANEL_W, PANEL_H)),
-                anchor: Anchor::empty(),
-                layer: Layer::Top,
-                exclusive_zone: -1,
-                keyboard_interactivity: KeyboardInteractivity::OnDemand,
+        .window(window::Settings {
+            size: iced::Size::new(PANEL_W as f32, PANEL_H as f32),
+            position: window::Position::Centered,
+            resizable: false,
+            decorations: false,
+            transparent: true,
+            blur: true,
+            platform_specific: window::settings::PlatformSpecific {
+                application_id: "hyprlink-hud".to_string(),
                 ..Default::default()
             },
             ..Default::default()
