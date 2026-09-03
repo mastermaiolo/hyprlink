@@ -177,7 +177,11 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
     let packet = match Packet::decode(&frame) {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("[stream] erro decodificando CBOR: {e}");
+            eprintln!(
+                "[stream] erro decodificando CBOR: {e} · {} bytes · hex: {}",
+                frame.len(),
+                frame.iter().map(|b| format!("{b:02x}")).collect::<String>()
+            );
             return;
         }
     };
