@@ -14,13 +14,38 @@ use crate::state::HudState;
 const PLAYER_PATH: &str = "/org/mpris/MediaPlayer2";
 const PLAYER_IFACE: &str = "org.mpris.MediaPlayer2.Player";
 
-async fn active_player_name(conn: &Connection) -> Option<String> {
-    let dbus = zbus::fdo::DBusProxy::new(conn).await.ok()?;
-    let names = dbus.list_names().await.ok()?;
+/// Nomes MPRIS candidatos — exclui `playerctld`: é um proxy/agregador (não
+/// um player de verdade) e quebra ao ser consultado diretamente se não
+/// estiver ativamente delegando (visto ao vivo: "Object does not exist at
+/// path" mesmo listado no bus). Consultar os players reais direto é mais
+/// simples e mais robusto.
+async fn candidate_names(conn: &Connection) -> Vec<String> {
+    let Ok(dbus) = zbus::fdo::DBusProxy::new(conn).await else { return Vec::new() };
+    let Ok(names) = dbus.list_names().await else { return Vec::new() };
     names
         .into_iter()
         .map(|n| n.to_string())
-        .find(|n| n.starts_with("org.mpris.MediaPlayer2."))
+        .filter(|n| n.starts_with("org.mpris.MediaPlayer2.") && !n.contains("playerctld"))
+        .collect()
+}
+
+/// Entre os players reais, prefere um que esteja "Playing"; sem nenhum
+/// tocando, usa o primeiro que responder de verdade (ex: pausado ainda
+/// mostra a faixa atual) — nunca um nome que nem existe mais no bus.
+async fn best_player(conn: &Connection) -> Option<(String, String)> {
+    let names = candidate_names(conn).await;
+    let mut fallback = None;
+    for name in names {
+        let Ok(proxy) = Proxy::new(conn, name.clone(), PLAYER_PATH, PLAYER_IFACE).await else { continue };
+        let Ok(status) = proxy.get_property::<String>("PlaybackStatus").await else { continue };
+        if status == "Playing" {
+            return Some((name, status));
+        }
+        if fallback.is_none() {
+            fallback = Some((name, status));
+        }
+    }
+    fallback
 }
 
 /// `media.command` vindo do telemóvel: play_pause/play/pause/next/previous.
@@ -34,7 +59,7 @@ pub async fn handle_command(cmd: &str) {
         _ => return,
     };
     let Ok(conn) = Connection::session().await else { return };
-    let Some(name) = active_player_name(&conn).await else { return };
+    let Some((name, _)) = best_player(&conn).await else { return };
     let Ok(proxy) = Proxy::new(&conn, name, PLAYER_PATH, PLAYER_IFACE).await else { return };
     let _: Result<(), _> = proxy.call(method, &()).await;
 }
@@ -59,9 +84,8 @@ struct NowPlaying {
 }
 
 async fn snapshot(conn: &Connection) -> Option<NowPlaying> {
-    let name = active_player_name(conn).await?;
+    let (name, status) = best_player(conn).await?;
     let proxy = Proxy::new(conn, name.clone(), PLAYER_PATH, PLAYER_IFACE).await.ok()?;
-    let status: String = proxy.get_property("PlaybackStatus").await.unwrap_or_default();
     let meta: HashMap<String, OwnedValue> = proxy.get_property("Metadata").await.unwrap_or_default();
     let player = name
         .trim_start_matches("org.mpris.MediaPlayer2.")
@@ -110,5 +134,26 @@ pub async fn poll_and_push(active: ActiveConn, _hud: Arc<Mutex<HudState>>) {
             }
         }
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Não roda em CI (depende de D-Bus de sessão real com um player MPRIS
+    /// tocando) — `cargo test -- --ignored manual_snapshot` pra checar à
+    /// mão que a seleção de player e o parsing de metadata funcionam contra
+    /// o ambiente real.
+    #[tokio::test]
+    #[ignore]
+    async fn manual_snapshot() {
+        let conn = Connection::session().await.expect("D-Bus de sessão");
+        let np = snapshot(&conn).await.expect("nenhum player MPRIS respondeu");
+        println!(
+            "player={} status={} title={:?} artist={:?} album={:?}",
+            np.player, np.status, np.title, np.artist, np.album
+        );
+        assert!(np.title.is_some(), "esperava título com um player real tocando/pausado");
     }
 }

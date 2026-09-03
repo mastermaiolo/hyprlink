@@ -82,6 +82,10 @@ pub fn body_get_bytes<'a>(body: &'a Value, key: &str) -> Option<&'a [u8]> {
     body_get(body, key)?.as_bytes().map(|b| b.as_slice())
 }
 
+pub fn body_get_i64(body: &Value, key: &str) -> Option<i64> {
+    body_get(body, key)?.as_integer().and_then(|i| i64::try_from(i).ok())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

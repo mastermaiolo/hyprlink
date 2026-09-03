@@ -4,6 +4,7 @@ mod clip;
 mod gui;
 mod hypr;
 mod identity;
+mod input;
 mod media;
 mod pairing;
 mod protocol;

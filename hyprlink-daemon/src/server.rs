@@ -12,6 +12,7 @@ use rustls::pki_types::CertificateDer;
 use crate::active::{self, ActiveConn};
 use crate::clip::{self, LastLocalSet};
 use crate::identity::{fingerprint_der, ServerIdentity};
+use crate::input::InputDevice;
 use crate::pairing::PairingStore;
 use crate::protocol::{body_get_bytes, body_get_str, read_frame, write_frame, Packet};
 use crate::state::{self, HudState};
@@ -24,11 +25,17 @@ pub struct Ctx {
     pub hud: Arc<Mutex<HudState>>,
     pub active: ActiveConn,
     pub clip_guard: LastLocalSet,
+    pub input: Arc<InputDevice>,
 }
 
 impl Ctx {
     pub fn new(hud: Arc<Mutex<HudState>>) -> Self {
-        Self { hud, active: active::new_registry(), clip_guard: clip::new_guard() }
+        Self {
+            hud,
+            active: active::new_registry(),
+            clip_guard: clip::new_guard(),
+            input: Arc::new(InputDevice::open()),
+        }
     }
 }
 
@@ -206,9 +213,7 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
         "battery.state" => {
             // bateria do telemóvel — só log por enquanto (ver Fase 8 pra UI).
             if let (Some(level), Some(charging)) = (
-                body.and_then(|b| crate::protocol::body_get(b, "level"))
-                    .and_then(|v| v.as_integer())
-                    .and_then(|i| i64::try_from(i).ok()),
+                body.and_then(|b| crate::protocol::body_get_i64(b, "level")),
                 body.and_then(|b| crate::protocol::body_get(b, "charging")).and_then(|v| v.as_bool()),
             ) {
                 state::push_log(hud, format!("[i] bateria do telemóvel: {level}% · carregando={charging}"));
@@ -218,6 +223,37 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
         "media.command" => {
             let cmd = body.and_then(|b| body_get_str(b, "command")).unwrap_or("").to_string();
             media::handle_command(&cmd).await;
+        }
+
+        "input.move" => {
+            if let (Some(dx), Some(dy)) = (
+                body.and_then(|b| crate::protocol::body_get_i64(b, "dx")),
+                body.and_then(|b| crate::protocol::body_get_i64(b, "dy")),
+            ) {
+                ctx.input.move_relative(dx as i32, dy as i32);
+            }
+        }
+        "input.scroll" => {
+            if let (Some(dx), Some(dy)) = (
+                body.and_then(|b| crate::protocol::body_get_i64(b, "dx")),
+                body.and_then(|b| crate::protocol::body_get_i64(b, "dy")),
+            ) {
+                ctx.input.scroll(dx as i32, dy as i32);
+            }
+        }
+        "input.click" => {
+            let button = body.and_then(|b| body_get_str(b, "button")).unwrap_or("left");
+            ctx.input.click(button);
+        }
+        "input.type" => {
+            if let Some(text) = body.and_then(|b| body_get_str(b, "text")) {
+                ctx.input.type_text(text);
+            }
+        }
+        "input.key" => {
+            if let Some(key) = body.and_then(|b| body_get_str(b, "key")) {
+                ctx.input.key(key);
+            }
         }
 
         "share.url" => {
