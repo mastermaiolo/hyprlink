@@ -20,7 +20,7 @@ use crate::protocol::{body_get_bytes, body_get_str, read_frame, write_frame, Pac
 use crate::share;
 use crate::state::{self, HudState};
 use crate::tls_verifier::AcceptAnyClientCert;
-use crate::{battery, hypr, media};
+use crate::{audio, battery, hypr, media};
 
 /// Estado partilhado entre todas as streams/tarefas de fundo de uma sessão.
 #[derive(Clone)]
@@ -243,6 +243,36 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
             reply(&mut send, packet.id, "hypr.dispatch_result", Some(ok_data(data))).await;
         }
 
+        "audio.state" => {
+            reply(&mut send, packet.id, "audio.state_reply", Some(audio::state_body())).await;
+        }
+        "audio.set_volume" => {
+            if let (Some(kind), Some(id), Some(volume)) = (
+                body.and_then(|b| body_get_str(b, "kind")),
+                body.and_then(|b| crate::protocol::body_get_i64(b, "id")),
+                body.and_then(|b| crate::protocol::body_get_i64(b, "volume")),
+            ) {
+                audio::set_volume(kind, id, volume);
+            }
+            reply(&mut send, packet.id, "audio.ack", Some(ok_bool(true))).await;
+        }
+        "audio.set_mute" => {
+            if let (Some(kind), Some(id), Some(muted)) = (
+                body.and_then(|b| body_get_str(b, "kind")),
+                body.and_then(|b| crate::protocol::body_get_i64(b, "id")),
+                body.and_then(|b| crate::protocol::body_get(b, "muted")).and_then(|v| v.as_bool()),
+            ) {
+                audio::set_mute(kind, id, muted);
+            }
+            reply(&mut send, packet.id, "audio.ack", Some(ok_bool(true))).await;
+        }
+        "audio.set_default_sink" => {
+            if let Some(name) = body.and_then(|b| body_get_str(b, "name")) {
+                audio::set_default_sink(name);
+            }
+            reply(&mut send, packet.id, "audio.ack", Some(ok_bool(true))).await;
+        }
+
         "battery.request" => {
             reply(&mut send, packet.id, "battery.state", Some(battery::state_body())).await;
         }
@@ -354,6 +384,10 @@ async fn reply(send: &mut quinn::SendStream, id: u64, kind: &str, body: Option<V
 
 fn ok_data(data: String) -> Value {
     Value::Map(vec![(Value::Text("ok".into()), Value::Bool(true)), (Value::Text("data".into()), Value::Text(data))])
+}
+
+fn ok_bool(ok: bool) -> Value {
+    Value::Map(vec![(Value::Text("ok".into()), Value::Bool(ok))])
 }
 
 fn peer_cert_fingerprint(connection: &quinn::Connection) -> Option<String> {

@@ -1,4 +1,5 @@
 mod active;
+mod audio;
 mod battery;
 mod clip;
 mod config;
