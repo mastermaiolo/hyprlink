@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use iced::widget::{button, column, container, row, scrollable, slider, text, text_editor, text_input, Space};
+use iced::widget::{button, checkbox, column, container, row, scrollable, slider, text, text_editor, text_input, Space};
 use iced::window;
 use iced::{Alignment, Background, Border, Color, Element, Font, Length, Shadow, Task, Theme, Vector};
 
@@ -156,6 +156,7 @@ enum Message {
     Tick,
     Quit,
     MinimizeToTray,
+    ToggleTraySpecialWorkspace(bool),
     CopyText(String),
     ConsoleAction(text_editor::Action),
     PickDownloadDir,
@@ -266,6 +267,10 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
         Message::MinimizeToTray => {
             crate::state::push_log(&hud.shared, "[i] tray: minimizando".to_string());
             Task::perform(async { tokio::task::spawn_blocking(crate::hypr::tray_hide).await.unwrap_or(false) }, |_| Message::Tick)
+        }
+        Message::ToggleTraySpecialWorkspace(enabled) => {
+            config::set_tray_special_workspace(&hud.config, enabled);
+            Task::none()
         }
         Message::CopyText(value) => iced::clipboard::write(value),
         Message::ConsoleAction(action) => {
@@ -856,7 +861,7 @@ fn module_screen(hud: &Hud, id: ModuleId) -> Element<'_, Message> {
         ModuleId::Media => media_screen(&hud.snapshot.modules),
         ModuleId::Audio => audio_screen(hud),
         ModuleId::Webcam => webcam_screen(hud),
-        ModuleId::Config => config_screen(&hud.snapshot),
+        ModuleId::Config => config_screen(hud),
     };
     column![screen].width(Length::Fill).height(Length::Fill).into()
 }
@@ -1424,7 +1429,8 @@ fn control_screen(hud: &Hud) -> Element<'_, Message> {
     column![module_header("CONTROL", "Hyprland IPC".to_string(), GREEN), card, dispatch_row, result].spacing(16).into()
 }
 
-fn config_screen(snapshot: &HudState) -> Element<'static, Message> {
+fn config_screen(hud: &Hud) -> Element<'static, Message> {
+    let snapshot = &hud.snapshot;
     let row_kv = |label: &'static str, value: String| {
         row![
             text(label).size(11).color(TEXT_2),
@@ -1465,11 +1471,26 @@ fn config_screen(snapshot: &HudState) -> Element<'static, Message> {
         _ => container(text("Nenhum telemóvel ligado agora.").size(11).color(TEXT_3)).padding(16).width(Length::Fill).into(),
     };
 
+    let tray_toggle = container(
+        checkbox(config::tray_special_workspace(&hud.config))
+            .label("Minimizar pra bandeja usando workspace especial do Hyprland")
+            .on_toggle(Message::ToggleTraySpecialWorkspace)
+            .size(16)
+            .text_size(11),
+    )
+    .padding(16)
+    .width(Length::Fill)
+    .style(|_| container::Style { background: Some(Background::Color(Color::from_rgba(0x07 as f32 / 255.0, 0x07 as f32 / 255.0, 0x07 as f32 / 255.0, 1.0))), ..Default::default() });
+
+    let tray_note = text("Se desligado, o botão de minimizar some do cabeçalho — esse mecanismo é específico do Hyprland (move a janela pra uma workspace especial), pode não fazer sentido noutro compositor.")
+        .size(10)
+        .color(TEXT_3);
+
     let note = text("Lista de dispositivos já pareados (com revogar), nível de log e retenção de histórico ainda não têm UI — dá pra reparear via QR se precisar trocar de telemóvel.")
         .size(10)
         .color(TEXT_3);
 
-    column![module_header("CONFIG", "Rede e dispositivo ligado".to_string(), TEXT_2), device_card, list, note]
+    column![module_header("CONFIG", "Rede e dispositivo ligado".to_string(), TEXT_2), device_card, list, tray_toggle, tray_note, note]
         .spacing(16)
         .into()
 }
@@ -1508,7 +1529,8 @@ fn view(hud: &Hud) -> Element<'_, Message> {
         })
         .on_press(Message::MinimizeToTray);
 
-    let header_right: Element<'_, Message> = if hud.screen != Screen::Dashboard {
+    let mut header_right_row = row![].spacing(8).align_y(Alignment::Center);
+    if hud.screen != Screen::Dashboard {
         let back = button(text("‹ VOLTAR").size(11).color(TEXT_2))
             .padding([6, 12])
             .style(|_, _| button::Style {
@@ -1518,10 +1540,14 @@ fn view(hud: &Hud) -> Element<'_, Message> {
                 ..Default::default()
             })
             .on_press(Message::Back);
-        row![back, minimize_btn, close_btn].spacing(8).align_y(Alignment::Center).into()
+        header_right_row = header_right_row.push(back);
     } else {
-        row![status_pill(status_color, status_label), minimize_btn, close_btn].spacing(8).align_y(Alignment::Center).into()
-    };
+        header_right_row = header_right_row.push(status_pill(status_color, status_label));
+    }
+    if config::tray_special_workspace(&hud.config) {
+        header_right_row = header_right_row.push(minimize_btn);
+    }
+    let header_right: Element<'_, Message> = header_right_row.push(close_btn).into();
 
     let header = row![logo, Space::new().width(Length::Fill), header_right].spacing(8).align_y(Alignment::Center);
 

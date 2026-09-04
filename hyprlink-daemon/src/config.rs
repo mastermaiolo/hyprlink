@@ -11,10 +11,19 @@ pub type SharedConfig = Arc<Mutex<AppConfig>>;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub download_dir: PathBuf,
+    /// Minimizar pra bandeja usa uma workspace especial do Hyprland (ver
+    /// `hypr.rs::tray_hide/tray_show`) — não é Wayland genérico, então dá
+    /// pra desligar se causar problema noutro compositor/config.
+    #[serde(default = "default_tray_special_workspace")]
+    pub tray_special_workspace: bool,
 }
 
 fn default_download_dir() -> PathBuf {
     dirs::download_dir().unwrap_or_else(|| dirs::home_dir().unwrap_or_default()).join("HyprLink")
+}
+
+fn default_tray_special_workspace() -> bool {
+    true
 }
 
 fn config_path() -> PathBuf {
@@ -29,7 +38,7 @@ impl AppConfig {
         std::fs::read_to_string(config_path())
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_else(|| Self { download_dir: default_download_dir() })
+            .unwrap_or_else(|| Self { download_dir: default_download_dir(), tray_special_workspace: default_tray_special_workspace() })
     }
 
     fn save(&self) {
@@ -54,5 +63,15 @@ pub fn download_dir(config: &SharedConfig) -> PathBuf {
 pub fn set_download_dir(config: &SharedConfig, dir: &Path) {
     let mut c = config.lock().unwrap();
     c.download_dir = dir.to_path_buf();
+    c.save();
+}
+
+pub fn tray_special_workspace(config: &SharedConfig) -> bool {
+    config.lock().unwrap().tray_special_workspace
+}
+
+pub fn set_tray_special_workspace(config: &SharedConfig, enabled: bool) {
+    let mut c = config.lock().unwrap();
+    c.tray_special_workspace = enabled;
     c.save();
 }
