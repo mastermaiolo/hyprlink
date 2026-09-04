@@ -41,7 +41,20 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app::AppSrc;
 
+use crate::active::{push, ActiveConn};
 use crate::state::{self, push_log, HudState};
+
+/// Pede pro telemóvel ligar/desligar o mic dele (botão na GUI do PC) —
+/// equivalente a tocar o botão por lá; o telemóvel decide se aceita (ex:
+/// permissão concedida) e o `webcam.mic_start`/uni-stream normal segue
+/// depois por conta dele, sem resposta direta a este pedido.
+pub async fn request_start(active: &ActiveConn) -> bool {
+    push(active, "webcam.mic_start_request", None).await.is_some()
+}
+
+pub async fn request_stop(active: &ActiveConn) -> bool {
+    push(active, "webcam.mic_stop_request", None).await.is_some()
+}
 
 pub type MicHandle = Arc<Mutex<Option<gst::Pipeline>>>;
 
@@ -111,7 +124,7 @@ fn run_gst_thread(rx: Receiver<Vec<u8>>, handle: MicHandle, hud: Arc<Mutex<HudSt
     let pipeline_str = "appsrc name=src is-live=true format=time block=true \
          ! audio/x-raw,format=S16LE,rate=48000,channels=1,layout=interleaved \
          ! audioconvert ! audioresample \
-         ! volume volume=2.5 \
+         ! volume volume=5.0 \
          ! pipewiresink sync=false stream-properties=\"props,media.class=Audio/Source,node.name=hyprlink-mic,node.description=HyprLink-Mic\"";
     let pipeline = match gst::parse::launch(pipeline_str) {
         Ok(el) => match el.downcast::<gst::Pipeline>() {

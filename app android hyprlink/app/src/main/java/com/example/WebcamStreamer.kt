@@ -348,7 +348,10 @@ object WebcamStreamer {
             ConnectionRepository.appendLog("[WEBCAM] Permissão de microfone não concedida")
             return
         }
-        val conn = activeConn ?: return
+        val conn = activeConn ?: ConnectionRepository.activeConnection ?: run {
+            ConnectionRepository.appendLog("[WEBCAM] Microfone: sem conexão ativa com o PC")
+            return
+        }
 
         micJob = CoroutineScope(Dispatchers.IO).launch {
             var out: java.io.OutputStream? = null

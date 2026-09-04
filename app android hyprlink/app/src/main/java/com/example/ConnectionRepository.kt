@@ -1103,6 +1103,10 @@ object ConnectionRepository {
                         }
                     } else if (packet.type == "webcam.stop") {
                         WebcamStreamer.stop()
+                    } else if (packet.type == "webcam.mic_start_request") {
+                        WebcamStreamer.startMic(context)
+                    } else if (packet.type == "webcam.mic_stop_request") {
+                        WebcamStreamer.stopMic()
                     }
                 }
                 "phone_audio" -> {

@@ -228,6 +228,8 @@ não nos steps reais do `AudioManager` — o telemóvel converte.
 | `webcam.transform` | P→D one-way | `{rotation:0\|90\|180\|270, mirror:Bool}` |
 | `webcam.mic_start` | P→D anúncio (`has_payload=true`) | `{rate:48000, channels:1}` — `id` retornado correlaciona uni-stream de mic |
 | `webcam.mic_stop` | P→D one-way | `{}` |
+| `webcam.mic_start_request` | D→P one-way | body irrelevante — pede pro telemóvel ligar o mic (equivalente a tocar o botão por lá); sem resposta, o `webcam.mic_start` normal segue depois se o telemóvel aceitar (ex: tem permissão) |
+| `webcam.mic_stop_request` | D→P one-way | body irrelevante — pede pro telemóvel desligar o mic |
 
 Uni-stream de vídeo (P→D): 8 bytes id + **1 byte codec efetivo**
 (`0x01`=H.264/AVC, `0x02`=H.265/HEVC — reflete o que foi realmente usado,

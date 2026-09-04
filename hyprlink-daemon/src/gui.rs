@@ -157,6 +157,8 @@ enum Message {
     Quit,
     MinimizeToTray,
     ToggleTraySpecialWorkspace(bool),
+    PhoneMicToggle(bool),
+    PhoneMicRequestResult(bool, bool),
     CopyText(String),
     ConsoleAction(text_editor::Action),
     PickDownloadDir,
@@ -270,6 +272,28 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
         }
         Message::ToggleTraySpecialWorkspace(enabled) => {
             config::set_tray_special_workspace(&hud.config, enabled);
+            Task::none()
+        }
+        Message::PhoneMicToggle(enabled) => {
+            let active = hud.active.clone();
+            Task::perform(
+                async move {
+                    let ok = if enabled {
+                        crate::mic::request_start(&active).await
+                    } else {
+                        crate::mic::request_stop(&active).await
+                    };
+                    (enabled, ok)
+                },
+                |(enabled, ok)| Message::PhoneMicRequestResult(enabled, ok),
+            )
+        }
+        Message::PhoneMicRequestResult(enabled, ok) => {
+            if ok {
+                crate::state::push_log(&hud.shared, format!("[i] microfone: pedido de {} enviado ao telemóvel", if enabled { "ligar" } else { "desligar" }));
+            } else {
+                crate::state::push_log(&hud.shared, "[!] microfone: não foi possível enviar o pedido (sem conexão ativa?)".to_string());
+            }
             Task::none()
         }
         Message::CopyText(value) => iced::clipboard::write(value),
@@ -1185,22 +1209,32 @@ fn audio_screen(hud: &Hud) -> Element<'_, Message> {
         column(hud.audio.apps.iter().map(app_row)).spacing(8).into()
     };
 
-    // Microfone do telemóvel: função independente da webcam — liga/desliga
-    // pelo botão no telemóvel (fora da pré-visualização da câmara), aqui é
-    // só o indicador.
-    let mic_status: Element<'_, Message> = if hud.snapshot.modules.mic_active {
-        container(text("🎙️ microfone do telemóvel ativo — selecione \"HyprLink-Mic\" como entrada de áudio em qualquer app").size(11).color(GREEN))
-            .padding(10)
-            .width(Length::Fill)
-            .style(|_| container::Style {
-                background: Some(Background::Color(Color { a: 0.10, ..GREEN })),
-                border: Border { color: Color { a: 0.35, ..GREEN }, width: 1.0, radius: 10.0.into() },
-                ..Default::default()
-            })
-            .into()
-    } else {
-        text("🎙️ microfone do telemóvel: desligado (liga pelo telemóvel).").size(11).color(TEXT_3).into()
-    };
+    // Microfone do telemóvel: função independente da webcam — pode ligar
+    // por aqui (pede pro telemóvel) ou por lá (botão no telemóvel), os dois
+    // convergem no mesmo estado real (`mic_active`).
+    let mic_active = hud.snapshot.modules.mic_active;
+    let mic_status = container(
+        column![
+            checkbox(mic_active)
+                .label(if mic_active { "🎙️ microfone do telemóvel: ativo" } else { "🎙️ microfone do telemóvel: desligado" })
+                .on_toggle(Message::PhoneMicToggle)
+                .size(16)
+                .text_size(11),
+            if mic_active {
+                Element::from(text("Selecione \"HyprLink-Mic\" como entrada de áudio em qualquer app.").size(10).color(TEXT_2))
+            } else {
+                Element::from(iced::widget::Space::new())
+            },
+        ]
+        .spacing(6),
+    )
+    .padding(10)
+    .width(Length::Fill)
+    .style(move |_| container::Style {
+        background: Some(Background::Color(if mic_active { Color { a: 0.10, ..GREEN } } else { Color::from_rgba(1.0, 1.0, 1.0, 0.045) })),
+        border: Border { color: if mic_active { Color { a: 0.35, ..GREEN } } else { Color::from_rgba(1.0, 1.0, 1.0, 0.08) }, width: 1.0, radius: 10.0.into() },
+        ..Default::default()
+    });
 
     scrollable(
         column![
