@@ -36,6 +36,8 @@ pub struct Ctx {
     pub tap: crate::tap::TapHandle,
     pub webcam: webcam::WebcamHandle,
     pub pending_webcam: webcam::PendingWebcam,
+    pub mic: crate::mic::MicHandle,
+    pub pending_mic: crate::mic::PendingMic,
 }
 
 impl Ctx {
@@ -51,6 +53,8 @@ impl Ctx {
             tap: crate::tap::new_handle(),
             webcam: webcam::new_handle(),
             pending_webcam,
+            mic: crate::mic::new_handle(),
+            pending_mic: crate::mic::new_pending(),
         }
     }
 }
@@ -121,6 +125,7 @@ pub async fn run(endpoint: quinn::Endpoint, pairing: Arc<Mutex<PairingStore>>, c
                 active::clear(&ctx.active);
                 crate::tap::stop(&ctx.tap, &ctx.hud);
                 webcam::stop(&ctx.webcam, &ctx.hud);
+                crate::mic::stop(&ctx.mic, &ctx.hud);
             }
         });
     }
@@ -213,12 +218,14 @@ async fn handle_connection(incoming: quinn::Incoming, pairing: Arc<Mutex<Pairing
     active::clear(&ctx.active);
     crate::tap::stop(&ctx.tap, &ctx.hud);
     webcam::stop(&ctx.webcam, &ctx.hud);
+    crate::mic::stop(&ctx.mic, &ctx.hud);
     Ok(())
 }
 
 /// Lê o id de correlação (8 bytes, comum a todo uni-stream) e decide se é
-/// vídeo de webcam (id bate com um `webcam.start` pendente) ou ficheiro —
-/// única leitura do cabeçalho, pra não competir com `share::receive_uni_stream`.
+/// vídeo de webcam (id bate com um `webcam.start` pendente), microfone (id
+/// bate com um `webcam.mic_start` pendente) ou ficheiro — única leitura do
+/// cabeçalho, pra não competir com `share::receive_uni_stream`.
 async fn route_uni_stream(mut recv: quinn::RecvStream, ctx: Ctx) {
     let mut id_buf = [0u8; 8];
     if recv.read_exact(&mut id_buf).await.is_err() {
@@ -236,9 +243,21 @@ async fn route_uni_stream(mut recv: quinn::RecvStream, ctx: Ctx) {
             _ => None,
         }
     };
+    let mic_res = {
+        let mut pending = ctx.pending_mic.lock().unwrap();
+        match *pending {
+            Some(pending_id) if pending_id == id => {
+                *pending = None;
+                true
+            }
+            _ => false,
+        }
+    };
 
     if let Some((width, height)) = webcam_res {
         webcam::feed(recv, ctx.webcam.clone(), ctx.hud.clone(), width, height).await;
+    } else if mic_res {
+        crate::mic::feed(recv, ctx.mic.clone(), ctx.hud.clone()).await;
     } else {
         share::receive_uni_stream(recv, id, ctx.incoming_files.clone(), ctx.active.clone(), ctx.hud.clone(), ctx.config.clone()).await;
     }
@@ -353,6 +372,13 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
             ) {
                 webcam::apply_transform(&ctx.webcam, rotation, mirror);
             }
+        }
+        "webcam.mic_start" => {
+            *ctx.pending_mic.lock().unwrap() = Some(packet.id);
+            state::push_log(hud, "[i] microfone: telemóvel anunciou stream de áudio".to_string());
+        }
+        "webcam.mic_stop" => {
+            crate::mic::stop(&ctx.mic, hud);
         }
 
         "battery.request" => {

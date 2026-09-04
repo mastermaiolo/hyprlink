@@ -245,10 +245,12 @@ início de sessão de streaming.
 - Nenhum destes tinha implementação real no daemon anterior (só protocolo em
   prosa): `audio.*`, `webcam.*`, `notification.*`, `share.file`. Construir do
   zero, com testes reais contra o app.
-- Enumeração/controle de PipeWire, criação do sink `hyprlink-speaker` e da
-  fonte `hyprlink-mic`, e o pipeline GStreamer de vídeo/áudio não vêm
-  especificados em lugar nenhum do projeto original — são decisões de
-  implementação do daemon Rust (ver plano de fases em
+- Enumeração/controle de PipeWire, criação do sink `hyprlink-speaker` (ainda
+  não implementado, ver plano de fases) e do sink nulo `hyprlink-mic`
+  (implementado em `mic.rs` — o "microfone" de verdade é o monitor desse
+  sink, `pactl load-module module-null-sink`), e o pipeline GStreamer de
+  vídeo/áudio não vêm especificados em lugar nenhum do projeto original —
+  são decisões de implementação do daemon Rust (ver plano de fases em
   `/home/maggio/.claude/plans/bubbly-frolicking-wilkes.md`).
 - **`hyprctl dispatch` nem sempre aceita a sintaxe clássica.** Em forks de
   Hyprland baseados em Lua (confirmado num, apelidado "ryoku" pelo usuário

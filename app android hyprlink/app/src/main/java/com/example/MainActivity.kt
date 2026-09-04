@@ -791,6 +791,18 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                                     }
                                 },
                                 webcamActive = isWebcamStreaming,
+                                isMicOn = isMicOn,
+                                onMicToggleClick = {
+                                    if (isMicOn) {
+                                        WebcamStreamer.stopMic()
+                                    } else {
+                                        if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                            WebcamStreamer.startMic(context)
+                                        } else {
+                                            micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                        }
+                                    }
+                                },
                                 controlService = if (currentLinkState == com.example.ui.theme.LinkState.CONNECTED) com.example.ui.theme.ServiceState.ACTIVE else com.example.ui.theme.ServiceState.INACTIVE,
                                 webcamService = if (isWebcamStreaming) com.example.ui.theme.ServiceState.ACTIVE else com.example.ui.theme.ServiceState.INACTIVE,
                                 micBridgeService = if (isMicOn) com.example.ui.theme.ServiceState.ACTIVE else com.example.ui.theme.ServiceState.INACTIVE,

@@ -8,6 +8,7 @@ mod hypr;
 mod identity;
 mod input;
 mod media;
+mod mic;
 mod notif;
 mod pairing;
 mod phone_audio;

@@ -49,6 +49,7 @@ pub struct ModuleStatus {
     pub workspace: Option<String>,
     pub audio_tap_active: bool,
     pub webcam_active: bool,
+    pub mic_active: bool,
     /// Vazão medida da stream de vídeo atual (Mbps, janela de ~1s) — usado
     /// tanto pro teste de rede quanto exibido ao vivo durante um stream normal.
     pub webcam_mbps: Option<f64>,
@@ -141,4 +142,8 @@ pub fn set_webcam_active(state: &Arc<Mutex<HudState>>, active: bool) {
 
 pub fn set_webcam_mbps(state: &Arc<Mutex<HudState>>, mbps: f64) {
     state.lock().unwrap().modules.webcam_mbps = Some(mbps);
+}
+
+pub fn set_mic_active(state: &Arc<Mutex<HudState>>, active: bool) {
+    state.lock().unwrap().modules.mic_active = active;
 }

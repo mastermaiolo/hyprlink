@@ -1185,6 +1185,23 @@ fn audio_screen(hud: &Hud) -> Element<'_, Message> {
         column(hud.audio.apps.iter().map(app_row)).spacing(8).into()
     };
 
+    // Microfone do telemóvel: função independente da webcam — liga/desliga
+    // pelo botão no telemóvel (fora da pré-visualização da câmara), aqui é
+    // só o indicador.
+    let mic_status: Element<'_, Message> = if hud.snapshot.modules.mic_active {
+        container(text("🎙️ microfone do telemóvel ativo — selecione \"HyprLink-Mic\" como entrada de áudio em qualquer app").size(11).color(GREEN))
+            .padding(10)
+            .width(Length::Fill)
+            .style(|_| container::Style {
+                background: Some(Background::Color(Color { a: 0.10, ..GREEN })),
+                border: Border { color: Color { a: 0.35, ..GREEN }, width: 1.0, radius: 10.0.into() },
+                ..Default::default()
+            })
+            .into()
+    } else {
+        text("🎙️ microfone do telemóvel: desligado (liga pelo telemóvel).").size(11).color(TEXT_3).into()
+    };
+
     scrollable(
         column![
             module_header("AUDIO", "Mixer do PC e do telemóvel".to_string(), TEXT_3),
@@ -1193,6 +1210,7 @@ fn audio_screen(hud: &Hud) -> Element<'_, Message> {
             text("APPS (PC)").size(9).color(TEXT_2),
             apps,
             phone_audio_section(hud),
+            mic_status,
         ]
         .spacing(12),
     )

@@ -47,6 +47,8 @@ fun DashboardScreen(
     onSendFilesClick: () -> Unit,
     onWebcamClick: () -> Unit,
     webcamActive: Boolean,
+    isMicOn: Boolean = false,
+    onMicToggleClick: () -> Unit = {},
     controlService: ServiceState = ServiceState.ACTIVE,
     webcamService: ServiceState = if (webcamActive) ServiceState.ACTIVE else ServiceState.INACTIVE,
     micBridgeService: ServiceState = ServiceState.ACTIVE,
@@ -495,6 +497,31 @@ fun DashboardScreen(
                     }
                 }
             }
+        }
+
+        // Botão de Microfone direto no Dashboard
+        Button(
+            onClick = onMicToggleClick,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (isMicOn) Color(0xFF39FF9C).copy(alpha = 0.15f) else Color.White.copy(alpha = 0.08f),
+                contentColor = if (isMicOn) Color(0xFF39FF9C) else Color.White
+            ),
+            border = BorderStroke(
+                1.dp,
+                if (isMicOn) Color(0xFF39FF9C).copy(alpha = 0.7f) else Color.White.copy(alpha = 0.25f)
+            ),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+        ) {
+            Text(
+                text = if (isMicOn) "🎙️ MIC: ATIVO" else "🎙️ MIC: INATIVO",
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                maxLines = 1
+            )
         }
 
         // 5. Secção "SERVIÇOS"
