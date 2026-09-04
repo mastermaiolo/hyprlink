@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use ciborium::Value;
 
-use crate::protocol::{write_frame, Packet};
+use crate::protocol::{read_frame, write_frame, Packet};
 
 pub type ActiveConn = Arc<Mutex<Option<quinn::Connection>>>;
 
@@ -43,4 +43,20 @@ pub async fn push(active: &ActiveConn, kind: &str, body: Option<Value>) -> Optio
     let _ = write_frame(&mut send, &packet.encode()).await;
     let _ = send.finish();
     Some(id)
+}
+
+/// Igual a `push`, mas **espera a resposta** na mesma stream (padrão
+/// inverso do que o telemóvel já faz pra `battery.request`/`audio.state` —
+/// aqui é o daemon quem pergunta e o telemóvel quem responde). Timeout de
+/// 5s, mesma folga usada pelos `req/ack` do telemóvel pro lado do PC.
+pub async fn request(active: &ActiveConn, kind: &str, body: Option<Value>) -> Option<Packet> {
+    let connection = { active.lock().unwrap().clone() };
+    let connection = connection?;
+    let (mut send, mut recv) = connection.open_bi().await.ok()?;
+    let id = next_id();
+    let packet = Packet::new(id, kind, body, false);
+    write_frame(&mut send, &packet.encode()).await.ok()?;
+    send.finish().ok()?;
+    let raw = tokio::time::timeout(std::time::Duration::from_secs(5), read_frame(&mut recv)).await.ok()?.ok()?;
+    Packet::decode(&raw).ok()
 }

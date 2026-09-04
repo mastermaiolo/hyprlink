@@ -196,6 +196,20 @@ descrição `"HyprLink-Phone"`, `is_phone:true`. Uni-stream de tap (D→P): 8
 bytes id + PCM cru **16-bit LE, 48000Hz, estéreo intercalado**, infinito até
 `tap_stop`/desconexão.
 
+### phone_audio
+
+Inverso do `audio.*` acima — aqui é o **daemon quem pergunta/comanda** e o
+telemóvel quem responde/executa (único caso do protocolo nessa direção; até
+agora todo req/resp era telemóvel→PC). Volumes sempre em percentual (0-100),
+não nos steps reais do `AudioManager` — o telemóvel converte.
+
+| type | dir | body |
+|---|---|---|
+| `phone_audio.state` → `phone_audio.state_reply` | D→P req/resp (5s) | resp: `{ring_percent, media_percent, alarm_percent, ringer_mode:"normal"\|"vibrate"\|"silent", dnd_access:Bool, dnd_enabled:Bool}` |
+| `phone_audio.set_volume` | D→P push | `{stream:"ring"\|"media"\|"alarm", percent(0-100)}` — sem resposta |
+| `phone_audio.set_ringer_mode` | D→P push | `{mode:"normal"\|"vibrate"\|"silent"}` — sem resposta; sem `dnd_access` (acesso a "Não Perturbe"), vibrar/silencioso não têm efeito |
+| `phone_audio.set_dnd` | D→P push | `{enabled:Bool}` — sem resposta; liga/desliga o filtro de interrupção (`NotificationManager.setInterruptionFilter`, `PRIORITY` quando ligado, `ALL` quando desligado) — diferente do `ringer_mode`; também depende de `dnd_access` |
+
 ### webcam
 | type | dir | body |
 |---|---|---|

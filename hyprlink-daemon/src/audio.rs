@@ -77,28 +77,56 @@ fn sink_description(s: &PaSink) -> String {
         .unwrap_or_else(|| s.name.clone())
 }
 
-/// `audio.state_reply`: sinks (saídas de som) + apps (streams por aplicação).
-pub fn state_body() -> Value {
+/// Saída de som (sink) — usado tanto pelo `audio.state_reply` (telemóvel)
+/// quanto pela tela AUDIO da GUI.
+#[derive(Debug, Clone)]
+pub struct SinkInfo {
+    pub id: i64,
+    pub name: String,
+    pub description: String,
+    pub volume: i64,
+    pub muted: bool,
+    pub is_default: bool,
+    pub is_phone: bool,
+}
+
+/// Stream de áudio de uma app (sink-input) — idem.
+#[derive(Debug, Clone)]
+pub struct AppInfo {
+    pub id: i64,
+    pub name: String,
+    pub media: Option<String>,
+    pub volume: i64,
+    pub muted: bool,
+    pub sink_id: i64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct AudioSnapshot {
+    pub default_sink: String,
+    pub sinks: Vec<SinkInfo>,
+    pub apps: Vec<AppInfo>,
+}
+
+pub fn snapshot() -> AudioSnapshot {
     let default_sink = run_text(&["get-default-sink"]);
     let sinks: Vec<PaSink> = run_json(&["-f", "json", "list", "sinks"]);
     let inputs: Vec<PaSinkInput> = run_json(&["-f", "json", "list", "sink-inputs"]);
 
-    let sinks_val: Vec<Value> = sinks
+    let sinks = sinks
         .iter()
-        .map(|s| {
-            Value::Map(vec![
-                (Value::Text("id".into()), Value::Integer(s.index.into())),
-                (Value::Text("name".into()), Value::Text(s.name.clone())),
-                (Value::Text("description".into()), Value::Text(sink_description(s))),
-                (Value::Text("volume".into()), Value::Integer(avg_percent(&s.volume).into())),
-                (Value::Text("muted".into()), Value::Bool(s.mute)),
-                (Value::Text("is_default".into()), Value::Bool(s.name == default_sink)),
-                (Value::Text("is_phone".into()), Value::Bool(s.name == PHONE_SINK_NAME)),
-            ])
+        .map(|s| SinkInfo {
+            id: s.index as i64,
+            name: s.name.clone(),
+            description: sink_description(s),
+            volume: avg_percent(&s.volume),
+            muted: s.mute,
+            is_default: s.name == default_sink,
+            is_phone: s.name == PHONE_SINK_NAME,
         })
         .collect();
 
-    let apps_val: Vec<Value> = inputs
+    let apps = inputs
         .iter()
         .map(|i| {
             let name = i
@@ -107,20 +135,57 @@ pub fn state_body() -> Value {
                 .or_else(|| i.properties.get("node.name"))
                 .cloned()
                 .unwrap_or_else(|| "App".to_string());
-            let media = i.properties.get("media.name").map(|m| Value::Text(m.clone())).unwrap_or(Value::Null);
+            AppInfo {
+                id: i.index as i64,
+                name,
+                media: i.properties.get("media.name").cloned(),
+                volume: avg_percent(&i.volume),
+                muted: i.mute,
+                sink_id: i.sink as i64,
+            }
+        })
+        .collect();
+
+    AudioSnapshot { default_sink, sinks, apps }
+}
+
+/// `audio.state_reply`: sinks (saídas de som) + apps (streams por aplicação).
+pub fn state_body() -> Value {
+    let s = snapshot();
+    let sinks_val: Vec<Value> = s
+        .sinks
+        .iter()
+        .map(|s| {
             Value::Map(vec![
-                (Value::Text("id".into()), Value::Integer(i.index.into())),
-                (Value::Text("name".into()), Value::Text(name)),
+                (Value::Text("id".into()), Value::Integer(s.id.into())),
+                (Value::Text("name".into()), Value::Text(s.name.clone())),
+                (Value::Text("description".into()), Value::Text(s.description.clone())),
+                (Value::Text("volume".into()), Value::Integer(s.volume.into())),
+                (Value::Text("muted".into()), Value::Bool(s.muted)),
+                (Value::Text("is_default".into()), Value::Bool(s.is_default)),
+                (Value::Text("is_phone".into()), Value::Bool(s.is_phone)),
+            ])
+        })
+        .collect();
+
+    let apps_val: Vec<Value> = s
+        .apps
+        .iter()
+        .map(|a| {
+            let media = a.media.clone().map(Value::Text).unwrap_or(Value::Null);
+            Value::Map(vec![
+                (Value::Text("id".into()), Value::Integer(a.id.into())),
+                (Value::Text("name".into()), Value::Text(a.name.clone())),
                 (Value::Text("media".into()), media),
-                (Value::Text("volume".into()), Value::Integer(avg_percent(&i.volume).into())),
-                (Value::Text("muted".into()), Value::Bool(i.mute)),
-                (Value::Text("sink_id".into()), Value::Integer(i.sink.into())),
+                (Value::Text("volume".into()), Value::Integer(a.volume.into())),
+                (Value::Text("muted".into()), Value::Bool(a.muted)),
+                (Value::Text("sink_id".into()), Value::Integer(a.sink_id.into())),
             ])
         })
         .collect();
 
     Value::Map(vec![
-        (Value::Text("default_sink".into()), Value::Text(default_sink)),
+        (Value::Text("default_sink".into()), Value::Text(s.default_sink)),
         (Value::Text("sinks".into()), Value::Array(sinks_val)),
         (Value::Text("apps".into()), Value::Array(apps_val)),
     ])

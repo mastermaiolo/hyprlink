@@ -19,6 +19,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -242,10 +243,54 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
     val sharedPrefs = remember { context.getSharedPreferences("hyprlink_prefs", Context.MODE_PRIVATE) }
     val coroutineScope = rememberCoroutineScope()
 
-    // Request notification permission on startup (Android 13+)
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    var isBatteryOptIgnored by remember {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        mutableStateOf(pm?.isIgnoringBatteryOptimizations(context.packageName) ?: true)
+    }
+    var isDndGranted by remember {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+        mutableStateOf(nm?.isNotificationPolicyAccessGranted ?: false)
+    }
+    var isNotifListenerGranted by remember {
+        mutableStateOf(isNotificationListenerEnabled(context))
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+                isBatteryOptIgnored = pm?.isIgnoringBatteryOptimizations(context.packageName) ?: true
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+                isDndGranted = nm?.isNotificationPolicyAccessGranted ?: false
+                isNotifListenerGranted = isNotificationListenerEnabled(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    var showInitialPermissionsDialog by remember { mutableStateOf(false) }
+    var hasRequestedBatteryExemptionThisSession by rememberSaveable { mutableStateOf(false) }
+    var showBatteryExemptionDialog by remember { mutableStateOf(false) }
+    var hasRequestedDndThisSession by rememberSaveable { mutableStateOf(false) }
+    var showDndDialog by remember { mutableStateOf(false) }
+
+    fun checkAndTriggerInitialPermissions() {
+        val hasSeen = sharedPrefs.getBoolean("has_seen_initial_permissions_dialog", false)
+        if (!hasSeen && (!isBatteryOptIgnored || !isDndGranted || !isNotifListenerGranted)) {
+            showInitialPermissionsDialog = true
+        }
+    }
+
+    // Request all runtime permissions on startup (Android 13+ Notifs, Camera, Microphone)
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
-        onResult = { _ -> }
+        onResult = { _ ->
+            checkAndTriggerInitialPermissions()
+        }
     )
 
     LaunchedEffect(Unit) {
@@ -258,8 +303,13 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             permissionsToRequest.add(Manifest.permission.CAMERA)
         }
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(Manifest.permission.RECORD_AUDIO)
+        }
         if (permissionsToRequest.isNotEmpty()) {
             permissionLauncher.launch(permissionsToRequest.toTypedArray())
+        } else {
+            checkAndTriggerInitialPermissions()
         }
     }
 
@@ -278,6 +328,8 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
     val codecPreference by WebcamStreamer.codecPreference.collectAsStateWithLifecycle()
     val activeCodec by WebcamStreamer.activeCodec.collectAsStateWithLifecycle()
     val isMicOn by WebcamStreamer.isMicOn.collectAsStateWithLifecycle()
+    val isTorchOn by WebcamStreamer.isTorchOn.collectAsStateWithLifecycle()
+    val zoomRatio by WebcamStreamer.zoomRatio.collectAsStateWithLifecycle()
 
     val micPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -293,9 +345,6 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
     var isServiceActive by rememberSaveable {
         mutableStateOf(sharedPrefs.getBoolean("is_service_active", true))
     }
-
-    var hasRequestedBatteryExemptionThisSession by rememberSaveable { mutableStateOf(false) }
-    var showBatteryExemptionDialog by remember { mutableStateOf(false) }
 
     // Room DB instances
     val db = remember { AppDatabase.getDatabase(context) }
@@ -323,10 +372,10 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
             editor.apply()
             if (isServiceActive) {
                 ContextCompat.startForegroundService(context, intent)
-                if (!hasRequestedBatteryExemptionThisSession) {
+                if (!hasRequestedBatteryExemptionThisSession && !showInitialPermissionsDialog) {
                     val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
                     val isIgnoring = pm?.isIgnoringBatteryOptimizations(context.packageName) ?: true
-                    if (!isIgnoring) {
+                    if (!isIgnoring && sharedPrefs.getBoolean("has_seen_initial_permissions_dialog", false)) {
                         showBatteryExemptionDialog = true
                     }
                 }
@@ -914,13 +963,15 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
         ) {
             var previewView by remember { mutableStateOf<androidx.camera.view.PreviewView?>(null) }
+            var isScreenOff by remember { mutableStateOf(false) }
+            var currentZoom by remember { mutableStateOf(1.0f) }
 
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black)
             ) {
-                // Full-screen camera preview
+                // Full-screen camera preview with pinch-to-zoom and tap-to-focus
                 androidx.compose.ui.viewinterop.AndroidView(
                     factory = { ctx ->
                         androidx.camera.view.PreviewView(ctx).also { previewView = it }.apply {
@@ -934,6 +985,12 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                     },
                     modifier = Modifier
                         .fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectTransformGestures { _, _, zoom, _ ->
+                                currentZoom = (currentZoom * zoom).coerceIn(1.0f, 10.0f)
+                                WebcamStreamer.setZoomRatio(currentZoom)
+                            }
+                        }
                         .pointerInput(Unit) {
                             detectTapGestures(
                                 onTap = { offset ->
@@ -994,27 +1051,66 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                     }
 
                     Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(Color.Black.copy(alpha = 0.6f))
-                            .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(20.dp))
-                            .padding(horizontal = 14.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Videocam,
-                            contentDescription = "Webcam Status",
-                            tint = CyanActive,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = lensLabel,
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontFamily = JetBrainsMono,
-                            fontWeight = FontWeight.Bold
-                        )
+                        // Torch quick toggle button
+                        IconButton(
+                            onClick = { WebcamStreamer.toggleTorch(!isTorchOn) },
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(if (isTorchOn) Color(0xFFFFD700).copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.6f))
+                                .border(1.dp, if (isTorchOn) Color(0xFFFFD700) else Color.White.copy(alpha = 0.15f), CircleShape)
+                                .size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isTorchOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
+                                contentDescription = "Alternar Lanterna",
+                                tint = if (isTorchOn) Color(0xFFFFD700) else Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        // Screen-off mode toggle button
+                        IconButton(
+                            onClick = { isScreenOff = true },
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.6f))
+                                .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                                .size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Brightness2,
+                                contentDescription = "Apagar Ecrã",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color.Black.copy(alpha = 0.6f))
+                                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 14.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Videocam,
+                                contentDescription = "Webcam Status",
+                                tint = CyanActive,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = lensLabel,
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = JetBrainsMono,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
 
@@ -1113,7 +1209,30 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                                 )
                             }
 
-                            // 4. Microphone toggle Button
+                            // 4. Torch Button
+                            Button(
+                                onClick = { WebcamStreamer.toggleTorch(!isTorchOn) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isTorchOn) Color(0xFFFFD700).copy(alpha = 0.15f) else Color.White.copy(alpha = 0.08f),
+                                    contentColor = if (isTorchOn) Color(0xFFFFD700) else Color.White
+                                ),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isTorchOn) Color(0xFFFFD700).copy(alpha = 0.7f) else Color.White.copy(alpha = 0.25f)
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.height(48.dp)
+                            ) {
+                                Text(
+                                    text = if (isTorchOn) "🔦 LANTERNA: ON" else "🔦 LANTERNA: OFF",
+                                    fontFamily = JetBrainsMono,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    maxLines = 1
+                                )
+                            }
+
+                            // 5. Microphone toggle Button
                             Button(
                                 onClick = {
                                     if (isMicOn) {
@@ -1146,7 +1265,7 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                                 )
                             }
 
-                            // 5. Codec cycling preference Button
+                            // 6. Codec cycling preference Button
                             Button(
                                 onClick = { WebcamStreamer.cycleCodecPreference() },
                                 colors = ButtonDefaults.buttonColors(
@@ -1190,6 +1309,30 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                                 maxLines = 1
                             )
                         }
+                    }
+                }
+
+                // Screen-off overlay (tap anywhere to re-awaken screen)
+                if (isScreenOff) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black)
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onTap = { isScreenOff = false }
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Toque em qualquer lugar para reativar o ecrã",
+                            color = Color.White.copy(alpha = 0.3f),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = JetBrainsMono,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(24.dp)
+                        )
                     }
                 }
             }
@@ -1299,6 +1442,229 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
         )
     }
 
+    if (showInitialPermissionsDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showInitialPermissionsDialog = false
+                sharedPrefs.edit().putBoolean("has_seen_initial_permissions_dialog", true).apply()
+            },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Security,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Configuração de Permissões",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Para que todas as funções do HyprLink operem em segundo plano com a sua workstation (notificações, áudio remoto e ligação estável), configure os acessos abaixo:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // 1. Bateria
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "🔋 Bateria Sem Restrições",
+                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (isBatteryOptIgnored) "ATIVO ✓" else "PENDENTE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isBatteryOptIgnored) Color(0xFF4CAF50) else Color(0xFFFF9800)
+                                )
+                            }
+                            Text(
+                                text = "Evita que o Android congele a ligação de fundo durante períodos de inatividade.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (!isBatteryOptIgnored) {
+                                Button(
+                                    onClick = {
+                                        try {
+                                            val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                                data = Uri.parse("package:${context.packageName}")
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(36.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                    contentPadding = PaddingValues(vertical = 4.dp)
+                                ) {
+                                    Text("Desativar Restrições de Bateria", fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    // 2. Notificações
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "🔔 Espelhar Notificações",
+                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (isNotifListenerGranted) "ATIVO ✓" else "PENDENTE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isNotifListenerGranted) Color(0xFF4CAF50) else Color(0xFFFF9800)
+                                )
+                            }
+                            Text(
+                                text = "Permite enviar e responder a notificações diretamente no PC.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (!isNotifListenerGranted) {
+                                Button(
+                                    onClick = {
+                                        try {
+                                            val intent = Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(36.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                    contentPadding = PaddingValues(vertical = 4.dp)
+                                ) {
+                                    Text("Permitir Acesso a Notificações", fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    // 3. Não Incomodar / Som
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "🔇 Acesso a Não Incomodar",
+                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (isDndGranted) "ATIVO ✓" else "PENDENTE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isDndGranted) Color(0xFF4CAF50) else Color(0xFFFF9800)
+                                )
+                            }
+                            Text(
+                                text = "Permite ao PC alternar o som do telemóvel para Silencioso, Vibrar ou Normal.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (!isDndGranted) {
+                                Button(
+                                    onClick = {
+                                        try {
+                                            val intent = Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).apply {
+                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(36.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                    contentPadding = PaddingValues(vertical = 4.dp)
+                                ) {
+                                    Text("Conceder Permissão DND", fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                val allGranted = isBatteryOptIgnored && isNotifListenerGranted && isDndGranted
+                TextButton(
+                    onClick = {
+                        showInitialPermissionsDialog = false
+                        sharedPrefs.edit().putBoolean("has_seen_initial_permissions_dialog", true).apply()
+                    }
+                ) {
+                    Text(
+                        text = if (allGranted) "Tudo Pronto" else "Concluir",
+                        color = MaterialTheme.colorScheme.secondary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showInitialPermissionsDialog = false
+                        sharedPrefs.edit().putBoolean("has_seen_initial_permissions_dialog", true).apply()
+                    }
+                ) {
+                    Text("Mais Tarde", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        )
+    }
+
     if (showBatteryExemptionDialog) {
         AlertDialog(
             onDismissRequest = { showBatteryExemptionDialog = false },
@@ -1330,6 +1696,45 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                     }
                 ) {
                     Text("Ignorar", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        )
+    }
+
+    if (showDndDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showDndDialog = false
+                hasRequestedDndThisSession = true
+            },
+            title = { Text("Acesso a Não Incomodar / Silencioso", color = MaterialTheme.colorScheme.onSurface) },
+            text = { Text("Para que o computador consiga alterar remotamente o modo de som do telemóvel (Normal, Vibrar ou Silencioso) via HyprLink, o Android requer autorização de acesso ao modo Não Incomodar.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDndDialog = false
+                        hasRequestedDndThisSession = true
+                        try {
+                            val intent = Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Erro ao abrir definições: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                ) {
+                    Text("Configurar", color = MaterialTheme.colorScheme.secondary)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDndDialog = false
+                        hasRequestedDndThisSession = true
+                    }
+                ) {
+                    Text("Mais Tarde", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         )
@@ -4848,11 +5253,14 @@ fun NotificationsSettingsScreen(
     
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     var hasPermission by remember { mutableStateOf(false) }
+    var hasDndPermission by remember { mutableStateOf(false) }
 
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 hasPermission = isNotificationListenerEnabled(context)
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+                hasDndPermission = nm?.isNotificationPolicyAccessGranted ?: false
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -4981,6 +5389,88 @@ fun NotificationsSettingsScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(if (hasPermission) "Gerir Acesso" else "Conceder Permissão")
+                }
+            }
+        }
+
+        // Card 1b: Permissão de Não Incomodar / Modo Silencioso
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+                .testTag("dnd_permission_card"),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Acesso a Não Incomodar (DND)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    val badgeColor = if (hasDndPermission) Color(0xFF4CAF50) else Color(0xFFFF9800)
+                    val badgeText = if (hasDndPermission) "ATIVADO" else "PENDENTE"
+
+                    Box(
+                        modifier = Modifier
+                            .background(badgeColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                            .border(1.dp, badgeColor.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = badgeText,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = badgeColor
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Permite que a sua workstation ajuste os volumes e altere remotamente o telemóvel entre Silencioso, Vibrar e Som Normal.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Button(
+                    onClick = {
+                        try {
+                            val intent = Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Não foi possível abrir as definições.", Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("open_dnd_settings_button"),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (hasDndPermission) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+                        contentColor = if (hasDndPermission) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.VolumeUp,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(if (hasDndPermission) "Gerir Permissão DND" else "Conceder Permissão DND")
                 }
             }
         }

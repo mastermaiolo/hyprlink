@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use iced::widget::{button, column, container, row, scrollable, text, text_editor, text_input, Space};
+use iced::widget::{button, column, container, row, scrollable, slider, text, text_editor, text_input, Space};
 use iced::window;
 use iced::{Alignment, Background, Border, Color, Element, Font, Length, Shadow, Task, Theme, Vector};
 
@@ -45,6 +45,7 @@ enum ModuleId {
     Batt,
     Control,
     Media,
+    Audio,
     Webcam,
     Config,
 }
@@ -67,6 +68,14 @@ struct Hud {
     download_dir: PathBuf,
     active: ActiveConn,
     pending_webcam: crate::webcam::PendingWebcam,
+    audio: crate::audio::AudioSnapshot,
+    phone_audio: crate::phone_audio::PhoneAudioState,
+    /// Valor "ao vivo" enquanto o slider do telemóvel está sendo arrastado —
+    /// só visual, o comando de rede só sai no soltar (ver nota em
+    /// `phone_volume_row`, mesma classe de bug do audio tap: abrir um
+    /// stream QUIC por pixel arrastado afoga o telemóvel).
+    phone_volume_drag: std::collections::HashMap<&'static str, i64>,
+    tray_show: crate::tray::ShowRequested,
     screen: Screen,
     hypr_input: String,
     hypr_workspaces: Vec<i64>,
@@ -146,6 +155,7 @@ fn suggest_webcam_config(mbps: f64) -> (&'static str, i64) {
 enum Message {
     Tick,
     Quit,
+    MinimizeToTray,
     CopyText(String),
     ConsoleAction(text_editor::Action),
     PickDownloadDir,
@@ -167,10 +177,19 @@ enum Message {
     WebcamTestStart,
     WebcamTestStartResult(bool),
     WebcamTestApply,
+    AudioLoaded(crate::audio::AudioSnapshot),
+    AudioSetVolume(&'static str, i64, i64),
+    AudioSetMute(&'static str, i64, bool),
+    AudioSetDefaultSink(String),
+    PhoneAudioLoaded(crate::phone_audio::PhoneAudioState),
+    PhoneAudioVolumeDragged(&'static str, i64),
+    PhoneAudioVolumeRelease(&'static str),
+    PhoneAudioSetRingerMode(&'static str),
+    PhoneAudioSetDnd(bool),
 }
 
 impl Hud {
-    fn new(shared: Arc<Mutex<HudState>>, config: SharedConfig, active: ActiveConn, pending_webcam: crate::webcam::PendingWebcam) -> Self {
+    fn new(shared: Arc<Mutex<HudState>>, config: SharedConfig, active: ActiveConn, pending_webcam: crate::webcam::PendingWebcam, tray_show: crate::tray::ShowRequested) -> Self {
         let snapshot = shared.lock().unwrap().clone();
         let console_len = snapshot.logs.len();
         let console = text_editor::Content::with_text(&snapshot.logs.join("\n"));
@@ -184,6 +203,10 @@ impl Hud {
             download_dir,
             active,
             pending_webcam,
+            audio: crate::audio::AudioSnapshot::default(),
+            phone_audio: crate::phone_audio::PhoneAudioState::default(),
+            phone_volume_drag: std::collections::HashMap::new(),
+            tray_show,
             screen: Screen::Dashboard,
             hypr_input: String::new(),
             hypr_workspaces: Vec::new(),
@@ -212,6 +235,10 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
                 hud.console_len = hud.snapshot.logs.len();
                 hud.console = text_editor::Content::with_text(&hud.snapshot.logs.join("\n"));
             }
+            if crate::tray::take_show_requested(&hud.tray_show) {
+                crate::state::push_log(&hud.shared, "[i] tray: restaurando janela".to_string());
+                return Task::perform(async { tokio::task::spawn_blocking(crate::hypr::tray_show).await.unwrap_or(false) }, |_| Message::Tick);
+            }
             if let WebcamTest::Running { started } = hud.webcam_test {
                 if started.elapsed() >= WEBCAM_TEST_DURATION {
                     let mbps = hud.snapshot.modules.webcam_mbps.unwrap_or(0.0);
@@ -233,6 +260,10 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
             }
             kill_other_instances();
             std::process::exit(0)
+        }
+        Message::MinimizeToTray => {
+            crate::state::push_log(&hud.shared, "[i] tray: minimizando".to_string());
+            Task::perform(async { tokio::task::spawn_blocking(crate::hypr::tray_hide).await.unwrap_or(false) }, |_| Message::Tick)
         }
         Message::CopyText(value) => iced::clipboard::write(value),
         Message::ConsoleAction(action) => {
@@ -265,6 +296,10 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
             hud.screen = Screen::Module(id);
             if id == ModuleId::Control {
                 return fetch_workspaces();
+            }
+            if id == ModuleId::Audio {
+                let active = hud.active.clone();
+                return Task::batch([fetch_audio(), fetch_phone_audio(active)]);
             }
             Task::none()
         }
@@ -359,7 +394,92 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
             hud.webcam_test = WebcamTest::Idle;
             Task::none()
         }
+        Message::AudioLoaded(snapshot) => {
+            hud.audio = snapshot;
+            Task::none()
+        }
+        Message::AudioSetVolume(kind, id, volume) => {
+            Task::perform(
+                async move {
+                    tokio::task::spawn_blocking(move || crate::audio::set_volume(kind, id, volume)).await.ok();
+                    tokio::task::spawn_blocking(crate::audio::snapshot).await.unwrap_or_default()
+                },
+                Message::AudioLoaded,
+            )
+        }
+        Message::AudioSetMute(kind, id, muted) => {
+            Task::perform(
+                async move {
+                    tokio::task::spawn_blocking(move || crate::audio::set_mute(kind, id, muted)).await.ok();
+                    tokio::task::spawn_blocking(crate::audio::snapshot).await.unwrap_or_default()
+                },
+                Message::AudioLoaded,
+            )
+        }
+        Message::AudioSetDefaultSink(name) => Task::perform(
+            async move {
+                tokio::task::spawn_blocking(move || crate::audio::set_default_sink(&name)).await.ok();
+                tokio::task::spawn_blocking(crate::audio::snapshot).await.unwrap_or_default()
+            },
+            Message::AudioLoaded,
+        ),
+        Message::PhoneAudioLoaded(state) => {
+            hud.phone_audio = state;
+            Task::none()
+        }
+        Message::PhoneAudioVolumeDragged(stream, percent) => {
+            hud.phone_volume_drag.insert(stream, percent);
+            Task::none()
+        }
+        Message::PhoneAudioVolumeRelease(stream) => {
+            let fallback = match stream {
+                "ring" => hud.phone_audio.ring_percent,
+                "media" => hud.phone_audio.media_percent,
+                "alarm" => hud.phone_audio.alarm_percent,
+                _ => 50,
+            };
+            let percent = hud.phone_volume_drag.remove(stream).unwrap_or(fallback);
+            let active = hud.active.clone();
+            Task::perform(
+                async move {
+                    crate::phone_audio::set_volume(&active, stream, percent).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                    crate::phone_audio::get_state(&active).await.unwrap_or_default()
+                },
+                Message::PhoneAudioLoaded,
+            )
+        }
+        Message::PhoneAudioSetRingerMode(mode) => {
+            let active = hud.active.clone();
+            Task::perform(
+                async move {
+                    crate::phone_audio::set_ringer_mode(&active, mode).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                    crate::phone_audio::get_state(&active).await.unwrap_or_default()
+                },
+                Message::PhoneAudioLoaded,
+            )
+        }
+        Message::PhoneAudioSetDnd(enabled) => {
+            let active = hud.active.clone();
+            Task::perform(
+                async move {
+                    crate::phone_audio::set_dnd(&active, enabled).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                    crate::phone_audio::get_state(&active).await.unwrap_or_default()
+                },
+                Message::PhoneAudioLoaded,
+            )
+        }
     }
+}
+
+fn fetch_audio() -> Task<Message> {
+    Task::perform(async { tokio::task::spawn_blocking(crate::audio::snapshot).await.unwrap_or_default() }, Message::AudioLoaded)
+}
+
+fn fetch_phone_audio(active: ActiveConn) -> Task<Message> {
+    Task::perform(async move { crate::phone_audio::get_state(&active).await.unwrap_or_default() }, Message::PhoneAudioLoaded)
 }
 
 /// Só a lista de ids de workspace (não `id`/`name` completo) — o suficiente
@@ -536,7 +656,7 @@ fn module_list(download_dir: &std::path::Path, modules: &crate::state::ModuleSta
         module_row("04", "MEDIA", media_state, Some(ModuleId::Media)),
         module_row("05", "BATT", batt_state, Some(ModuleId::Batt)),
         module_row("06", "CONTROL", control_state, Some(ModuleId::Control)),
-        module_row("07", "AUDIO", audio_state, None),
+        module_row("07", "AUDIO", audio_state, Some(ModuleId::Audio)),
         module_row("08", "WEBCAM", webcam_state, Some(ModuleId::Webcam)),
         module_row("09", "TRACK", ModuleState::NotImplemented, None),
         module_row("10", "CONFIG", ModuleState::Idle("Permissões e dispositivos"), Some(ModuleId::Config)),
@@ -684,7 +804,7 @@ fn module_ruler(active: ModuleId) -> Element<'static, Message> {
         entry("04", active == ModuleId::Media),
         entry("05", active == ModuleId::Batt),
         entry("06", active == ModuleId::Control),
-        entry("07", false),
+        entry("07", active == ModuleId::Audio),
         entry("08", active == ModuleId::Webcam),
         entry("09", false),
         entry("10", active == ModuleId::Config),
@@ -711,6 +831,7 @@ fn module_screen(hud: &Hud, id: ModuleId) -> Element<'_, Message> {
         ModuleId::Batt => batt_screen(&hud.snapshot.modules),
         ModuleId::Control => control_screen(hud),
         ModuleId::Media => media_screen(&hud.snapshot.modules),
+        ModuleId::Audio => audio_screen(hud),
         ModuleId::Webcam => webcam_screen(hud),
         ModuleId::Config => config_screen(&hud.snapshot),
     };
@@ -869,6 +990,185 @@ fn media_screen(modules: &crate::state::ModuleStatus) -> Element<'static, Messag
         .color(TEXT_3);
 
     column![module_header("MEDIA", "MPRIS".to_string(), GREEN), card, transport, note].spacing(16).into()
+}
+
+fn mute_button(muted: bool, on_press: Message) -> Element<'static, Message> {
+    let label = if muted { "🔇" } else { "🔊" };
+    button(text(label).size(13))
+        .padding([6, 10])
+        .style(move |_, _| button::Style {
+            background: Some(Background::Color(if muted { Color { a: 0.10, ..RED } } else { Color::from_rgba(1.0, 1.0, 1.0, 0.045) })),
+            border: Border { color: if muted { Color { a: 0.35, ..RED } } else { Color::from_rgba(1.0, 1.0, 1.0, 0.08) }, width: 1.0, radius: 8.0.into() },
+            text_color: if muted { RED } else { TEXT_2 },
+            ..Default::default()
+        })
+        .on_press(on_press)
+        .into()
+}
+
+fn sink_row(s: &crate::audio::SinkInfo) -> Element<'static, Message> {
+    let id = s.id;
+    let muted = s.muted;
+    let name_col = column![
+        text(s.description.clone()).size(11).color(TEXT),
+        if s.is_default { text("saída padrão").size(9).color(GREEN) } else { text("").size(9) },
+    ]
+    .spacing(2)
+    .width(Length::FillPortion(3));
+
+    let mut controls = row![
+        name_col,
+        slider(0.0..=150.0, s.volume as f64, move |v| Message::AudioSetVolume("sink", id, v.round() as i64)).width(Length::FillPortion(4)),
+        text(format!("{}%", s.volume)).size(10).color(TEXT_2).width(32),
+        mute_button(muted, Message::AudioSetMute("sink", id, !muted)),
+    ]
+    .spacing(10)
+    .align_y(Alignment::Center);
+
+    if !s.is_default {
+        let name = s.name.clone();
+        controls = controls.push(
+            button(text("usar").size(10).color(GREEN))
+                .padding([6, 10])
+                .style(|_, _| button::Style {
+                    background: Some(Background::Color(Color { a: 0.10, ..GREEN })),
+                    border: Border { color: Color { a: 0.35, ..GREEN }, width: 1.0, radius: 8.0.into() },
+                    text_color: GREEN,
+                    ..Default::default()
+                })
+                .on_press(Message::AudioSetDefaultSink(name)),
+        );
+    }
+
+    container(controls).padding(10).width(Length::Fill).style(|_| glass(10.0)).into()
+}
+
+fn app_row(a: &crate::audio::AppInfo) -> Element<'static, Message> {
+    let id = a.id;
+    let muted = a.muted;
+    let label = a.media.clone().unwrap_or_else(|| a.name.clone());
+    let name_col = column![text(a.name.clone()).size(11).color(TEXT), text(label).size(9).color(TEXT_2)].spacing(2).width(Length::FillPortion(3));
+
+    container(
+        row![
+            name_col,
+            slider(0.0..=150.0, a.volume as f64, move |v| Message::AudioSetVolume("app", id, v.round() as i64)).width(Length::FillPortion(4)),
+            text(format!("{}%", a.volume)).size(10).color(TEXT_2).width(32),
+            mute_button(muted, Message::AudioSetMute("app", id, !muted)),
+        ]
+        .spacing(10)
+        .align_y(Alignment::Center),
+    )
+    .padding(10)
+    .width(Length::Fill)
+    .style(|_| glass(10.0))
+    .into()
+}
+
+/// `percent` já vem resolvido pelo chamador (valor real ou o que está sendo
+/// arrastado agora) — o comando de rede só sai no `on_release`, arrastar é
+/// só visual (ver `Hud::phone_volume_drag`).
+fn phone_volume_row(label: &'static str, stream: &'static str, percent: i64) -> Element<'static, Message> {
+    row![
+        text(label).size(11).color(TEXT).width(Length::FillPortion(2)),
+        slider(0.0..=100.0, percent as f64, move |v| Message::PhoneAudioVolumeDragged(stream, v.round() as i64))
+            .on_release(Message::PhoneAudioVolumeRelease(stream))
+            .width(Length::FillPortion(4)),
+        text(format!("{percent}%")).size(10).color(TEXT_2).width(32),
+    ]
+    .spacing(10)
+    .align_y(Alignment::Center)
+    .into()
+}
+
+fn ringer_mode_button(label: &'static str, mode: &'static str, active_mode: &str) -> Element<'static, Message> {
+    let is_active = active_mode == mode;
+    button(text(label).size(11).color(if is_active { GREEN } else { TEXT_2 }))
+        .padding([8, 14])
+        .style(move |_, _| button::Style {
+            background: Some(Background::Color(if is_active { Color { a: 0.10, ..GREEN } } else { Color::from_rgba(1.0, 1.0, 1.0, 0.045) })),
+            border: Border { color: if is_active { Color { a: 0.35, ..GREEN } } else { Color::from_rgba(1.0, 1.0, 1.0, 0.08) }, width: 1.0, radius: 8.0.into() },
+            text_color: if is_active { GREEN } else { TEXT_2 },
+            ..Default::default()
+        })
+        .on_press(Message::PhoneAudioSetRingerMode(mode))
+        .into()
+}
+
+fn dnd_button(enabled: bool) -> Element<'static, Message> {
+    let color = if enabled { AMBER } else { TEXT_2 };
+    button(text(if enabled { "não perturbe: ligado" } else { "não perturbe: desligado" }).size(11).color(color))
+        .padding([8, 14])
+        .style(move |_, _| button::Style {
+            background: Some(Background::Color(if enabled { Color { a: 0.10, ..AMBER } } else { Color::from_rgba(1.0, 1.0, 1.0, 0.045) })),
+            border: Border { color: if enabled { Color { a: 0.35, ..AMBER } } else { Color::from_rgba(1.0, 1.0, 1.0, 0.08) }, width: 1.0, radius: 8.0.into() },
+            text_color: color,
+            ..Default::default()
+        })
+        .on_press(Message::PhoneAudioSetDnd(!enabled))
+        .into()
+}
+
+fn phone_audio_section(hud: &Hud) -> Element<'_, Message> {
+    let state = &hud.phone_audio;
+    let displayed = |stream: &'static str, real: i64| hud.phone_volume_drag.get(stream).copied().unwrap_or(real);
+    let mut section = column![
+        text("TELEMÓVEL").size(9).color(TEXT_2),
+        container(
+            column![
+                phone_volume_row("toque", "ring", displayed("ring", state.ring_percent)),
+                phone_volume_row("mídia", "media", displayed("media", state.media_percent)),
+                phone_volume_row("alarme", "alarm", displayed("alarm", state.alarm_percent)),
+                row![
+                    ringer_mode_button("som", "normal", &state.ringer_mode),
+                    ringer_mode_button("vibrar", "vibrate", &state.ringer_mode),
+                    ringer_mode_button("silencioso", "silent", &state.ringer_mode),
+                ]
+                .spacing(8),
+                dnd_button(state.dnd_enabled),
+            ]
+            .spacing(10)
+        )
+        .padding(10)
+        .width(Length::Fill)
+        .style(|_| glass(10.0)),
+    ]
+    .spacing(8);
+
+    if !state.dnd_access {
+        section = section.push(
+            text("Sem acesso a \"Não Perturbe\" no telemóvel — vibrar/silencioso não têm efeito até conceder essa permissão nas configurações dele.")
+                .size(10)
+                .color(AMBER),
+        );
+    }
+    section.into()
+}
+
+fn audio_screen(hud: &Hud) -> Element<'_, Message> {
+    let sinks: Element<'_, Message> = if hud.audio.sinks.is_empty() {
+        text("A carregar saídas de som…").size(11).color(TEXT_3).into()
+    } else {
+        column(hud.audio.sinks.iter().map(sink_row)).spacing(8).into()
+    };
+    let apps: Element<'_, Message> = if hud.audio.apps.is_empty() {
+        text("Nenhuma app tocando som agora.").size(11).color(TEXT_3).into()
+    } else {
+        column(hud.audio.apps.iter().map(app_row)).spacing(8).into()
+    };
+
+    scrollable(
+        column![
+            module_header("AUDIO", "Mixer do PC e do telemóvel".to_string(), TEXT_3),
+            text("SAÍDAS (PC)").size(9).color(TEXT_2),
+            sinks,
+            text("APPS (PC)").size(9).color(TEXT_2),
+            apps,
+            phone_audio_section(hud),
+        ]
+        .spacing(12),
+    )
+    .into()
 }
 
 fn webcam_screen(hud: &Hud) -> Element<'_, Message> {
@@ -1175,6 +1475,16 @@ fn view(hud: &Hud) -> Element<'_, Message> {
         })
         .on_press(Message::Quit);
 
+    let minimize_btn = button(text("–").size(16).color(TEXT_2))
+        .padding([2, 9])
+        .style(|_, _| button::Style {
+            background: Some(Background::Color(Color::from_rgba(1.0, 1.0, 1.0, 0.045))),
+            border: Border { color: Color::from_rgba(1.0, 1.0, 1.0, 0.08), width: 1.0, radius: 8.0.into() },
+            text_color: TEXT_2,
+            ..Default::default()
+        })
+        .on_press(Message::MinimizeToTray);
+
     let header_right: Element<'_, Message> = if hud.screen != Screen::Dashboard {
         let back = button(text("‹ VOLTAR").size(11).color(TEXT_2))
             .padding([6, 12])
@@ -1185,9 +1495,9 @@ fn view(hud: &Hud) -> Element<'_, Message> {
                 ..Default::default()
             })
             .on_press(Message::Back);
-        row![back, close_btn].spacing(8).align_y(Alignment::Center).into()
+        row![back, minimize_btn, close_btn].spacing(8).align_y(Alignment::Center).into()
     } else {
-        row![status_pill(status_color, status_label), close_btn].spacing(8).align_y(Alignment::Center).into()
+        row![status_pill(status_color, status_label), minimize_btn, close_btn].spacing(8).align_y(Alignment::Center).into()
     };
 
     let header = row![logo, Space::new().width(Length::Fill), header_right].spacing(8).align_y(Alignment::Center);
@@ -1321,8 +1631,8 @@ fn style(_hud: &Hud, theme: &Theme) -> iced::theme::Style {
     }
 }
 
-pub fn run(shared: Arc<Mutex<HudState>>, config: SharedConfig, active: ActiveConn, pending_webcam: crate::webcam::PendingWebcam) -> iced::Result {
-    iced::application(move || Hud::new(shared.clone(), config.clone(), active.clone(), pending_webcam.clone()), update, view)
+pub fn run(shared: Arc<Mutex<HudState>>, config: SharedConfig, active: ActiveConn, pending_webcam: crate::webcam::PendingWebcam, tray_show: crate::tray::ShowRequested) -> iced::Result {
+    iced::application(move || Hud::new(shared.clone(), config.clone(), active.clone(), pending_webcam.clone(), tray_show.clone()), update, view)
         .title("HyprLink")
         .style(style)
         .subscription(subscription)

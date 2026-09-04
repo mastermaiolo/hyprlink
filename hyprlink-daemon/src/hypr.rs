@@ -67,8 +67,51 @@ fn lua_fallback(disp: &str, arg: &str) -> Option<String> {
         "workspace" if arg.parse::<i64>().is_ok() => Some(format!("hl.dsp.focus({{workspace = {arg}}})")),
         "focuswindow" => Some(format!("hl.dsp.focus({{window = \"{arg}\"}})")),
         "closewindow" => Some(format!("hl.dsp.window.close({{address = \"{arg}\"}})")),
+        "movetoworkspacesilent" => Some(format!("hl.dsp.window.move({{workspace = \"{arg}\"}})")),
         _ => None,
     }
+}
+
+/// Nome fixo da workspace especial usada só pra "minimizar" a própria GUI
+/// pra bandeja — nunca é alternada (`toggle_special`): sempre um comando
+/// determinístico de "esconder" ou "mostrar", nunca "alternar". Um toggle
+/// pode dessincronizar do estado real do Hyprland e travar a janela visível
+/// em cima de tudo, em toda workspace, sem jeito de fechar — já aconteceu
+/// uma vez durante o desenvolvimento (ver conversa), não repetir.
+const TRAY_WORKSPACE: &str = "special:hyprlinktray";
+
+fn own_window_address() -> Option<String> {
+    let clients: serde_json::Value = serde_json::from_str(&clients_json()).ok()?;
+    clients
+        .as_array()?
+        .iter()
+        .find(|c| c.get("class").and_then(|v| v.as_str()) == Some("hyprlink-hud"))?
+        .get("address")?
+        .as_str()
+        .map(String::from)
+}
+
+fn active_workspace_id() -> i64 {
+    let data = run_hyprctl(&["activeworkspace", "-j"]);
+    serde_json::from_str::<serde_json::Value>(&data).ok().and_then(|v| v.get("id")?.as_i64()).unwrap_or(1)
+}
+
+/// Move a própria janela da GUI pra uma workspace especial — como ela nunca
+/// é mostrada sozinha (ninguém chama `togglespecialworkspace`), fica
+/// efetivamente escondida até `tray_show()` a trazer de volta.
+pub fn tray_hide() -> bool {
+    let Some(addr) = own_window_address() else { return false };
+    dispatch(&format!("focuswindow address:{addr}"));
+    !dispatch(&format!("movetoworkspacesilent {TRAY_WORKSPACE}")).starts_with("erro")
+}
+
+/// Move a janela de volta pra workspace ativa no momento — determinístico
+/// (não depende de saber se estava escondida ou não).
+pub fn tray_show() -> bool {
+    let Some(addr) = own_window_address() else { return false };
+    let ws = active_workspace_id();
+    dispatch(&format!("focuswindow address:{addr}"));
+    !dispatch(&format!("movetoworkspacesilent {ws}")).starts_with("erro")
 }
 
 fn socket2_path() -> Option<String> {

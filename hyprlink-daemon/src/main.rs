@@ -10,11 +10,13 @@ mod input;
 mod media;
 mod notif;
 mod pairing;
+mod phone_audio;
 mod protocol;
 mod server;
 mod share;
 mod state;
 mod tap;
+mod tray;
 mod tls_verifier;
 mod webcam;
 
@@ -40,6 +42,10 @@ fn main() -> anyhow::Result<()> {
     // Compartilhado com a GUI pra ela poder pedir "iniciar/parar stream" no
     // ecrã da webcam sem precisar de todo o `Ctx` do servidor.
     let pending_webcam = webcam::new_pending();
+    // Compartilhado com a GUI: o ícone da bandeja roda numa thread/executor
+    // próprio (ksni) — sinaliza aqui quando o usuário clica nele, a GUI
+    // consome no `Tick` (polling, não dá pra mandar `Message` direto de fora).
+    let tray_show = tray::new_show_flag();
 
     print_terminal_qr(&identity.fingerprint_hex, local_ip, &token_hex)?;
 
@@ -48,13 +54,14 @@ fn main() -> anyhow::Result<()> {
         let config = config.clone();
         let active = active.clone();
         let pending_webcam = pending_webcam.clone();
+        let tray_show = tray_show.clone();
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().expect("falha ao criar runtime tokio");
-            rt.block_on(run_daemon(identity, pairing, hud, config, active, pending_webcam, local_ip));
+            rt.block_on(run_daemon(identity, pairing, hud, config, active, pending_webcam, tray_show, local_ip));
         });
     }
 
-    gui::run(hud, config, active, pending_webcam).map_err(|e| anyhow::anyhow!("erro na GUI: {e}"))
+    gui::run(hud, config, active, pending_webcam, tray_show).map_err(|e| anyhow::anyhow!("erro na GUI: {e}"))
 }
 
 async fn run_daemon(
@@ -64,6 +71,7 @@ async fn run_daemon(
     config: config::SharedConfig,
     active: active::ActiveConn,
     pending_webcam: webcam::PendingWebcam,
+    tray_show: tray::ShowRequested,
     local_ip: std::net::IpAddr,
 ) {
     let addr: std::net::SocketAddr = format!("0.0.0.0:{PORT}").parse().expect("porta fixa válida");
@@ -77,6 +85,7 @@ async fn run_daemon(
     };
     let ctx = server::Ctx::new(hud, config, active, pending_webcam);
     server::spawn_background_tasks(ctx.clone());
+    tokio::spawn(tray::spawn(tray_show));
     server::run(endpoint, pairing, ctx).await;
 }
 

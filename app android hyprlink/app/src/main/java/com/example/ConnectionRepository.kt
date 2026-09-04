@@ -1104,6 +1104,85 @@ object ConnectionRepository {
                         WebcamStreamer.stop()
                     }
                 }
+                "phone_audio" -> {
+                    val am = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+                    val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+
+                    if (packet.type == "phone_audio.state") {
+                        fun pct(streamType: Int): Int {
+                            val cur = am.getStreamVolume(streamType)
+                            val max = am.getStreamMaxVolume(streamType).coerceAtLeast(1)
+                            return (cur * 100 / max)
+                        }
+                        val ringerMode = when (am.ringerMode) {
+                            android.media.AudioManager.RINGER_MODE_SILENT -> "silent"
+                            android.media.AudioManager.RINGER_MODE_VIBRATE -> "vibrate"
+                            else -> "normal"
+                        }
+                        val body = mapOf(
+                            "ring_percent" to pct(android.media.AudioManager.STREAM_RING),
+                            "media_percent" to pct(android.media.AudioManager.STREAM_MUSIC),
+                            "alarm_percent" to pct(android.media.AudioManager.STREAM_ALARM),
+                            "ringer_mode" to ringerMode,
+                            "dnd_access" to nm.isNotificationPolicyAccessGranted,
+                            "dnd_enabled" to (nm.currentInterruptionFilter != android.app.NotificationManager.INTERRUPTION_FILTER_ALL)
+                        )
+                        val replyPacket = Packet(
+                            id = packet.id,
+                            type = "phone_audio.state_reply",
+                            body = body,
+                            hasPayload = false
+                        )
+                        val out = stream.outputStream
+                        writeFramedBytes(out, encodePacket(replyPacket))
+                        out.close()
+                    } else if (packet.type == "phone_audio.set_volume") {
+                        val streamName = packet.body?.get("stream") as? String
+                        val percent = (packet.body?.get("percent") as? Number)?.toInt()?.coerceIn(0, 100)
+                        val streamType = when (streamName) {
+                            "ring" -> android.media.AudioManager.STREAM_RING
+                            "media" -> android.media.AudioManager.STREAM_MUSIC
+                            "alarm" -> android.media.AudioManager.STREAM_ALARM
+                            else -> null
+                        }
+                        if (streamType != null && percent != null) {
+                            val max = am.getStreamMaxVolume(streamType)
+                            am.setStreamVolume(streamType, (percent * max / 100), 0)
+                        }
+                    } else if (packet.type == "phone_audio.set_ringer_mode") {
+                        val mode = packet.body?.get("mode") as? String
+                        if (nm.isNotificationPolicyAccessGranted) {
+                            try {
+                                am.ringerMode = when (mode) {
+                                    "silent" -> android.media.AudioManager.RINGER_MODE_SILENT
+                                    "vibrate" -> android.media.AudioManager.RINGER_MODE_VIBRATE
+                                    else -> android.media.AudioManager.RINGER_MODE_NORMAL
+                                }
+                            } catch (e: SecurityException) { /* sem permissão de verdade, ignora */ }
+                        } else {
+                            // Sem acesso a "Não Perturbe" — abre a tela de permissão pro usuário conceder ali mesmo.
+                            val intent = Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(intent)
+                        }
+                    } else if (packet.type == "phone_audio.set_dnd") {
+                        val enabled = packet.body?.get("enabled") as? Boolean ?: false
+                        if (nm.isNotificationPolicyAccessGranted) {
+                            try {
+                                nm.setInterruptionFilter(
+                                    if (enabled) android.app.NotificationManager.INTERRUPTION_FILTER_PRIORITY
+                                    else android.app.NotificationManager.INTERRUPTION_FILTER_ALL
+                                )
+                            } catch (e: SecurityException) { /* sem permissão de verdade, ignora */ }
+                        } else {
+                            val intent = Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(intent)
+                        }
+                    }
+                }
                 else -> {
                     appendLog("[WARN] Unknown packet prefix router: $routerPrefix (type: ${packet.type})")
                 }

@@ -86,6 +86,10 @@ pub fn body_get_i64(body: &Value, key: &str) -> Option<i64> {
     body_get(body, key)?.as_integer().and_then(|i| i64::try_from(i).ok())
 }
 
+pub fn body_get_bool(body: &Value, key: &str) -> Option<bool> {
+    body_get(body, key)?.as_bool()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

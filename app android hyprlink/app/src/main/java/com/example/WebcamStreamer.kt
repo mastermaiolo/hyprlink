@@ -3,6 +3,8 @@ package com.example
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
 import android.media.AudioFormat
 import android.media.AudioRecord
@@ -58,6 +60,12 @@ object WebcamStreamer {
     private val _isMicOn = MutableStateFlow(false)
     val isMicOn = _isMicOn.asStateFlow()
 
+    private val _isTorchOn = MutableStateFlow(false)
+    val isTorchOn = _isTorchOn.asStateFlow()
+
+    private val _zoomRatio = MutableStateFlow(1.0f)
+    val zoomRatio = _zoomRatio.asStateFlow()
+
     private val _lensLabel = MutableStateFlow("LENTE")
     val lensLabel = _lensLabel.asStateFlow()
 
@@ -75,6 +83,39 @@ object WebcamStreamer {
 
     private val _activeCodec = MutableStateFlow("")
     val activeCodec = _activeCodec.asStateFlow()
+
+    fun getSupportedResolutions(context: Context): List<Map<String, Any>> {
+        val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
+            ?: return emptyList()
+        val cameraId = try {
+            cameraManager.cameraIdList.getOrNull(lensIndex) ?: cameraManager.cameraIdList.firstOrNull()
+        } catch (e: Exception) {
+            null
+        } ?: return emptyList()
+
+        val characteristics = try {
+            cameraManager.getCameraCharacteristics(cameraId)
+        } catch (e: Exception) {
+            return emptyList()
+        }
+
+        val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            ?: return emptyList()
+        val outputSizes = map.getOutputSizes(android.graphics.ImageFormat.YUV_420_888)
+            ?: map.getOutputSizes(android.view.SurfaceHolder::class.java)
+            ?: emptyArray()
+
+        return outputSizes
+            .sortedByDescending { it.width * it.height }
+            .distinctBy { "${it.width}x${it.height}" }
+            .map { size ->
+                mapOf(
+                    "name" to "${size.width}x${size.height}",
+                    "width" to size.width,
+                    "height" to size.height
+                )
+            }
+    }
 
     // Manda webcam.error ao PC (além do log local) — sem isto, qualquer
     // falha aqui parecia sempre o mesmo timeout genérico de 10s do lado
@@ -138,6 +179,15 @@ object WebcamStreamer {
                 val mime = if (useHevc) MediaFormat.MIMETYPE_VIDEO_HEVC else MediaFormat.MIMETYPE_VIDEO_AVC
                 val codecByte: Byte = if (useHevc) 0x02 else 0x01
                 _activeCodec.value = if (useHevc) "H.265" else "H.264"
+
+                // Verificar resolução e FPS suportados antes de iniciar
+                val supported = getSupportedResolutions(context)
+                val targetResolutionSupported = supported.any {
+                    (it["width"] as? Int) == width && (it["height"] as? Int) == height
+                }
+                if (supported.isNotEmpty() && !targetResolutionSupported) {
+                    ConnectionRepository.appendLog("[WEBCAM] Aviso: Resolução ${width}x${height} não está listada como suportada nativamente. O CameraX tentará fazer o melhor ajuste.")
+                }
 
                 val format = MediaFormat.createVideoFormat(mime, width, height).apply {
                     setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
@@ -376,6 +426,23 @@ object WebcamStreamer {
         camera?.cameraControl?.startFocusAndMetering(action)
     }
 
+    fun focusAtNormalized(x: Float, y: Float) {
+        val factory = androidx.camera.core.SurfaceOrientedMeteringPointFactory(1.0f, 1.0f)
+        val point = factory.createPoint(x.coerceIn(0f, 1f), y.coerceIn(0f, 1f))
+        focusAt(point)
+    }
+
+    fun setZoomRatio(ratio: Float) {
+        val clamped = ratio.coerceAtLeast(1.0f)
+        _zoomRatio.value = clamped
+        camera?.cameraControl?.setZoomRatio(clamped)
+    }
+
+    fun toggleTorch(on: Boolean) {
+        _isTorchOn.value = on
+        camera?.cameraControl?.enableTorch(on)
+    }
+
     // Pode ser chamado de qualquer thread — despacha o teardown do
     // CameraX para a main (unbindAll fora dela lança "Not in
     // application's main thread").
@@ -392,6 +459,8 @@ object WebcamStreamer {
         micJob?.cancel()
         micJob = null
         _isMicOn.value = false
+        _isTorchOn.value = false
+        _zoomRatio.value = 1.0f
         streamJob?.cancel()
         streamJob = null
         camera = null
