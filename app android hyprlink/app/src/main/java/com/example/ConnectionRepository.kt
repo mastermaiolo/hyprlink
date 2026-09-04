@@ -1198,6 +1198,9 @@ object ConnectionRepository {
             try {
                 stream.closeInput(0)
             } catch (e: Exception) {}
+            try {
+                stream.outputStream.close()
+            } catch (e: Exception) {}
         }
     }
 
