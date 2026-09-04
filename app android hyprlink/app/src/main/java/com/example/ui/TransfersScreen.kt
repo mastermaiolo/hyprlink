@@ -32,7 +32,8 @@ data class CompletedTransferItem(
     val totalBytes: Long,
     val dateLabel: String,
     val sha256Hash: String,
-    val isVerified: Boolean = true
+    val isVerified: Boolean = true,
+    val uri: android.net.Uri? = null
 )
 
 data class ErrorTransferItem(
@@ -55,6 +56,7 @@ fun TransfersScreen(
     onRetryTransfer: (String) -> Unit,
     onDeleteErrorTransfer: (String) -> Unit,
     onClearHistory: () -> Unit,
+    onOpenTransfer: (CompletedTransferItem) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize().background(HyprColors.Background)) {
@@ -426,6 +428,7 @@ fun TransfersScreen(
                         .clip(RoundedCornerShape(12.dp))
                         .background(HyprColors.SurfaceCard)
                         .border(1.dp, HyprColors.BorderNormal, RoundedCornerShape(12.dp))
+                        .clickable { onOpenTransfer(item) }
                         .padding(12.dp)
                 ) {
                     Column {

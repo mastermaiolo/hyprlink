@@ -169,16 +169,25 @@ app realmente faz): `["core","clipboard","notification","media","battery","share
 ### share
 | type | dir | body |
 |---|---|---|
-| `share.file` | anúncio bidi (`has_payload=true`) | `{name, size}` — `id` do pacote correlaciona com o uni-stream de bytes |
-| `share.progress` | push | `{id, bytes, total}` |
-| `share.done` | push | `{id, ok, sha256 (hex), bytes, error?}` |
+| `share.file` | anúncio bidi (`has_payload=true`), **as duas direções** | `{name, size}` — `id` do pacote correlaciona com o uni-stream de bytes |
+| `share.progress` | push **D→P sempre** | `{id, bytes, total}` |
+| `share.done` | push **D→P sempre** | `{id, ok, sha256 (hex), bytes, error?}` |
 | `share.url` | P→D one-way | `{url}` |
 
-Uni-stream de ficheiro: 8 bytes id + bytes crus, chunks de 32 KiB no lado
-Android. SHA-256 sobre os bytes exatos. Nome de ficheiro sanitizado (só
-último componente do path, rejeita `..`/`/` embutido). Receptor espera até
-15s por um `share.done` após o EOF do uni-stream antes de marcar como
-"não verificado".
+Uni-stream de ficheiro: 8 bytes id + bytes crus, chunks de 32 KiB. SHA-256
+sobre os bytes exatos. Nome de ficheiro sanitizado (só último componente do
+path, rejeita `..`/`/` embutido). Receptor espera até 15s por um
+`share.done` após o EOF do uni-stream antes de marcar como "não
+verificado". **`share.progress`/`share.done` são sempre mandados pelo PC**
+(não é "quem recebe confirma" — o lado Android sempre só ESPERA por eles,
+nas duas direções, nunca os envia; ver `ConnectionRepository.kt::saveFileFromStream`,
+que já vinha pronto pra receber ficheiro do PC antes até de existir um jeito
+de mandar um). **Telemóvel→PC**: telemóvel anuncia+envia, PC recebe e manda
+`share.progress`/`share.done` (`share.rs::receive_uni_stream`, salva em
+`config::download_dir`). **PC→telemóvel** (`share.rs::send_file`, botão
+"enviar" do módulo FILES): PC anuncia+envia e TAMBÉM manda `share.done` no
+final (calculando o próprio SHA-256 dos bytes enviados) — sem isso o
+telemóvel espera 15s à toa e marca "não verificado".
 
 ### audio
 | type | dir | body |

@@ -1,7 +1,4 @@
-//! Transferência de ficheiros (Fase 5): por ora só a direção telemóvel→PC
-//! (o app já tem essa opção pronta em "Partilha"). Enviar do PC pro
-//! telemóvel fica pra quando a GUI tiver um seletor de ficheiro — não faz
-//! sentido construir isso sem ter como escolher o ficheiro ainda.
+//! Transferência de ficheiros (Fase 5): telemóvel→PC e PC→telemóvel.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -9,9 +6,9 @@ use std::time::Duration;
 
 use ciborium::Value;
 use sha2::{Digest, Sha256};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::active::{push, ActiveConn};
+use crate::active::{announce, push, ActiveConn};
 use crate::config::{self, SharedConfig};
 use crate::state::{push_log, HudState};
 
@@ -124,4 +121,83 @@ pub async fn receive_uni_stream(
         (Value::Text("error".into()), Value::Null),
     ]);
     push(&active, "share.done", Some(body)).await;
+}
+
+/// Envia um ficheiro do PC pro telemóvel: anuncia (`share.file`, D→P) pra
+/// ganhar um `id`, depois abre um uni-stream próprio (8 bytes de id + bytes
+/// crus, mesmo formato que o telemóvel usa na direção inversa) e transmite
+/// em chunks de 32 KiB. Não espera pelo `share.done` de volta — isso chega
+/// como qualquer outro pacote em `server.rs` e só é logado.
+pub async fn send_file(active: &ActiveConn, hud: &Arc<Mutex<HudState>>, path: &std::path::Path) {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("arquivo").to_string();
+    let size = match tokio::fs::metadata(path).await {
+        Ok(m) => m.len(),
+        Err(e) => {
+            push_log(hud, format!("[!] share.file: não foi possível ler {}: {e}", path.display()));
+            return;
+        }
+    };
+
+    let body = Value::Map(vec![
+        (Value::Text("name".into()), Value::Text(name.clone())),
+        (Value::Text("size".into()), Value::Integer(size.into())),
+    ]);
+    let Some(id) = announce(active, "share.file", Some(body)).await else {
+        push_log(hud, "[!] share.file: sem conexão ativa pra enviar".to_string());
+        return;
+    };
+
+    let connection = { active.lock().unwrap().clone() };
+    let Some(connection) = connection else { return };
+    let mut send = match connection.open_uni().await {
+        Ok(s) => s,
+        Err(e) => {
+            push_log(hud, format!("[!] share.file: não foi possível abrir o uni-stream: {e}"));
+            return;
+        }
+    };
+    if send.write_all(&id.to_be_bytes()).await.is_err() {
+        return;
+    }
+
+    let mut file = match tokio::fs::File::open(path).await {
+        Ok(f) => f,
+        Err(e) => {
+            push_log(hud, format!("[!] share.file: não foi possível abrir {}: {e}", path.display()));
+            return;
+        }
+    };
+
+    push_log(hud, format!("[i] share.file · enviando {name} ({size} bytes)"));
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 32 * 1024];
+    let mut total: u64 = 0;
+    loop {
+        let n = match file.read(&mut buf).await {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(_) => break,
+        };
+        if send.write_all(&buf[..n]).await.is_err() {
+            push_log(hud, format!("[!] share.file: falha ao enviar {name} em {total} bytes"));
+            return;
+        }
+        hasher.update(&buf[..n]);
+        total += n as u64;
+    }
+    let _ = send.finish();
+
+    // O telemóvel (receptor nessa direção) espera um `share.done` do
+    // remetente pra confirmar/verificar — mesmo papel que o daemon já faz
+    // pra ficheiros telemóvel→PC, só invertido (ver `receive_uni_stream`).
+    let sha_hex: String = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect();
+    let done_body = Value::Map(vec![
+        (Value::Text("id".into()), Value::Integer(id.into())),
+        (Value::Text("ok".into()), Value::Bool(true)),
+        (Value::Text("sha256".into()), Value::Text(sha_hex.clone())),
+        (Value::Text("bytes".into()), Value::Integer(total.into())),
+        (Value::Text("error".into()), Value::Null),
+    ]);
+    push(active, "share.done", Some(done_body)).await;
+    push_log(hud, format!("[+] ficheiro enviado: {name} ({total} bytes) · sha256 {sha_hex}"));
 }

@@ -641,7 +641,8 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                         totalBytes = it.size,
                         dateLabel = "Hoje",
                         sha256Hash = it.sha256Local ?: "SHA-256 verificado",
-                        isVerified = it.status == TransferStatus.VERIFICADO
+                        isVerified = it.status == TransferStatus.VERIFICADO,
+                        uri = it.uri
                     )
                 }
             }
@@ -931,6 +932,21 @@ fun HyprLinkDashboard(modifier: Modifier = Modifier) {
                                 onClearHistory = {
                                     ConnectionRepository.clearPersistentHistory(context)
                                     ConnectionRepository.clearTransfers()
+                                },
+                                onOpenTransfer = { item ->
+                                    val uri = item.uri
+                                    if (uri != null) {
+                                        try {
+                                            val mime = context.contentResolver.getType(uri) ?: "*/*"
+                                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                                setDataAndType(uri, mime)
+                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (e: android.content.ActivityNotFoundException) {
+                                            android.widget.Toast.makeText(context, "Nenhuma app instalada consegue abrir esse ficheiro", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
                                 },
                                 modifier = Modifier.fillMaxSize()
                             )

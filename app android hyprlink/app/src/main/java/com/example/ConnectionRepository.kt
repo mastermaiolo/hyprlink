@@ -68,7 +68,8 @@ data class TransferItem(
     val error: String? = null,
     val sha256Local: String? = null,
     val sha256Remote: String? = null,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val uri: android.net.Uri? = null
 )
 
 data class ShareDonePacket(
@@ -1336,7 +1337,7 @@ object ConnectionRepository {
         val contentValues = android.content.ContentValues().apply {
             put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "${android.os.Environment.DIRECTORY_DOWNLOADS}/HyprLink")
             }
         }
         
@@ -1358,7 +1359,8 @@ object ConnectionRepository {
             direction = TransferDirection.DOWNLOAD,
             status = TransferStatus.EM_CURSO,
             progress = 0f,
-            bytesTransferred = 0L
+            bytesTransferred = 0L,
+            uri = uri
         )
         updateTransfer(item)
 
@@ -1419,7 +1421,8 @@ object ConnectionRepository {
                                 progress = 1f,
                                 bytesTransferred = donePacket.bytes,
                                 sha256Local = localSha256,
-                                sha256Remote = donePacket.sha256
+                                sha256Remote = donePacket.sha256,
+                                uri = uri
                             ))
                             appendLog("[SHARE] Download id=$packetId VERIFIED ✓ (SHA256: $localSha256)")
                             postNotification(context, "Ficheiro recebido", "$name foi verificado e guardado com sucesso nos Downloads.", "HyprLink")
@@ -1439,7 +1442,8 @@ object ConnectionRepository {
                                 bytesTransferred = donePacket.bytes,
                                 sha256Local = localSha256,
                                 sha256Remote = donePacket.sha256,
-                                error = "ERRO: hash não corresponde"
+                                error = "ERRO: hash não corresponde",
+                                uri = uri
                             ))
                             appendLog("[SHARE] Download id=$packetId ERROR: SHA256 mismatch. Local: $localSha256, Remote: ${donePacket.sha256}. Deleted file.")
                             postNotification(context, "Erro de verificação", "Ficheiro $name foi corrompido ou modificado durante a transferência.", "HyprLink")
@@ -1457,7 +1461,8 @@ object ConnectionRepository {
                             status = TransferStatus.ERRO,
                             progress = 1f,
                             bytesTransferred = donePacket.bytes,
-                            error = errMsg
+                            error = errMsg,
+                            uri = uri
                         ))
                         appendLog("[SHARE] Download id=$packetId failed on PC side: $errMsg")
                         postNotification(context, "Transferência falhou", "O PC reportou erro ao processar o ficheiro.", "HyprLink")
@@ -1473,7 +1478,8 @@ object ConnectionRepository {
                     progress = 1f,
                     bytesTransferred = size,
                     sha256Local = localSha256,
-                    error = "Não verificado (timeout de confirmação)"
+                    error = "Não verificado (timeout de confirmação)",
+                    uri = uri
                 ))
                 appendLog("[SHARE] Download id=$packetId timeout waiting for share.done. Kept file, marked NAO_VERIFICADO.")
                 postNotification(context, "Ficheiro guardado (Não verificado)", "$name foi guardado mas não pôde ser verificado.", "HyprLink")
@@ -1492,7 +1498,8 @@ object ConnectionRepository {
                 status = TransferStatus.ERRO,
                 progress = 1f,
                 bytesTransferred = 0L,
-                error = e.message ?: "Erro desconhecido na receção"
+                error = e.message ?: "Erro desconhecido na receção",
+                uri = uri
             ))
             throw e
         } finally {

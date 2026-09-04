@@ -212,7 +212,6 @@ async fn handle_connection(incoming: quinn::Incoming, pairing: Arc<Mutex<Pairing
     state::set_pairing(&ctx.hud);
     active::clear(&ctx.active);
     crate::tap::stop(&ctx.tap, &ctx.hud);
-                webcam::stop(&ctx.webcam, &ctx.hud);
     webcam::stop(&ctx.webcam, &ctx.hud);
     Ok(())
 }

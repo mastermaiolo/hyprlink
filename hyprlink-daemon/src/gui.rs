@@ -160,6 +160,8 @@ enum Message {
     ConsoleAction(text_editor::Action),
     PickDownloadDir,
     DownloadDirPicked(Option<PathBuf>),
+    PickFileToSend,
+    FileToSendPicked(Option<PathBuf>),
     OpenModule(ModuleId),
     Back,
     MediaCommand(&'static str),
@@ -292,6 +294,16 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
             Task::none()
         }
         Message::DownloadDirPicked(None) => Task::none(),
+        Message::PickFileToSend => Task::perform(
+            async { rfd::AsyncFileDialog::new().set_title("Ficheiro pra enviar pro telemóvel").pick_file().await.map(|handle| handle.path().to_path_buf()) },
+            Message::FileToSendPicked,
+        ),
+        Message::FileToSendPicked(Some(path)) => {
+            let active = hud.active.clone();
+            let shared = hud.shared.clone();
+            Task::perform(async move { crate::share::send_file(&active, &shared, &path).await }, |_| Message::Tick)
+        }
+        Message::FileToSendPicked(None) => Task::none(),
         Message::OpenModule(id) => {
             hud.screen = Screen::Module(id);
             if id == ModuleId::Control {
@@ -587,11 +599,23 @@ fn module_row(num: &str, title: &str, state: ModuleState, open: Option<ModuleId>
     }
 }
 
-/// A linha de FILES é clicável: abre o seletor de pasta nativo (portal XDG)
-/// pra escolher onde os ficheiros recebidos são salvos.
+/// Linha de FILES com duas ações diretas (sem tela própria, ver
+/// code-tarefas.md): "enviar" escolhe um ficheiro e manda pro telemóvel,
+/// "alterar" troca a pasta onde os ficheiros recebidos são salvos.
 fn files_row(download_dir: &std::path::Path) -> Element<'static, Message> {
     let sub = format!("Recebe em {}", download_dir.display());
-    button(
+    let action_btn = |label: &'static str, msg: Message| {
+        button(text(label).size(9).color(TEXT_2))
+            .padding([5, 9])
+            .style(|_, _| button::Style {
+                background: Some(Background::Color(Color::from_rgba(1.0, 1.0, 1.0, 0.06))),
+                border: Border { color: Color::from_rgba(1.0, 1.0, 1.0, 0.1), width: 1.0, radius: 7.0.into() },
+                text_color: TEXT_2,
+                ..Default::default()
+            })
+            .on_press(msg)
+    };
+    container(
         row![
             text("02").size(9).color(TEXT_2).width(16),
             column![
@@ -600,19 +624,18 @@ fn files_row(download_dir: &std::path::Path) -> Element<'static, Message> {
             ]
             .spacing(2)
             .width(Length::Fill),
-            text("alterar").size(9).color(TEXT_2),
+            action_btn("enviar", Message::PickFileToSend),
+            action_btn("alterar", Message::PickDownloadDir),
         ]
-        .spacing(10)
+        .spacing(8)
         .align_y(Alignment::Center),
     )
     .padding([7, 10])
-    .style(|_, _| button::Style {
+    .style(|_| container::Style {
         background: Some(Background::Color(Color::from_rgba(1.0, 1.0, 1.0, 0.045))),
         border: Border { color: Color::from_rgba(1.0, 1.0, 1.0, 0.08), width: 1.0, radius: 10.0.into() },
-        text_color: TEXT,
         ..Default::default()
     })
-    .on_press(Message::PickDownloadDir)
     .into()
 }
 
