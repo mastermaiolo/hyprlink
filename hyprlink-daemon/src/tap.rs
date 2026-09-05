@@ -156,12 +156,24 @@ pub async fn start(connection: quinn::Connection, id: u64, handle: TapHandle, hu
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
     let hud_thread = hud.clone();
     std::thread::spawn(move || {
+        // ponytail: instrumentação temporária pra descobrir se o gargalo é a
+        // captura (pull_sample) ou o envio (mpsc/QUIC) — comparar com "X KB
+        // enviados" no log; se "capturados" avança mas "enviados" não, o
+        // canal/QUIC está travado, não o GStreamer.
+        let mut captured: u64 = 0;
+        let mut last_logged_captured: u64 = 0;
         loop {
             match appsink.pull_sample() {
                 Ok(sample) => {
                     let Some(buffer) = sample.buffer() else { continue };
                     let Ok(map) = buffer.map_readable() else { continue };
+                    captured += map.len() as u64;
+                    if captured.saturating_sub(last_logged_captured) >= 1_000_000 {
+                        last_logged_captured = captured;
+                        push_log(&hud_thread, format!("[i] audio tap: {} KB capturados do PipeWire", captured / 1024));
+                    }
                     if tx.blocking_send(map.as_slice().to_vec()).is_err() {
+                        push_log(&hud_thread, "[!] audio tap: canal pro QUIC fechou, parando captura".to_string());
                         break;
                     }
                 }
@@ -230,6 +242,39 @@ mod tests {
         let map = buffer.map_readable().expect("buffer deveria ser legível");
         println!("recebido: {} bytes", map.len());
         assert!(!map.is_empty(), "esperava bytes de PCM reais");
+
+        pipeline.set_state(gst::State::Null).ok();
+    }
+
+    /// Diagnóstico: pula em loop 30x seguidas (não só uma) pra ver se
+    /// `pull_sample()` continua entregando amostras ou trava depois da
+    /// primeira quando chamado repetidamente do Rust puro (sem QUIC/tokio).
+    #[test]
+    #[ignore]
+    fn manual_pipeline_loop() {
+        gst::init().expect("GStreamer deveria inicializar");
+        let sink = default_sink_name().expect("deveria haver um sink padrão");
+        println!("sink: {sink}");
+
+        let pipeline_str = format!(
+            "pipewiresrc target-object=\"{sink}\" stream-properties=\"props,stream.capture.sink=true\" \
+             ! audioconvert ! audioresample \
+             ! audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved \
+             ! appsink name=hyprlink_tap sync=false max-buffers=8 drop=true"
+        );
+        let pipeline =
+            gst::parse::launch(&pipeline_str).unwrap().downcast::<gst::Pipeline>().unwrap();
+        let appsink = pipeline.by_name("hyprlink_tap").unwrap().downcast::<AppSink>().unwrap();
+        pipeline.set_state(gst::State::Playing).expect("pipeline deveria iniciar");
+
+        let start = std::time::Instant::now();
+        for i in 0..30 {
+            let t0 = std::time::Instant::now();
+            let sample = appsink.pull_sample().expect(&format!("pull #{i} deveria funcionar"));
+            let buffer = sample.buffer().expect("amostra deveria ter buffer");
+            let map = buffer.map_readable().expect("buffer deveria ser legível");
+            println!("pull #{i}: {} bytes em {:?} (total decorrido: {:?})", map.len(), t0.elapsed(), start.elapsed());
+        }
 
         pipeline.set_state(gst::State::Null).ok();
     }

@@ -121,10 +121,13 @@ fn run_gst_thread(rx: Receiver<Vec<u8>>, handle: MicHandle, hud: Arc<Mutex<HudSt
         return;
     }
 
+    // ponytail: 1.0 pressupõe que o app manda PCM já com ganho de hardware
+    // (AudioSource.CAMCORDER/UNPROCESSED, não MIC) — se "abafado" voltar depois
+    // da troca no Android, ajustar aqui primeiro em vez de mexer no lado do telemóvel.
     let pipeline_str = "appsrc name=src is-live=true format=time block=true \
          ! audio/x-raw,format=S16LE,rate=48000,channels=1,layout=interleaved \
          ! audioconvert ! audioresample \
-         ! volume volume=5.0 \
+         ! volume volume=1.0 \
          ! pipewiresink sync=false stream-properties=\"props,media.class=Audio/Source,node.name=hyprlink-mic,node.description=HyprLink-Mic\"";
     let pipeline = match gst::parse::launch(pipeline_str) {
         Ok(el) => match el.downcast::<gst::Pipeline>() {
