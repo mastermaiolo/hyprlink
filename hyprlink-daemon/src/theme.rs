@@ -23,6 +23,7 @@ pub const TEXT_6: Color = Color::from_rgb(0x3A as f32 / 255.0, 0x3A as f32 / 255
 // superfícies
 pub const WINDOW_BG: Color = Color { r: 0.031, g: 0.035, b: 0.047, a: 0.82 };
 pub const TERMINAL: Color = Color::from_rgb(0x07 as f32 / 255.0, 0x07 as f32 / 255.0, 0x07 as f32 / 255.0);
+pub const GLASS: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.045 };
 pub const GLASS_BRD: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.08 };
 pub const WINDOW_BRD: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.10 };
 
