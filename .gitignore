@@ -7,6 +7,8 @@ hyprlink.zip
 # exportação pontual do AI Studio, duplica "app android hyprlink/" — arquivos
 # relevantes já são puxados manualmente pra lá, não versionar a pasta inteira
 /app new/
+/new/
+/novaversao/
 
 # editores/SO
 .DS_Store
