@@ -60,7 +60,7 @@ pub fn notif_screen(hud: &Hud) -> Element<'_, Message> {
     .align_y(Alignment::Center);
 
     column![
-        module_header("NOTIF", format!("{} espelhada(s) nesta sessão", modules.notif_count), TEXT_2),
+        module_header("NOTIFICAÇÕES", format!("{} espelhada(s) nesta sessão", modules.notif_count), TEXT_2),
         scrollable(chips).direction(scrollable::Direction::Horizontal(scrollable::Scrollbar::new().width(2).scroller_width(2))),
         header_row,
         history_list(rows, "Nenhuma notificação espelhada ainda nesta sessão."),

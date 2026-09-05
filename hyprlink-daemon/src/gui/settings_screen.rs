@@ -103,7 +103,7 @@ pub fn config_screen(hud: &Hud) -> Element<'static, Message> {
         .color(TEXT_3);
 
     column![
-        module_header("CONFIG", "Rede e dispositivo ligado".to_string(), TEXT_2),
+        module_header("CONFIGURAÇÕES", "Rede e dispositivo ligado".to_string(), TEXT_2),
         device_card,
         list,
         paired_card,

@@ -786,7 +786,7 @@ fn view(hud: &Hud) -> Element<'_, Message> {
             .align_y(Alignment::Center);
 
             row![
-                column![connbar, module_list(&hud.download_dir, &hud.snapshot.modules)].spacing(14),
+                column![connbar, module_list(&hud.download_dir, &hud.snapshot.modules, true)].spacing(14),
                 container(column![console_header, console(&hud.console)].spacing(8))
                     .width(Length::Fill)
                     .height(Length::Fill)
@@ -833,7 +833,7 @@ fn view(hud: &Hud) -> Element<'_, Message> {
                 ..Default::default()
             });
 
-            row![module_list(&hud.download_dir, &hud.snapshot.modules), pairing_card].spacing(14).height(Length::Fill).into()
+            row![module_list(&hud.download_dir, &hud.snapshot.modules, false), pairing_card].spacing(14).height(Length::Fill).into()
         }
     };
 

@@ -99,7 +99,7 @@ pub fn batt_screen(hud: &Hud) -> Element<'_, Message> {
 
     let note = text("Temperatura, saúde e ciclos não existem no protocolo — só nível e carregamento chegam do telemóvel hoje.").size(10).color(TEXT_5);
 
-    column![module_header("BATT", "Telemetria do telemóvel e do PC".to_string(), TEXT_2), cards, chart_card, alerts_card, note]
+    column![module_header("BATERIA", "Telemetria do telemóvel e do PC".to_string(), TEXT_2), cards, chart_card, alerts_card, note]
         .spacing(14)
         .into()
 }

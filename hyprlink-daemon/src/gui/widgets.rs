@@ -156,51 +156,71 @@ pub fn module_row(id: ModuleId, title: &str, state: ModuleState) -> Element<'sta
 }
 
 
-pub fn module_list(download_dir: &std::path::Path, modules: &crate::state::ModuleStatus) -> Element<'static, Message> {
-    let clip_state = match modules.clip_history.first() {
-        Some(entry) => ModuleState::Active(format!("{}: {}", entry.direction, clip::preview(&entry.text))),
-        None => ModuleState::idle("Nada sincronizado ainda"),
-    };
+/// Sem ligação ativa, nenhum dado anterior conta — força cinza mesmo que
+/// `modules` ainda guarde valores de uma sessão anterior (code-spec-iced.md
+/// §4: "sidebar inteira em cinza durante o pareamento").
+fn gated(connected: bool, state: ModuleState) -> ModuleState {
+    if connected { state } else { ModuleState::idle("Aguardando conexão") }
+}
+
+pub fn module_list(download_dir: &std::path::Path, modules: &crate::state::ModuleStatus, connected: bool) -> Element<'static, Message> {
+    let clip_state = gated(
+        connected,
+        match modules.clip_history.first() {
+            Some(entry) => ModuleState::Active(format!("{}: {}", entry.direction, clip::preview(&entry.text))),
+            None => ModuleState::idle("Nada sincronizado ainda"),
+        },
+    );
     let files_state = ModuleState::idle(format!("Recebe em {}", download_dir.display()));
-    let notif_state = if modules.notif_count > 0 {
-        ModuleState::Active(format!("{} espelhada(s) nesta sessão", modules.notif_count))
-    } else {
-        ModuleState::idle("Nenhuma notificação ainda")
-    };
-    let media_state = match &modules.media {
-        Some(status) => ModuleState::Active(status.clone()),
-        None => ModuleState::idle("Nenhum leitor ativo"),
-    };
-    let batt_state = match modules.phone_battery_pct {
-        Some(pct) => ModuleState::Active(format!("Telemóvel em {pct}%")),
-        None => ModuleState::idle("Aguardando bateria do telemóvel"),
-    };
-    let control_state = match &modules.workspace {
-        Some(ws) => ModuleState::Active(format!("Workspace {ws}")),
-        None => ModuleState::idle("Hyprland IPC"),
-    };
-    let audio_state = if modules.audio_tap_active {
-        ModuleState::Active("Audio tap ativo".to_string())
-    } else {
-        ModuleState::idle("Mixer e audio tap")
-    };
-    let webcam_state = if modules.webcam_active {
-        ModuleState::Active("Stream ativo · /dev/video42".to_string())
-    } else {
-        ModuleState::idle("Câmara remota do PC")
-    };
+    let notif_state = gated(
+        connected,
+        if modules.notif_count > 0 {
+            ModuleState::Active(format!("{} espelhada(s) nesta sessão", modules.notif_count))
+        } else {
+            ModuleState::idle("Nenhuma notificação ainda")
+        },
+    );
+    let media_state = gated(
+        connected,
+        match &modules.media {
+            Some(status) => ModuleState::Active(status.clone()),
+            None => ModuleState::idle("Nenhum leitor ativo"),
+        },
+    );
+    let batt_state = gated(
+        connected,
+        match modules.phone_battery_pct {
+            Some(pct) => ModuleState::Active(format!("Telemóvel em {pct}%")),
+            None => ModuleState::idle("Aguardando bateria do telemóvel"),
+        },
+    );
+    let control_state = gated(
+        connected,
+        match &modules.workspace {
+            Some(ws) => ModuleState::Active(format!("Workspace {ws}")),
+            None => ModuleState::idle("Hyprland IPC"),
+        },
+    );
+    let audio_state = gated(
+        connected,
+        if modules.audio_tap_active { ModuleState::Active("Audio tap ativo".to_string()) } else { ModuleState::idle("Mixer e audio tap") },
+    );
+    let webcam_state = gated(
+        connected,
+        if modules.webcam_active { ModuleState::Active("Stream ativo · /dev/video42".to_string()) } else { ModuleState::idle("Câmara remota do PC") },
+    );
 
     let rows = column![
         module_row(ModuleId::Clip, "CLIP", clip_state),
         module_row(ModuleId::Files, "FILES", files_state),
-        module_row(ModuleId::Notif, "NOTIF", notif_state),
+        module_row(ModuleId::Notif, "NOTIFICAÇÕES", notif_state),
         module_row(ModuleId::Media, "MEDIA", media_state),
-        module_row(ModuleId::Batt, "BATT", batt_state),
+        module_row(ModuleId::Batt, "BATERIA", batt_state),
         module_row(ModuleId::Control, "CONTROL", control_state),
         module_row(ModuleId::Audio, "AUDIO", audio_state),
         module_row(ModuleId::Webcam, "WEBCAM", webcam_state),
         module_row(ModuleId::Track, "TRACK", ModuleState::idle("Rato/teclado virtual pronto (uinput)")),
-        module_row(ModuleId::Config, "CONFIG", ModuleState::idle("Permissões e dispositivos")),
+        module_row(ModuleId::Config, "CONFIGURAÇÕES", ModuleState::idle("Permissões e dispositivos")),
     ]
     .spacing(7);
     scrollable(rows).width(296).height(Length::Fill).into()
