@@ -713,10 +713,16 @@ fn view(hud: &Hud) -> Element<'_, Message> {
     let accent = hud.accent();
     let elapsed = hud.start_time.elapsed().as_secs_f32();
 
-    let logo = row![
-        container(breathing_dot(accent, 8.0, elapsed)).width(14).height(14).align_x(Alignment::Center).align_y(Alignment::Center),
+    // "HyprLink" é uma palavra só — HYPR e LINK não podem ter o mesmo
+    // espaçamento do ponto de estado, senão lê como duas palavras.
+    let wordmark = row![
         text("HYPR").size(21).font(Font { weight: iced::font::Weight::Bold, ..Font::default() }).color(TEXT),
         text("LINK").size(21).font(Font { weight: iced::font::Weight::Bold, ..Font::default() }).color(accent),
+    ]
+    .spacing(0);
+    let logo = row![
+        container(breathing_dot(accent, 8.0, elapsed)).width(14).height(14).align_x(Alignment::Center).align_y(Alignment::Center),
+        wordmark,
     ]
     .spacing(10)
     .align_y(Alignment::Center);
