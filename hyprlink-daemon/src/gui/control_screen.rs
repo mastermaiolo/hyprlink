@@ -47,7 +47,7 @@ pub fn fetch_control_context() -> Task<Message> {
 pub fn control_screen(hud: &Hud) -> Element<'_, Message> {
     let current = hud.snapshot.modules.workspace.clone();
     let buttons: Element<'_, Message> = if hud.hypr_workspaces.is_empty() {
-        text("A carregar workspaces…").size(11).color(TEXT_3).into()
+        text(t("A carregar workspaces…")).size(11).color(TEXT_3).into()
     } else {
         row(hud.hypr_workspaces.iter().map(|&id| {
             let is_active = current.as_deref() == Some(&id.to_string());
@@ -77,7 +77,7 @@ pub fn control_screen(hud: &Hud) -> Element<'_, Message> {
         .into()
     };
 
-    let card = container(column![text("WORKSPACES").size(9).color(TEXT_2), buttons].spacing(12))
+    let card = container(column![text(t("WORKSPACES")).size(9).color(TEXT_2), buttons].spacing(12))
         .padding(20)
         .width(Length::Fill)
         .style(|_| container::Style {
@@ -87,7 +87,7 @@ pub fn control_screen(hud: &Hud) -> Element<'_, Message> {
         });
 
     let dispatch_row = row![
-        text_input("hyprctl dispatch …", &hud.hypr_input)
+        text_input(t("hyprctl dispatch …"), &hud.hypr_input)
             .on_input(Message::HyprInputChanged)
             .on_submit(Message::HyprDispatch)
             .size(11)
@@ -100,7 +100,7 @@ pub fn control_screen(hud: &Hud) -> Element<'_, Message> {
                 value: TEXT,
                 selection: Color { a: 0.35, ..GREEN },
             }),
-        button(text("executar").size(11).color(GREEN))
+        button(text(t("executar")).size(11).color(GREEN))
             .padding([10, 16])
             .style(accent_button(GREEN, 10.0))
             .on_press(Message::HyprDispatch),
@@ -114,24 +114,24 @@ pub fn control_screen(hud: &Hud) -> Element<'_, Message> {
 
     let context_line = match (&current, &hud.hypr_focused) {
         (Some(ws), Some((class, title))) => {
-            text(format!("{ws} · {} janela(s) · foco: {} — {}", hud.hypr_window_count, class, title)).size(10).color(TEXT_4)
+            text(format!("{ws} · {} {} · {}: {} — {}", hud.hypr_window_count, t("janela(s)"), t("foco"), class, title)).size(10).color(TEXT_4)
         }
-        (Some(ws), None) => text(format!("{ws} · {} janela(s)", hud.hypr_window_count)).size(10).color(TEXT_4),
-        _ => text("Aguardando o primeiro hypr.event…").size(10).color(TEXT_5),
+        (Some(ws), None) => text(format!("{ws} · {} {}", hud.hypr_window_count, t("janela(s)"))).size(10).color(TEXT_4),
+        _ => text(t("Aguardando o primeiro hypr.event…")).size(10).color(TEXT_5),
     };
 
     let shortcuts = config::shortcuts(&hud.config);
     let shortcuts_list: Element<'_, Message> = if shortcuts.is_empty() {
-        text("Nenhum atalho configurado ainda.").size(10).color(TEXT_5).into()
+        text(t("Nenhum atalho configurado ainda.")).size(10).color(TEXT_5).into()
     } else {
         column(shortcuts.iter().enumerate().map(|(i, s)| {
             row![
                 column![text(s.name.clone()).size(11).color(TEXT), text(s.command.clone()).size(9).color(TEXT_4)].spacing(2).width(Length::Fill),
-                button(text("executar").size(9).color(GREEN))
+                button(text(t("executar")).size(9).color(GREEN))
                     .padding([5, 10])
                     .style(accent_button(GREEN, 7.0))
                     .on_press(Message::ShortcutRun(s.command.clone())),
-                button(text("remover").size(9).color(RED))
+                button(text(t("remover")).size(9).color(RED))
                     .padding([5, 10])
                     .style(|_, _| button::Style { background: None, border: Border { color: RED_BRD, width: 1.0, radius: 7.0.into() }, text_color: RED, ..Default::default() })
                     .on_press(Message::ShortcutRemove(i)),
@@ -144,7 +144,7 @@ pub fn control_screen(hud: &Hud) -> Element<'_, Message> {
         .into()
     };
     let add_shortcut_row = row![
-        text_input("nome", &hud.shortcut_name)
+        text_input(t("nome"), &hud.shortcut_name)
             .on_input(Message::ShortcutNameChanged)
             .size(10)
             .padding(8)
@@ -157,7 +157,7 @@ pub fn control_screen(hud: &Hud) -> Element<'_, Message> {
                 value: TEXT,
                 selection: Color { a: 0.35, ..GREEN },
             }),
-        text_input("comando (ex: workspace 3)", &hud.shortcut_cmd)
+        text_input(t("comando (ex: workspace 3)"), &hud.shortcut_cmd)
             .on_input(Message::ShortcutCmdChanged)
             .on_submit(Message::ShortcutAdd)
             .size(10)
@@ -171,19 +171,19 @@ pub fn control_screen(hud: &Hud) -> Element<'_, Message> {
                 value: TEXT,
                 selection: Color { a: 0.35, ..GREEN },
             }),
-        button(text("adicionar").size(10).color(TEXT_2))
+        button(text(t("adicionar")).size(10).color(TEXT_2))
             .padding([8, 12])
             .style(ghost_button(TEXT_2, 8.0))
             .on_press(Message::ShortcutAdd),
     ]
     .spacing(8);
 
-    let shortcuts_card = container(column![text("ATALHOS").size(9).color(TEXT_2), shortcuts_list, add_shortcut_row].spacing(12))
+    let shortcuts_card = container(column![text(t("ATALHOS")).size(9).color(TEXT_2), shortcuts_list, add_shortcut_row].spacing(12))
         .padding([13, 16])
         .width(Length::Fill)
         .style(|_| glass(12.0));
 
-    column![module_header("CONTROL", "Hyprland IPC".to_string(), GREEN), card, context_line, shortcuts_card, dispatch_row, result]
+    column![module_header("CONTROL", t("Hyprland IPC").to_string(), GREEN), card, context_line, shortcuts_card, dispatch_row, result]
         .spacing(14)
         .into()
 }

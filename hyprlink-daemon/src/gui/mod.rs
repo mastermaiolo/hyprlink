@@ -35,6 +35,7 @@ use crate::theme::{
 };
 
 
+mod i18n;
 mod widgets;
 mod clip_screen;
 mod files_screen;
@@ -47,6 +48,7 @@ mod webcam_screen;
 mod track_screen;
 mod settings_screen;
 
+use i18n::*;
 use widgets::*;
 use clip_screen::*;
 use files_screen::*;
@@ -131,6 +133,11 @@ struct Hud {
     /// usuário enquanto ele está lendo o histórico.
     console: text_editor::Content,
     console_len: usize,
+    /// Idioma usado na última reconstrução do console — junto com
+    /// `console_len`, força reconstrução também ao trocar de idioma (não só
+    /// quando chega linha nova), senão o log já escrito ficaria "preso" no
+    /// idioma antigo até o próximo `push_log`.
+    console_lang: config::Lang,
     config: SharedConfig,
     download_dir: PathBuf,
     active: ActiveConn,
@@ -225,6 +232,7 @@ enum Message {
     ConfigRestartDaemon,
     FileTransferCancel,
     BattAlertToggle(config::BatteryAlertKind, bool),
+    SetLang(config::Lang),
     TrackPoll,
     CursorPosLoaded(Option<(i64, i64)>, (i64, i64)),
     TrackSensitivity(f32),
@@ -246,7 +254,9 @@ impl Hud {
     ) -> Self {
         let snapshot = shared.lock().unwrap().clone();
         let console_len = snapshot.logs.len();
-        let console = text_editor::Content::with_text(&snapshot.logs.join("\n"));
+        let console_lang = config::lang(&config);
+        i18n::set_current(console_lang);
+        let console = text_editor::Content::with_text(&snapshot.logs.iter().map(|l| i18n::tr_log(l)).collect::<Vec<_>>().join("\n"));
         let download_dir = config::download_dir(&config);
         Self {
             shared,
@@ -254,6 +264,7 @@ impl Hud {
             start_time: std::time::Instant::now(),
             snapshot,
             console,
+            console_lang,
             console_len,
             config,
             download_dir,
@@ -298,9 +309,12 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
         Message::Tock => Task::none(),
         Message::Tick => {
             hud.snapshot = hud.shared.lock().unwrap().clone();
-            if hud.snapshot.logs.len() != hud.console_len {
+            let current_lang = config::lang(&hud.config);
+            if hud.snapshot.logs.len() != hud.console_len || current_lang != hud.console_lang {
                 hud.console_len = hud.snapshot.logs.len();
-                hud.console = text_editor::Content::with_text(&hud.snapshot.logs.join("\n"));
+                hud.console_lang = current_lang;
+                i18n::set_current(current_lang);
+                hud.console = text_editor::Content::with_text(&hud.snapshot.logs.iter().map(|l| i18n::tr_log(l)).collect::<Vec<_>>().join("\n"));
             }
             if crate::tray::take_show_requested(&hud.tray_show) {
                 crate::state::push_log(&hud.shared, "[i] tray: restaurando janela".to_string());
@@ -359,6 +373,10 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
                 config::BatteryAlertKind::Low => config::set_battery_alert_low(&hud.config, enabled),
                 config::BatteryAlertKind::Full => config::set_battery_alert_full(&hud.config, enabled),
             }
+            Task::none()
+        }
+        Message::SetLang(lang) => {
+            config::set_lang(&hud.config, lang);
             Task::none()
         }
         Message::FileTransferCancel => {
@@ -710,6 +728,7 @@ fn module_screen(hud: &Hud, id: ModuleId) -> Element<'_, Message> {
 
 
 fn view(hud: &Hud) -> Element<'_, Message> {
+    i18n::set_current(config::lang(&hud.config));
     let accent = hud.accent();
     let elapsed = hud.start_time.elapsed().as_secs_f32();
 
@@ -745,7 +764,7 @@ fn view(hud: &Hud) -> Element<'_, Message> {
 
     let mut header_right_row = row![].spacing(8).align_y(Alignment::Center);
     if hud.screen != Screen::Dashboard {
-        let back = button(text("‹ VOLTAR").size(11).color(TEXT_2))
+        let back = button(text(t("‹ VOLTAR")).size(11).color(TEXT_2))
             .padding([6, 12])
             .style(ghost_button(TEXT_2, 8.0))
             .on_press(Message::Back);
@@ -777,9 +796,9 @@ fn view(hud: &Hud) -> Element<'_, Message> {
             .style(|_| glass(14.0));
 
             let console_header = row![
-                text("console de diagnóstico").size(9).color(TEXT_2),
+                text(t("console de diagnóstico")).size(9).color(TEXT_2),
                 Space::new().width(Length::Fill),
-                button(text("copiar log").size(9).color(TEXT_2))
+                button(text(t("copiar log")).size(9).color(TEXT_2))
                     .padding([4, 10])
                     .style(|_, _| button::Style {
                         background: Some(Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.35))),
@@ -814,9 +833,9 @@ fn view(hud: &Hud) -> Element<'_, Message> {
             );
             let pairing_card = container(
                 column![
-                    text("APONTE A CÂMARA DO TELEMÓVEL").size(11).color(TEXT_2),
+                    text(t("APONTE A CÂMARA DO TELEMÓVEL")).size(11).color(TEXT_2),
                     pairing_qr(&payload),
-                    text("Abra o HyprLink no Android e escaneie o código").size(10).color(TEXT_2),
+                    text(t("Abra o HyprLink no Android e escaneie o código")).size(10).color(TEXT_2),
                     kv_row(
                         "FINGERPRINT",
                         short_fp(&hud.snapshot.server_fingerprint_hex),

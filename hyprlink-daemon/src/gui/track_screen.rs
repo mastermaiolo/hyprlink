@@ -58,13 +58,13 @@ pub fn cursor_grid(cursor: Option<(i64, i64)>, size: (i64, i64)) -> Element<'sta
     container(
         column![
             row![
-                text("ESPELHO DO CURSOR").size(9).color(TEXT_2),
+                text(t("ESPELHO DO CURSOR")).size(9).color(TEXT_2),
                 Space::new().width(Length::Fill),
                 text(format!("{}×{}", size.0, size.1)).size(9).color(TEXT_5),
             ]
             .align_y(Alignment::Center),
             grid,
-            text(cursor.map(|(x, y)| format!("x {x} · y {y}")).unwrap_or_else(|| "aguardando…".to_string())).size(9).color(TEXT_5),
+            text(cursor.map(|(x, y)| format!("x {x} · y {y}")).unwrap_or_else(|| t("aguardando…").to_string())).size(9).color(TEXT_5),
         ]
         .spacing(10),
     )
@@ -77,7 +77,7 @@ pub fn cursor_grid(cursor: Option<(i64, i64)>, size: (i64, i64)) -> Element<'sta
 
 pub fn track_slider(label: &'static str, value: f32, display: String, range: std::ops::RangeInclusive<f32>, on_change: impl Fn(f32) -> Message + 'static) -> Element<'static, Message> {
     column![
-        row![text(label).size(11).color(TEXT_1), Space::new().width(Length::Fill), text(display).size(10).color(TEXT_3)].align_y(Alignment::Center),
+        row![text(t(label)).size(11).color(TEXT_1), Space::new().width(Length::Fill), text(display).size(10).color(TEXT_3)].align_y(Alignment::Center),
         slider(range, value, on_change).step(0.1_f32),
     ]
     .spacing(9)
@@ -86,7 +86,7 @@ pub fn track_slider(label: &'static str, value: f32, display: String, range: std
 
 
 pub fn track_toggle(label: &'static str, enabled: bool, on_toggle: Message) -> Element<'static, Message> {
-    button(text(format!("{label} {}", if enabled { "✓" } else { "" })).size(11).color(if enabled { TEXT_1 } else { TEXT_4 }))
+    button(text(format!("{} {}", t(label), if enabled { "✓" } else { "" })).size(11).color(if enabled { TEXT_1 } else { TEXT_4 }))
         .padding([12, 0])
         .width(Length::Fill)
         .style(move |_, _| button::Style {
@@ -101,13 +101,13 @@ pub fn track_toggle(label: &'static str, enabled: bool, on_toggle: Message) -> E
 
 
 pub fn track_screen(hud: &Hud) -> Element<'_, Message> {
-    let t = config::track_settings(&hud.config);
+    let ts = config::track_settings(&hud.config);
     let mirror = cursor_grid(hud.cursor_pos, hud.screen_size);
 
     let sliders = container(
         column![
-            track_slider("SENSIBILIDADE", t.sensitivity, format!("{:.1}×", t.sensitivity), 0.2..=3.0, Message::TrackSensitivity),
-            track_slider("VELOCIDADE DE SCROLL", t.scroll_speed, format!("{:.1}×", t.scroll_speed), 0.2..=3.0, Message::TrackScrollSpeed),
+            track_slider("SENSIBILIDADE", ts.sensitivity, format!("{:.1}×", ts.sensitivity), 0.2..=3.0, Message::TrackSensitivity),
+            track_slider("VELOCIDADE DE SCROLL", ts.scroll_speed, format!("{:.1}×", ts.scroll_speed), 0.2..=3.0, Message::TrackScrollSpeed),
         ]
         .spacing(16),
     )
@@ -116,15 +116,15 @@ pub fn track_screen(hud: &Hud) -> Element<'_, Message> {
     .style(|_| glass(14.0));
 
     let toggles = row![
-        track_toggle("aceleração", t.acceleration, Message::TrackAcceleration(!t.acceleration)),
-        track_toggle("inverter scroll", t.invert_scroll, Message::TrackInvertScroll(!t.invert_scroll)),
-        track_toggle("teclado virtual", t.virtual_keyboard, Message::TrackVirtualKeyboard(!t.virtual_keyboard)),
+        track_toggle("aceleração", ts.acceleration, Message::TrackAcceleration(!ts.acceleration)),
+        track_toggle("inverter scroll", ts.invert_scroll, Message::TrackInvertScroll(!ts.invert_scroll)),
+        track_toggle("teclado virtual", ts.virtual_keyboard, Message::TrackVirtualKeyboard(!ts.virtual_keyboard)),
     ]
     .spacing(10);
 
-    let note = text("Movimento, cliques e scroll chegam do telemóvel via /dev/uinput — os sliders acima já se aplicam de verdade.").size(10).color(TEXT_5);
+    let note = text(t("Movimento, cliques e scroll chegam do telemóvel via /dev/uinput — os sliders acima já se aplicam de verdade.")).size(10).color(TEXT_5);
 
-    column![module_header("TRACK", "Rato e teclado virtuais".to_string(), TEXT_2), mirror, sliders, toggles, note]
+    column![module_header("TRACK", t("Rato e teclado virtuais").to_string(), TEXT_2), mirror, sliders, toggles, note]
         .spacing(16)
         .into()
 }

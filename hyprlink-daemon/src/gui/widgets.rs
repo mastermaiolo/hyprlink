@@ -77,11 +77,11 @@ pub fn breathing_dot(accent: Color, base_size: f32, elapsed: f32) -> Element<'st
 }
 
 
-pub fn status_pill(accent: Color, label: &str, elapsed: f32) -> Element<'static, Message> {
+pub fn status_pill(accent: Color, label: &'static str, elapsed: f32) -> Element<'static, Message> {
     container(
         row![
             container(breathing_dot(accent, 7.0, elapsed)).width(13).height(13).align_x(Alignment::Center).align_y(Alignment::Center),
-            text(label.to_string()).size(11).color(accent),
+            text(t(label)).size(11).color(accent),
         ]
         .spacing(6)
         .align_y(Alignment::Center),
@@ -116,7 +116,7 @@ impl ModuleState {
 /// Linha da sidebar (code-spec-iced.md §4): nº · glifo · título · subtítulo
 /// real · ponto de estado · chevron. Todos os 10 módulos abrem tela própria
 /// agora (Ronda 6) — clicar chama `Message::OpenModule`.
-pub fn module_row(id: ModuleId, title: &str, state: ModuleState) -> Element<'static, Message> {
+pub fn module_row(id: ModuleId, title: &'static str, state: ModuleState) -> Element<'static, Message> {
     let is_active = matches!(state, ModuleState::Active(_));
     let (dot, sub, sub_color): (Color, String, Color) = match state {
         ModuleState::Active(sub) => (GREEN, sub, TEXT_2),
@@ -127,7 +127,7 @@ pub fn module_row(id: ModuleId, title: &str, state: ModuleState) -> Element<'sta
         text(module_number(id)).size(10).color(TEXT_6).width(16),
         text(module_glyph(id)).size(13).color(glyph_color),
         column![
-            text(title.to_string()).size(12).color(TEXT).font(Font::MONOSPACE),
+            text(t(title)).size(12).color(TEXT).font(Font::MONOSPACE),
             text(sub).size(9).color(sub_color),
         ]
         .spacing(2)
@@ -160,54 +160,54 @@ pub fn module_row(id: ModuleId, title: &str, state: ModuleState) -> Element<'sta
 /// `modules` ainda guarde valores de uma sessão anterior (code-spec-iced.md
 /// §4: "sidebar inteira em cinza durante o pareamento").
 fn gated(connected: bool, state: ModuleState) -> ModuleState {
-    if connected { state } else { ModuleState::idle("Aguardando conexão") }
+    if connected { state } else { ModuleState::idle(t("Aguardando conexão")) }
 }
 
 pub fn module_list(download_dir: &std::path::Path, modules: &crate::state::ModuleStatus, connected: bool) -> Element<'static, Message> {
     let clip_state = gated(
         connected,
         match modules.clip_history.first() {
-            Some(entry) => ModuleState::Active(format!("{}: {}", entry.direction, clip::preview(&entry.text))),
-            None => ModuleState::idle("Nada sincronizado ainda"),
+            Some(entry) => ModuleState::Active(format!("{}: {}", t(entry.direction), clip::preview(&entry.text))),
+            None => ModuleState::idle(t("Nada sincronizado ainda")),
         },
     );
-    let files_state = ModuleState::idle(format!("Recebe em {}", download_dir.display()));
+    let files_state = ModuleState::idle(t1("Recebe em {}", download_dir.display()));
     let notif_state = gated(
         connected,
         if modules.notif_count > 0 {
-            ModuleState::Active(format!("{} espelhada(s) nesta sessão", modules.notif_count))
+            ModuleState::Active(t1("{} espelhada(s) nesta sessão", modules.notif_count))
         } else {
-            ModuleState::idle("Nenhuma notificação ainda")
+            ModuleState::idle(t("Nenhuma notificação ainda"))
         },
     );
     let media_state = gated(
         connected,
         match &modules.media {
             Some(status) => ModuleState::Active(status.clone()),
-            None => ModuleState::idle("Nenhum leitor ativo"),
+            None => ModuleState::idle(t("Nenhum leitor ativo")),
         },
     );
     let batt_state = gated(
         connected,
         match modules.phone_battery_pct {
-            Some(pct) => ModuleState::Active(format!("Telemóvel em {pct}%")),
-            None => ModuleState::idle("Aguardando bateria do telemóvel"),
+            Some(pct) => ModuleState::Active(t1("Telemóvel em {}%", pct)),
+            None => ModuleState::idle(t("Aguardando bateria do telemóvel")),
         },
     );
     let control_state = gated(
         connected,
         match &modules.workspace {
-            Some(ws) => ModuleState::Active(format!("Workspace {ws}")),
-            None => ModuleState::idle("Hyprland IPC"),
+            Some(ws) => ModuleState::Active(t1("Workspace {}", ws)),
+            None => ModuleState::idle(t("Hyprland IPC")),
         },
     );
     let audio_state = gated(
         connected,
-        if modules.audio_tap_active { ModuleState::Active("Audio tap ativo".to_string()) } else { ModuleState::idle("Mixer e audio tap") },
+        if modules.audio_tap_active { ModuleState::Active(t("Audio tap ativo").to_string()) } else { ModuleState::idle(t("Mixer e audio tap")) },
     );
     let webcam_state = gated(
         connected,
-        if modules.webcam_active { ModuleState::Active("Stream ativo · /dev/video42".to_string()) } else { ModuleState::idle("Câmara remota do PC") },
+        if modules.webcam_active { ModuleState::Active(t("Stream ativo · /dev/video42").to_string()) } else { ModuleState::idle(t("Câmara remota do PC")) },
     );
 
     let rows = column![
@@ -219,8 +219,8 @@ pub fn module_list(download_dir: &std::path::Path, modules: &crate::state::Modul
         module_row(ModuleId::Control, "CONTROL", control_state),
         module_row(ModuleId::Audio, "AUDIO", audio_state),
         module_row(ModuleId::Webcam, "WEBCAM", webcam_state),
-        module_row(ModuleId::Track, "TRACK", ModuleState::idle("Rato/teclado virtual pronto (uinput)")),
-        module_row(ModuleId::Config, "CONFIGURAÇÕES", ModuleState::idle("Permissões e dispositivos")),
+        module_row(ModuleId::Track, "TRACK", ModuleState::idle(t("Rato/teclado virtual pronto (uinput)"))),
+        module_row(ModuleId::Config, "CONFIGURAÇÕES", ModuleState::idle(t("Permissões e dispositivos"))),
     ]
     .spacing(7);
     scrollable(rows).width(296).height(Length::Fill).into()
@@ -318,16 +318,16 @@ pub fn pairing_qr(payload: &str) -> Element<'static, Message> {
 
 /// Linha chave/valor copiável — mostra `display_value` mas copia `copy_value`
 /// por inteiro (o fingerprint é abreviado na tela, o token não pode ser).
-pub fn kv_row(label: &str, display_value: String, copy_value: String) -> Element<'static, Message> {
+pub fn kv_row(label: &'static str, display_value: String, copy_value: String) -> Element<'static, Message> {
     button(
         row![
             column![
-                text(label.to_string()).size(9).color(TEXT_2),
+                text(t(label)).size(9).color(TEXT_2),
                 text(display_value).size(11).color(TEXT).font(Font::MONOSPACE),
             ]
             .spacing(2)
             .width(Length::Fill),
-            text("copiar").size(9).color(TEXT_2),
+            text(t("copiar")).size(9).color(TEXT_2),
         ]
         .align_y(Alignment::Center),
     )
@@ -398,9 +398,9 @@ pub fn module_ruler(active: ModuleId) -> Element<'static, Message> {
 }
 
 
-pub fn module_header(title: &str, subtitle: String, subtitle_color: Color) -> Element<'static, Message> {
+pub fn module_header(title: &'static str, subtitle: String, subtitle_color: Color) -> Element<'static, Message> {
     column![
-        text(title.to_string()).size(20).font(Font { weight: iced::font::Weight::Bold, ..Font::default() }).color(TEXT),
+        text(t(title)).size(20).font(Font { weight: iced::font::Weight::Bold, ..Font::default() }).color(TEXT),
         text(subtitle).size(10).color(subtitle_color),
     ]
     .spacing(4)
@@ -412,7 +412,7 @@ pub fn module_header(title: &str, subtitle: String, subtitle_color: Color) -> El
 /// fino entre linhas, `Scrollable` (sem paginação — 50 entradas cabem bem).
 pub fn history_list(rows: Vec<Element<'static, Message>>, empty_label: &'static str) -> Element<'static, Message> {
     let inner: Element<'static, Message> = if rows.is_empty() {
-        text(empty_label).size(11).color(TEXT_3).into()
+        text(t(empty_label)).size(11).color(TEXT_3).into()
     } else {
         let mut col = column![].spacing(0);
         for (i, row_el) in rows.into_iter().enumerate() {
@@ -442,7 +442,7 @@ pub fn history_list(rows: Vec<Element<'static, Message>>, empty_label: &'static 
 /// Cabeçalho de busca reusado por CLIP/NOTIF (code-spec-iced.md: "pesquisar…"
 /// + "limpar"). `on_clear` some quando `value` já está vazio.
 pub fn search_row(value: &str, on_input: impl Fn(String) -> Message + 'static, on_clear: Message) -> Element<'static, Message> {
-    let mut r = row![text_input("pesquisar…", value)
+    let mut r = row![text_input(t("pesquisar…"), value)
         .on_input(on_input)
         .size(10)
         .padding([6, 10])
@@ -459,7 +459,7 @@ pub fn search_row(value: &str, on_input: impl Fn(String) -> Message + 'static, o
     .align_y(Alignment::Center);
     if !value.is_empty() {
         r = r.push(
-            button(text("limpar").size(9).color(TEXT_4))
+            button(text(t("limpar")).size(9).color(TEXT_4))
                 .padding([6, 9])
                 .style(|_, _| button::Style { background: None, border: Border { color: BRD_1, width: 1.0, radius: 6.0.into() }, text_color: TEXT_4, ..Default::default() })
                 .on_press(on_clear),

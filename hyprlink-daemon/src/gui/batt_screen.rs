@@ -4,14 +4,14 @@ use iced::widget::column;
 pub fn battery_card(label: &'static str, pct: Option<i64>, charging: Option<bool>) -> Element<'static, Message> {
     let pct_text = pct.map(|p| format!("{p}%")).unwrap_or_else(|| "--%".to_string());
     let sub = match (pct, charging) {
-        (Some(_), Some(true)) => "a carregar".to_string(),
-        (Some(_), Some(false)) => "na bateria".to_string(),
-        (Some(_), None) => "nível conhecido, carregando desconhecido".to_string(),
-        (None, _) => "aguardando dado real".to_string(),
+        (Some(_), Some(true)) => t("a carregar").to_string(),
+        (Some(_), Some(false)) => t("na bateria").to_string(),
+        (Some(_), None) => t("nível conhecido, carregando desconhecido").to_string(),
+        (None, _) => t("aguardando dado real").to_string(),
     };
     container(
         column![
-            text(label).size(9).color(TEXT_2),
+            text(t(label)).size(9).color(TEXT_2),
             text(pct_text).size(40).font(Font { weight: iced::font::Weight::Bold, ..Font::default() }).color(GREEN),
             text(sub).size(10).color(TEXT_4),
         ]
@@ -29,7 +29,7 @@ pub fn battery_card(label: &'static str, pct: Option<i64>, charging: Option<bool
 /// já que a amostragem real é a cada ~5 min).
 pub fn battery_chart(history: &[crate::state::BatterySample]) -> Element<'static, Message> {
     if history.is_empty() {
-        return text("Sem histórico ainda nesta sessão — volte daqui a pouco.").size(10).color(TEXT_5).into();
+        return text(t("Sem histórico ainda nesta sessão — volte daqui a pouco.")).size(10).color(TEXT_5).into();
     }
     let n = history.len();
     let buckets = 12.min(n);
@@ -49,8 +49,8 @@ pub fn battery_chart(history: &[crate::state::BatterySample]) -> Element<'static
 
 pub fn alert_toggle(label: &'static str, enabled: bool, on_toggle: Message) -> Element<'static, Message> {
     row![
-        text(label).size(11).color(TEXT_1).width(Length::Fill),
-        button(text(if enabled { "ativo" } else { "desligado" }).size(10).color(if enabled { GREEN } else { TEXT_5 }))
+        text(t(label)).size(11).color(TEXT_1).width(Length::Fill),
+        button(text(t(if enabled { "ativo" } else { "desligado" })).size(10).color(if enabled { GREEN } else { TEXT_5 }))
             .padding([5, 10])
             .style(move |_, _| button::Style {
                 background: Some(Background::Color(if enabled { Color { a: 0.10, ..GREEN } } else { Color::TRANSPARENT })),
@@ -75,7 +75,7 @@ pub fn batt_screen(hud: &Hud) -> Element<'_, Message> {
 
     let chart_card = container(
         column![
-            row![text("ÚLTIMAS 12H").size(9).color(TEXT_2), Space::new().width(Length::Fill), text("telemóvel, quando disponível").size(9).color(TEXT_5)].align_y(Alignment::Center),
+            row![text(t("ÚLTIMAS 12H")).size(9).color(TEXT_2), Space::new().width(Length::Fill), text(t("telemóvel, quando disponível")).size(9).color(TEXT_5)].align_y(Alignment::Center),
             battery_chart(&modules.battery_history),
         ]
         .spacing(14),
@@ -87,7 +87,7 @@ pub fn batt_screen(hud: &Hud) -> Element<'_, Message> {
     let alerts = config::battery_alerts(&hud.config);
     let alerts_card = container(
         column![
-            text("ALERTAS NO DESKTOP").size(9).color(TEXT_2),
+            text(t("ALERTAS NO DESKTOP")).size(9).color(TEXT_2),
             alert_toggle("avisar abaixo de 20% (telemóvel)", alerts.low, Message::BattAlertToggle(config::BatteryAlertKind::Low, !alerts.low)),
             alert_toggle("avisar quando carregada a 100%", alerts.full, Message::BattAlertToggle(config::BatteryAlertKind::Full, !alerts.full)),
         ]
@@ -97,9 +97,9 @@ pub fn batt_screen(hud: &Hud) -> Element<'_, Message> {
     .width(Length::Fill)
     .style(|_| glass(14.0));
 
-    let note = text("Temperatura, saúde e ciclos não existem no protocolo — só nível e carregamento chegam do telemóvel hoje.").size(10).color(TEXT_5);
+    let note = text(t("Temperatura, saúde e ciclos não existem no protocolo — só nível e carregamento chegam do telemóvel hoje.")).size(10).color(TEXT_5);
 
-    column![module_header("BATERIA", "Telemetria do telemóvel e do PC".to_string(), TEXT_2), cards, chart_card, alerts_card, note]
+    column![module_header("BATERIA", t("Telemetria do telemóvel e do PC").to_string(), TEXT_2), cards, chart_card, alerts_card, note]
         .spacing(14)
         .into()
 }

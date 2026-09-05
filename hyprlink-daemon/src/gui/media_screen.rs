@@ -2,7 +2,7 @@ use super::*;
 use iced::widget::column;
 
 pub fn media_screen(modules: &crate::state::ModuleStatus) -> Element<'static, Message> {
-    let now_playing = modules.media.clone().unwrap_or_else(|| "Nenhum leitor MPRIS ativo".to_string());
+    let now_playing = modules.media.clone().unwrap_or_else(|| t("Nenhum leitor MPRIS ativo").to_string());
     let card = container(text(now_playing).size(14).color(TEXT))
         .padding(20)
         .width(Length::Fill)
@@ -25,7 +25,7 @@ pub fn media_screen(modules: &crate::state::ModuleStatus) -> Element<'static, Me
     ]
     .spacing(10);
 
-    let note = text("Volume, shuffle/repeat e lista de players ainda não existem no protocolo — só o essencial (título/artista/álbum + transporte) é real hoje.")
+    let note = text(t("Volume, shuffle/repeat e lista de players ainda não existem no protocolo — só o essencial (título/artista/álbum + transporte) é real hoje."))
         .size(10)
         .color(TEXT_3);
 

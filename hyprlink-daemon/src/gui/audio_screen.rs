@@ -16,7 +16,7 @@ pub fn sink_row(s: &crate::audio::SinkInfo) -> Element<'static, Message> {
     let muted = s.muted;
     let name_col = column![
         text(s.description.clone()).size(11).color(TEXT),
-        if s.is_default { text("saída padrão").size(9).color(GREEN) } else { text("").size(9) },
+        if s.is_default { text(t("saída padrão")).size(9).color(GREEN) } else { text("").size(9) },
     ]
     .spacing(2)
     .width(Length::FillPortion(3));
@@ -33,7 +33,7 @@ pub fn sink_row(s: &crate::audio::SinkInfo) -> Element<'static, Message> {
     if !s.is_default {
         let name = s.name.clone();
         controls = controls.push(
-            button(text("usar").size(10).color(GREEN))
+            button(text(t("usar")).size(10).color(GREEN))
                 .padding([6, 10])
                 .style(accent_button(GREEN, 8.0))
                 .on_press(Message::AudioSetDefaultSink(name)),
@@ -72,7 +72,7 @@ pub fn app_row(a: &crate::audio::AppInfo) -> Element<'static, Message> {
 /// só visual (ver `Hud::phone_volume_drag`).
 pub fn phone_volume_row(label: &'static str, stream: &'static str, percent: i64) -> Element<'static, Message> {
     row![
-        text(label).size(11).color(TEXT).width(Length::FillPortion(2)),
+        text(t(label)).size(11).color(TEXT).width(Length::FillPortion(2)),
         slider(0.0..=100.0, percent as f64, move |v| Message::PhoneAudioVolumeDragged(stream, v.round() as i64))
             .on_release(Message::PhoneAudioVolumeRelease(stream))
             .width(Length::FillPortion(4)),
@@ -86,7 +86,7 @@ pub fn phone_volume_row(label: &'static str, stream: &'static str, percent: i64)
 
 pub fn ringer_mode_button(label: &'static str, mode: &'static str, active_mode: &str) -> Element<'static, Message> {
     let is_active = active_mode == mode;
-    button(text(label).size(11).color(if is_active { GREEN } else { TEXT_2 }))
+    button(text(t(label)).size(11).color(if is_active { GREEN } else { TEXT_2 }))
         .padding([8, 14])
         .style(move |_, _| button::Style {
             background: Some(Background::Color(if is_active { Color { a: 0.10, ..GREEN } } else { GLASS })),
@@ -101,7 +101,7 @@ pub fn ringer_mode_button(label: &'static str, mode: &'static str, active_mode: 
 
 pub fn dnd_button(enabled: bool) -> Element<'static, Message> {
     let color = if enabled { AMBER } else { TEXT_2 };
-    button(text(if enabled { "não perturbe: ligado" } else { "não perturbe: desligado" }).size(11).color(color))
+    button(text(t(if enabled { "não perturbe: ligado" } else { "não perturbe: desligado" })).size(11).color(color))
         .padding([8, 14])
         .style(move |_, _| button::Style {
             background: Some(Background::Color(if enabled { Color { a: 0.10, ..AMBER } } else { GLASS })),
@@ -118,7 +118,7 @@ pub fn phone_audio_section(hud: &Hud) -> Element<'_, Message> {
     let state = &hud.phone_audio;
     let displayed = |stream: &'static str, real: i64| hud.phone_volume_drag.get(stream).copied().unwrap_or(real);
     let mut section = column![
-        text("TELEMÓVEL").size(9).color(TEXT_2),
+        text(t("TELEMÓVEL")).size(9).color(TEXT_2),
         container(
             column![
                 phone_volume_row("toque", "ring", displayed("ring", state.ring_percent)),
@@ -142,7 +142,7 @@ pub fn phone_audio_section(hud: &Hud) -> Element<'_, Message> {
 
     if !state.dnd_access {
         section = section.push(
-            text("Sem acesso a \"Não Perturbe\" no telemóvel — vibrar/silencioso não têm efeito até conceder essa permissão nas configurações dele.")
+            text(t("Sem acesso a \"Não Perturbe\" no telemóvel — vibrar/silencioso não têm efeito até conceder essa permissão nas configurações dele."))
                 .size(10)
                 .color(AMBER),
         );
@@ -153,12 +153,12 @@ pub fn phone_audio_section(hud: &Hud) -> Element<'_, Message> {
 
 pub fn audio_screen(hud: &Hud) -> Element<'_, Message> {
     let sinks: Element<'_, Message> = if hud.audio.sinks.is_empty() {
-        text("A carregar saídas de som…").size(11).color(TEXT_3).into()
+        text(t("A carregar saídas de som…")).size(11).color(TEXT_3).into()
     } else {
         column(hud.audio.sinks.iter().map(sink_row)).spacing(8).into()
     };
     let apps: Element<'_, Message> = if hud.audio.apps.is_empty() {
-        text("Nenhuma app tocando som agora.").size(11).color(TEXT_3).into()
+        text(t("Nenhuma app tocando som agora.")).size(11).color(TEXT_3).into()
     } else {
         column(hud.audio.apps.iter().map(app_row)).spacing(8).into()
     };
@@ -170,12 +170,12 @@ pub fn audio_screen(hud: &Hud) -> Element<'_, Message> {
     let mic_status = container(
         column![
             checkbox(mic_active)
-                .label(if mic_active { "🎙️ microfone do telemóvel: ativo" } else { "🎙️ microfone do telemóvel: desligado" })
+                .label(t(if mic_active { "🎙️ microfone do telemóvel: ativo" } else { "🎙️ microfone do telemóvel: desligado" }))
                 .on_toggle(Message::PhoneMicToggle)
                 .size(16)
                 .text_size(11),
             if mic_active {
-                Element::from(text("Selecione \"HyprLink-Mic\" como entrada de áudio em qualquer app.").size(10).color(TEXT_2))
+                Element::from(text(t("Selecione \"HyprLink-Mic\" como entrada de áudio em qualquer app.")).size(10).color(TEXT_2))
             } else {
                 Element::from(iced::widget::Space::new())
             },
@@ -206,11 +206,11 @@ pub fn audio_screen(hud: &Hud) -> Element<'_, Message> {
         Space::new().height(56).into()
     };
     let tap_meta = match (tap_active, crate::state::audio_tap_elapsed_secs(&hud.shared)) {
-        (true, Some(secs)) => format!("{} KB enviados · {secs}s", hud.snapshot.modules.audio_tap_bytes / 1024),
-        _ => "Tap parado".to_string(),
+        (true, Some(secs)) => format!("{} {} · {secs}s", hud.snapshot.modules.audio_tap_bytes / 1024, t("KB enviados")),
+        _ => t("Tap parado").to_string(),
     };
     let tap_card = container(
-        column![row![text("SAÍDA ENCAMINHADA").size(9).color(if tap_active { GREEN } else { TEXT_2 }), Space::new().width(Length::Fill), text(tap_meta).size(9).color(TEXT_4)].align_y(Alignment::Center), vu]
+        column![row![text(t("SAÍDA ENCAMINHADA")).size(9).color(if tap_active { GREEN } else { TEXT_2 }), Space::new().width(Length::Fill), text(tap_meta).size(9).color(TEXT_4)].align_y(Alignment::Center), vu]
             .spacing(14),
     )
     .padding([14, 16])
@@ -223,11 +223,11 @@ pub fn audio_screen(hud: &Hud) -> Element<'_, Message> {
 
     scrollable(
         column![
-            module_header("AUDIO", "Mixer do PC e do telemóvel".to_string(), TEXT_3),
+            module_header("AUDIO", t("Mixer do PC e do telemóvel").to_string(), TEXT_3),
             tap_card,
-            text("SAÍDAS (PC)").size(9).color(TEXT_2),
+            text(t("SAÍDAS (PC)")).size(9).color(TEXT_2),
             sinks,
-            text("APPS (PC)").size(9).color(TEXT_2),
+            text(t("APPS (PC)")).size(9).color(TEXT_2),
             apps,
             phone_audio_section(hud),
             mic_status,

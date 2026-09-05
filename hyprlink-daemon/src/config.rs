@@ -55,6 +55,19 @@ pub enum BatteryAlertKind {
     Full,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum Lang {
+    PtPt,
+    PtBr,
+    EnGb,
+    EsEs,
+    Zh,
+}
+
+fn default_lang() -> Lang {
+    Lang::PtPt
+}
+
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct BatteryAlerts {
     #[serde(default)]
@@ -78,6 +91,8 @@ pub struct AppConfig {
     pub battery_alerts: BatteryAlerts,
     #[serde(default)]
     pub track: TrackSettings,
+    #[serde(default = "default_lang")]
+    pub lang: Lang,
 }
 
 fn default_download_dir() -> PathBuf {
@@ -106,6 +121,7 @@ impl AppConfig {
                 shortcuts: Vec::new(),
                 battery_alerts: BatteryAlerts::default(),
                 track: TrackSettings::default(),
+                lang: default_lang(),
             })
     }
 
@@ -209,5 +225,15 @@ pub fn set_track_invert_scroll(config: &SharedConfig, enabled: bool) {
 pub fn set_track_virtual_keyboard(config: &SharedConfig, enabled: bool) {
     let mut c = config.lock().unwrap();
     c.track.virtual_keyboard = enabled;
+    c.save();
+}
+
+pub fn lang(config: &SharedConfig) -> Lang {
+    config.lock().unwrap().lang
+}
+
+pub fn set_lang(config: &SharedConfig, lang: Lang) {
+    let mut c = config.lock().unwrap();
+    c.lang = lang;
     c.save();
 }

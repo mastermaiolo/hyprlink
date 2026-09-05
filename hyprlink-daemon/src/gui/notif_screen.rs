@@ -14,7 +14,7 @@ pub fn notif_screen(hud: &Hud) -> Element<'_, Message> {
         }
     }
 
-    let mut chips = row![filter_chip("todas".to_string(), modules.notif_history.len(), hud.notif_app_filter.is_none(), Message::NotifAppFilter(None))].spacing(7);
+    let mut chips = row![filter_chip(t("todas").to_string(), modules.notif_history.len(), hud.notif_app_filter.is_none(), Message::NotifAppFilter(None))].spacing(7);
     for (app, count) in &app_counts {
         chips = chips.push(filter_chip(app.clone(), *count, hud.notif_app_filter.as_deref() == Some(app.as_str()), Message::NotifAppFilter(Some(app.clone()))));
     }
@@ -38,7 +38,7 @@ pub fn notif_screen(hud: &Hud) -> Element<'_, Message> {
                     ]
                     .spacing(3)
                     .width(Length::Fill),
-                    button(text("copiar").size(9).color(TEXT_4))
+                    button(text(t("copiar")).size(9).color(TEXT_4))
                         .padding([4, 8])
                         .style(|_, _| button::Style { background: None, text_color: TEXT_4, ..Default::default() })
                         .on_press(Message::CopyText(format!("{}\n{}", entry.title, entry.text))),
@@ -53,14 +53,14 @@ pub fn notif_screen(hud: &Hud) -> Element<'_, Message> {
         .collect();
 
     let header_row = row![
-        text(format!("HISTÓRICO · {} NESTA SESSÃO", modules.notif_history.len())).size(9).color(TEXT_5),
+        text(t1("HISTÓRICO · {} NESTA SESSÃO", modules.notif_history.len())).size(9).color(TEXT_5),
         Space::new().width(Length::Fill),
         search_row(query, Message::NotifSearch, Message::NotifSearch(String::new())),
     ]
     .align_y(Alignment::Center);
 
     column![
-        module_header("NOTIFICAÇÕES", format!("{} espelhada(s) nesta sessão", modules.notif_count), TEXT_2),
+        module_header("NOTIFICAÇÕES", t1("{} espelhada(s) nesta sessão", modules.notif_count), TEXT_2),
         scrollable(chips).direction(scrollable::Direction::Horizontal(scrollable::Scrollbar::new().width(2).scroller_width(2))),
         header_row,
         history_list(rows, "Nenhuma notificação espelhada ainda nesta sessão."),

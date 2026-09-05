@@ -78,10 +78,10 @@ pub fn suggest_webcam_config(mbps: f64) -> (&'static str, i64) {
 pub fn webcam_screen(hud: &Hud) -> Element<'_, Message> {
     let modules = &hud.snapshot.modules;
     let (status_text, status_color) = if modules.webcam_active {
-        ("Stream ativo — a escrever em /dev/video42, use como webcam em qualquer app (Chrome, OBS, etc.)".to_string(), GREEN)
+        (t("Stream ativo — a escrever em /dev/video42, use como webcam em qualquer app (Chrome, OBS, etc.)").to_string(), GREEN)
     } else {
         (
-            format!("Parado. Ao iniciar, o telemóvel é trazido pro primeiro plano e passa a filmar em {}@{}fps ({}).", hud.webcam_resolution, hud.webcam_fps, hud.webcam_codec.to_uppercase()),
+            tn("Parado. Ao iniciar, o telemóvel é trazido pro primeiro plano e passa a filmar em {}@{}fps ({}).", &[&hud.webcam_resolution, &hud.webcam_fps, &hud.webcam_codec.to_uppercase()]),
             TEXT_3,
         )
     };
@@ -109,7 +109,7 @@ pub fn webcam_screen(hud: &Hud) -> Element<'_, Message> {
     };
     let config_row = row![
         column![
-            text("resolução").size(9).color(TEXT_2),
+            text(t("resolução")).size(9).color(TEXT_2),
             iced::widget::pick_list(WEBCAM_RESOLUTIONS, Some(hud.webcam_resolution), Message::WebcamResolutionChanged)
                 .text_size(11)
                 .padding([8, 12])
@@ -118,7 +118,7 @@ pub fn webcam_screen(hud: &Hud) -> Element<'_, Message> {
         .spacing(4)
         .width(Length::Fill),
         column![
-            text("fps").size(9).color(TEXT_2),
+            text(t("fps")).size(9).color(TEXT_2),
             iced::widget::pick_list(WEBCAM_FPS_OPTIONS, Some(hud.webcam_fps), Message::WebcamFpsChanged)
                 .text_size(11)
                 .padding([8, 12])
@@ -127,7 +127,7 @@ pub fn webcam_screen(hud: &Hud) -> Element<'_, Message> {
         .spacing(4)
         .width(Length::Fixed(80.0)),
         column![
-            text("codec").size(9).color(TEXT_2),
+            text(t("codec")).size(9).color(TEXT_2),
             iced::widget::pick_list(WEBCAM_CODECS, Some(hud.webcam_codec), Message::WebcamCodecChanged)
                 .text_size(11)
                 .padding([8, 12])
@@ -140,12 +140,12 @@ pub fn webcam_screen(hud: &Hud) -> Element<'_, Message> {
 
     let is_testing = matches!(hud.webcam_test, WebcamTest::Running { .. });
     let action = if modules.webcam_active {
-        button(text("parar stream").size(12).color(RED))
+        button(text(t("parar stream")).size(12).color(RED))
             .padding([10, 18])
             .style(accent_button(RED, 10.0))
             .on_press(Message::WebcamStop)
     } else {
-        button(text("iniciar stream").size(12).color(GREEN))
+        button(text(t("iniciar stream")).size(12).color(GREEN))
             .padding([10, 18])
             .style(accent_button(GREEN, 10.0))
             .on_press(Message::WebcamStart)
@@ -153,7 +153,7 @@ pub fn webcam_screen(hud: &Hud) -> Element<'_, Message> {
 
     let mut action_row = row![action].spacing(10);
     if !modules.webcam_active && !is_testing {
-        let test_btn = button(text("testar rede/hardware").size(12).color(TEXT_2))
+        let test_btn = button(text(t("testar rede/hardware")).size(12).color(TEXT_2))
             .padding([10, 18])
             .style(ghost_button(TEXT_2, 10.0))
             .on_press(Message::WebcamTestStart);
@@ -165,8 +165,8 @@ pub fn webcam_screen(hud: &Hud) -> Element<'_, Message> {
         WebcamTest::Idle => Space::new().height(0).into(),
         WebcamTest::Running { started } => {
             let remaining = WEBCAM_TEST_DURATION.saturating_sub(started.elapsed()).as_secs() + 1;
-            let mbps_text = modules.webcam_mbps.map(|m| format!("{m:.1} Mbps")).unwrap_or_else(|| "medindo…".to_string());
-            container(text(format!("Testando em 1920×1080@30 (baseline — não testa 2K/4K, ver nota abaixo) · {mbps_text} · {remaining}s restantes")).size(11).color(AMBER))
+            let mbps_text = modules.webcam_mbps.map(|m| format!("{m:.1} Mbps")).unwrap_or_else(|| t("medindo…").to_string());
+            container(text(tn("Testando em 1920×1080@30 (baseline — não testa 2K/4K, ver nota abaixo) · {} · {}s restantes", &[&mbps_text, &remaining])).size(11).color(AMBER))
                 .padding(12)
                 .width(Length::Fill)
                 .style(|_| container::Style {
@@ -178,11 +178,11 @@ pub fn webcam_screen(hud: &Hud) -> Element<'_, Message> {
         }
         WebcamTest::Done { mbps, suggested } => container(
             row![
-                text(format!("Sugestão: {} @ {}fps  ·  medido: {mbps:.1} Mbps na rede, {cores} núcleos de CPU", suggested.0, suggested.1))
+                text(tn("Sugestão: {} @ {}fps  ·  medido: {} Mbps na rede, {} núcleos de CPU", &[&suggested.0, &suggested.1, &format!("{mbps:.1}"), &cores]))
                     .size(11)
                     .color(GREEN)
                     .width(Length::Fill),
-                button(text("aplicar").size(11).color(GREEN))
+                button(text(t("aplicar")).size(11).color(GREEN))
                     .padding([6, 14])
                     .style(accent_button(GREEN, 8.0))
                     .on_press(Message::WebcamTestApply),
@@ -200,16 +200,16 @@ pub fn webcam_screen(hud: &Hud) -> Element<'_, Message> {
         .into(),
     };
 
-    let note = text("Sem pré-visualização aqui na GUI (custo de CPU extra por só cosmético) — só o /dev/video42 recebe o vídeo. Rotação/espelho seguem o que for ajustado no telemóvel. O teste mede vazão real da rede transmitindo por alguns segundos — não estima CPU de decodificação além da contagem de núcleos.")
+    let note = text(t("Sem pré-visualização aqui na GUI (custo de CPU extra por só cosmético) — só o /dev/video42 recebe o vídeo. Rotação/espelho seguem o que for ajustado no telemóvel. O teste mede vazão real da rede transmitindo por alguns segundos — não estima CPU de decodificação além da contagem de núcleos."))
         .size(10)
         .color(TEXT_3);
 
     let footer: Element<'_, Message> = match &modules.webcam_last_used {
-        Some((at, dur)) => container(text(format!("último uso · {at} · {dur}")).size(10).color(TEXT_4)).padding([10, 12]).width(Length::Fill).style(|_| glass(10.0)).into(),
+        Some((at, dur)) => container(text(tn("último uso · {} · {}", &[at, dur])).size(10).color(TEXT_4)).padding([10, 12]).width(Length::Fill).style(|_| glass(10.0)).into(),
         None => Space::new().height(0).into(),
     };
 
-    column![module_header("WEBCAM", "Câmara remota do PC".to_string(), status_color), preview, config_row, action_row, test_panel, footer, note]
+    column![module_header("WEBCAM", t("Câmara remota do PC").to_string(), status_color), preview, config_row, action_row, test_panel, footer, note]
         .spacing(16)
         .into()
 }
