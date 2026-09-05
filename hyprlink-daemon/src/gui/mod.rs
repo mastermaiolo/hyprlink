@@ -8,15 +8,14 @@
 //! ponytail: ícones SVG por módulo ficaram de fora desta primeira versão —
 //! número + título já comunica bem. Adicionar quando fizer sentido.
 //!
-//! ponytail: arquivo passou de 2600 linhas depois da Ronda 6 (10 telas de
-//! módulo) — teto de manutenção, não de execução. Upgrade quando incomodar:
-//! (1) mover cada `fn X_screen` pra `gui/x.rs` (`mod gui { mod clip; mod
-//! files; ... }`), Hud/Message/update/view ficam em `gui/mod.rs`; (2)
-//! extrair os ~20 blocos `button::Style{...}`/`container::Style{...}`
-//! repetidos à mão (grep `from_rgba(1.0, 1.0, 1.0, 0.045)` e `..0.08)`) em
-//! 2-3 funções de estilo em `theme.rs` (ex: `ghost_button()`,
-//! `accent_pill(color)`) — a maioria já devia estar usando `glass()`/
-//! `GLASS_BRD` que já existem e são usados só em parte dos lugares.
+//! Segregado em `gui/*.rs` (uma tela por arquivo, `widgets.rs` com os
+//! helpers reusados) e com os botões repetidos (`ghost_button()`,
+//! `accent_button()` em `widgets.rs`) consolidados em 2026-09-05 — este
+//! arquivo (`mod.rs`) fica só com o que é genuinamente compartilhado:
+//! `Hud`/`Message`/`update`/`view`/`run`. Se `update()` (a maior função,
+//! ~380 linhas) voltar a incomodar, o próximo corte natural é mover a
+//! lógica de cada variante de `Message` específica de uma tela pro arquivo
+//! daquela tela (`pub fn handle(hud, msg) -> Option<Task<Message>>`).
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
