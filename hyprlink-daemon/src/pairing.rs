@@ -52,6 +52,20 @@ impl PairingStore {
         self.devices.fingerprints.contains(fingerprint)
     }
 
+    /// Só os fingerprints — a GUI (CONFIG) não tem nome/last-seen por
+    /// dispositivo hoje (exigiria persistir isso no `core.hello`, fora de
+    /// escopo por ora), mostra o que existe de verdade.
+    pub fn list_fingerprints(&self) -> Vec<String> {
+        let mut v: Vec<String> = self.devices.fingerprints.iter().cloned().collect();
+        v.sort();
+        v
+    }
+
+    pub fn revoke(&mut self, fingerprint: &str) -> std::io::Result<()> {
+        self.devices.fingerprints.remove(fingerprint);
+        self.save()
+    }
+
     /// Autoriza um novo dispositivo se o token bater com o desta sessão do daemon.
     pub fn try_pair_with_token(&mut self, fingerprint: &str, token_hex: &str) -> std::io::Result<bool> {
         if token_hex.eq_ignore_ascii_case(&self.current_token_hex) {

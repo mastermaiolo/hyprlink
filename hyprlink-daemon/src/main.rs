@@ -17,6 +17,7 @@ mod server;
 mod share;
 mod state;
 mod tap;
+mod theme;
 mod tray;
 mod tls_verifier;
 mod webcam;
@@ -50,6 +51,8 @@ fn main() -> anyhow::Result<()> {
 
     print_terminal_qr(&identity.fingerprint_hex, local_ip, &token_hex)?;
 
+    let pairing_for_gui = pairing.clone();
+
     {
         let hud = hud.clone();
         let config = config.clone();
@@ -62,7 +65,7 @@ fn main() -> anyhow::Result<()> {
         });
     }
 
-    gui::run(hud, config, active, pending_webcam, tray_show).map_err(|e| anyhow::anyhow!("erro na GUI: {e}"))
+    gui::run(hud, config, active, pending_webcam, tray_show, pairing_for_gui).map_err(|e| anyhow::anyhow!("erro na GUI: {e}"))
 }
 
 async fn run_daemon(

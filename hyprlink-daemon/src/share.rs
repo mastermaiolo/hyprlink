@@ -86,8 +86,13 @@ pub async fn receive_uni_stream(
     let mut buf = vec![0u8; 32 * 1024];
     let mut total: u64 = 0;
     let mut last_progress = 0u64;
+    let cancel = crate::state::start_file_transfer(&hud, filename.clone(), "recebendo", pending.size);
 
     loop {
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            let _ = recv.stop(0u32.into());
+            break;
+        }
         let n = match recv.read(&mut buf).await {
             Ok(Some(n)) => n,
             Ok(None) => break,
@@ -100,6 +105,7 @@ pub async fn receive_uni_stream(
         total += n as u64;
         if total.saturating_sub(last_progress) >= 512 * 1024 {
             last_progress = total;
+            crate::state::update_file_transfer_progress(&hud, total);
             let body = Value::Map(vec![
                 (Value::Text("id".into()), Value::Integer(id.into())),
                 (Value::Text("bytes".into()), Value::Integer(total.into())),
@@ -109,6 +115,12 @@ pub async fn receive_uni_stream(
         }
     }
     let _ = file.flush().await;
+    let cancelled = cancel.load(std::sync::atomic::Ordering::Relaxed);
+    crate::state::finish_file_transfer(&hud, !cancelled, cancelled.then(|| "cancelado pelo usuário".to_string()));
+    if cancelled {
+        push_log(&hud, format!("[!] ficheiro recebido cancelado: {filename} ({total} de {} bytes)", pending.size));
+        return;
+    }
 
     let sha_hex: String = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect();
     push_log(&hud, format!("[+] ficheiro recebido: {filename} ({total} bytes) · sha256 {sha_hex}"));
@@ -172,20 +184,34 @@ pub async fn send_file(active: &ActiveConn, hud: &Arc<Mutex<HudState>>, path: &s
     let mut hasher = Sha256::new();
     let mut buf = vec![0u8; 32 * 1024];
     let mut total: u64 = 0;
+    let mut last_progress = 0u64;
+    let cancel = crate::state::start_file_transfer(hud, name.clone(), "enviando", size);
     loop {
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            let _ = send.reset(0u32.into());
+            crate::state::finish_file_transfer(hud, false, Some("cancelado pelo usuário".to_string()));
+            push_log(hud, format!("[!] envio cancelado: {name} ({total} de {size} bytes)"));
+            return;
+        }
         let n = match file.read(&mut buf).await {
             Ok(0) => break,
             Ok(n) => n,
             Err(_) => break,
         };
         if send.write_all(&buf[..n]).await.is_err() {
+            crate::state::finish_file_transfer(hud, false, Some("falha de rede".to_string()));
             push_log(hud, format!("[!] share.file: falha ao enviar {name} em {total} bytes"));
             return;
         }
         hasher.update(&buf[..n]);
         total += n as u64;
+        if total.saturating_sub(last_progress) >= 512 * 1024 {
+            last_progress = total;
+            crate::state::update_file_transfer_progress(hud, total);
+        }
     }
     let _ = send.finish();
+    crate::state::finish_file_transfer(hud, true, None);
 
     // O telemóvel (receptor nessa direção) espera um `share.done` do
     // remetente pra confirmar/verificar — mesmo papel que o daemon já faz

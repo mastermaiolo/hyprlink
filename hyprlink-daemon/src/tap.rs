@@ -13,12 +13,26 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app::AppSink;
 
-use crate::state::{self, push_log, HudState};
+use crate::state::{self, push_audio_vu, push_log, HudState};
 
 pub type TapHandle = Arc<Mutex<Option<gst::Pipeline>>>;
 
 pub fn new_handle() -> TapHandle {
     Arc::new(Mutex::new(None))
+}
+
+/// Pico de amplitude num bloco S16LE — mesmo cálculo que o Android já faz em
+/// `AudioStreamPlayer.kt` do lado da reprodução, aqui do lado da captura, pro
+/// VU meter do AUDIO na GUI.
+fn peak_percent(bytes: &[u8]) -> u8 {
+    let mut peak: i16 = 0;
+    let mut i = 0;
+    while i + 1 < bytes.len() {
+        let sample = i16::from_le_bytes([bytes[i], bytes[i + 1]]);
+        peak = peak.max(sample.saturating_abs());
+        i += 2;
+    }
+    ((peak as u32 * 100) / 32767) as u8
 }
 
 fn default_sink_name() -> Option<String> {
@@ -172,6 +186,7 @@ pub async fn start(connection: quinn::Connection, id: u64, handle: TapHandle, hu
                         last_logged_captured = captured;
                         push_log(&hud_thread, format!("[i] audio tap: {} KB capturados do PipeWire", captured / 1024));
                     }
+                    push_audio_vu(&hud_thread, peak_percent(map.as_slice()));
                     if tx.blocking_send(map.as_slice().to_vec()).is_err() {
                         push_log(&hud_thread, "[!] audio tap: canal pro QUIC fechou, parando captura".to_string());
                         break;
@@ -196,6 +211,7 @@ pub async fn start(connection: quinn::Connection, id: u64, handle: TapHandle, hu
                 break;
             }
             total += chunk.len() as u64;
+            state::set_audio_tap_bytes(&hud, total);
             if total.saturating_sub(last_logged) >= 1_000_000 {
                 last_logged = total;
                 push_log(&hud, format!("[i] audio tap: {} KB enviados", total / 1024));

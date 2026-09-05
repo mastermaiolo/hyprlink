@@ -11,7 +11,7 @@ use rustls::pki_types::CertificateDer;
 
 use crate::active::{self, ActiveConn};
 use crate::clip::{self, LastLocalSet};
-use crate::config::SharedConfig;
+use crate::config::{self, SharedConfig};
 use crate::identity::{fingerprint_der, ServerIdentity};
 use crate::input::InputDevice;
 use crate::notif;
@@ -108,7 +108,7 @@ pub fn build_endpoint(identity: &ServerIdentity, addr: SocketAddr) -> anyhow::Re
 pub fn spawn_background_tasks(ctx: Ctx) {
     tokio::spawn(clip::watch(ctx.active.clone(), ctx.clip_guard.clone(), ctx.hud.clone()));
     tokio::spawn(hypr::watch_events(ctx.active.clone(), ctx.hud.clone()));
-    tokio::spawn(battery::poll_and_push(ctx.active.clone()));
+    tokio::spawn(battery::poll_and_push(ctx.active.clone(), ctx.hud.clone()));
     tokio::spawn(media::poll_and_push(ctx.active.clone(), ctx.hud.clone()));
     tokio::spawn(notif::watch(ctx.active.clone(), ctx.notif.clone(), ctx.hud.clone()));
 }
@@ -385,13 +385,23 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
             reply(&mut send, packet.id, "battery.state", Some(battery::state_body())).await;
         }
         "battery.state" => {
-            // bateria do telemóvel — só log por enquanto (ver Fase 8 pra UI).
             if let (Some(level), Some(charging)) = (
                 body.and_then(|b| crate::protocol::body_get_i64(b, "level")),
                 body.and_then(|b| crate::protocol::body_get(b, "charging")).and_then(|v| v.as_bool()),
             ) {
+                let previous = state::phone_battery_pct(hud);
                 state::set_phone_battery(hud, level);
                 state::push_log(hud, format!("[i] bateria do telemóvel: {level}% · carregando={charging}"));
+
+                // Alertas do BATT (CONFIG do usuário) — dispara só na transição
+                // pro limiar, não a cada battery.state enquanto já está lá.
+                let alerts = config::battery_alerts(&ctx.config);
+                if alerts.low && level <= 20 && previous.is_none_or(|p| p > 20) {
+                    notif::post("HyprLink", "Bateria do telemóvel baixa", &format!("{level}% restantes"), "hyprlink-batt-low", &[], &ctx.notif).await;
+                }
+                if alerts.full && level >= 100 && previous.is_none_or(|p| p < 100) {
+                    notif::post("HyprLink", "Telemóvel carregado", "Bateria a 100%", "hyprlink-batt-full", &[], &ctx.notif).await;
+                }
             }
         }
 
@@ -436,7 +446,11 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                 body.and_then(|b| crate::protocol::body_get_i64(b, "dx")),
                 body.and_then(|b| crate::protocol::body_get_i64(b, "dy")),
             ) {
-                ctx.input.move_relative(dx as i32, dy as i32);
+                let t = config::track_settings(&ctx.config);
+                // ponytail: "aceleração" é só um multiplicador extra fixo, não
+                // uma curva real (ver TrackSettings) — bom o bastante por ora.
+                let mult = t.sensitivity * if t.acceleration { 1.6 } else { 1.0 };
+                ctx.input.move_relative((dx as f32 * mult) as i32, (dy as f32 * mult) as i32);
             }
         }
         "input.scroll" => {
@@ -444,7 +458,9 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                 body.and_then(|b| crate::protocol::body_get_i64(b, "dx")),
                 body.and_then(|b| crate::protocol::body_get_i64(b, "dy")),
             ) {
-                ctx.input.scroll(dx as i32, dy as i32);
+                let t = config::track_settings(&ctx.config);
+                let sign = if t.invert_scroll { -1.0 } else { 1.0 };
+                ctx.input.scroll((dx as f32 * t.scroll_speed * sign) as i32, (dy as f32 * t.scroll_speed * sign) as i32);
             }
         }
         "input.click" => {
@@ -453,12 +469,16 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
         }
         "input.type" => {
             if let Some(text) = body.and_then(|b| body_get_str(b, "text")) {
-                ctx.input.type_text(text);
+                if config::track_settings(&ctx.config).virtual_keyboard {
+                    ctx.input.type_text(text);
+                }
             }
         }
         "input.key" => {
             if let Some(key) = body.and_then(|b| body_get_str(b, "key")) {
-                ctx.input.key(key);
+                if config::track_settings(&ctx.config).virtual_keyboard {
+                    ctx.input.key(key);
+                }
             }
         }
 

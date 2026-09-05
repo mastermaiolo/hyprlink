@@ -37,6 +37,25 @@ pub fn clients_json() -> String {
     if data.trim().is_empty() { "[]".to_string() } else { data }
 }
 
+/// A janela focada agora — usado só pra linha de contexto do CONTROL
+/// (`activewindow` do socket2 já cobre o resto em tempo real).
+pub fn active_window_json() -> String {
+    let data = run_hyprctl(&["activewindow", "-j"]);
+    if data.trim().is_empty() { "{}".to_string() } else { data }
+}
+
+/// Posição do cursor — só pro espelho visual do TRACK, polling leve (1x/seg,
+/// só com essa tela aberta).
+pub fn cursor_pos_json() -> String {
+    let data = run_hyprctl(&["cursorpos", "-j"]);
+    if data.trim().is_empty() { "{}".to_string() } else { data }
+}
+
+pub fn monitors_json() -> String {
+    let data = run_hyprctl(&["monitors", "-j"]);
+    if data.trim().is_empty() { "[]".to_string() } else { data }
+}
+
 /// `cmd` vem como "workspace 2", "focuswindow address:0x..", etc — o primeiro
 /// espaço separa o dispatcher do argumento, igual ao app manda.
 pub fn dispatch(cmd: &str) -> String {
