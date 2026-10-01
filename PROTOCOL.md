@@ -49,6 +49,13 @@ Duas implementações independentes no app (pareamento vs pós-pareamento) —
   **big-endian** (`u64`, id de correlação com um pacote anunciado antes num
   stream bidi) + bytes crus até EOF (fim = stream fechado pelo remetente), sem
   mais nenhuma framing.
+- **QUIC DATAGRAM** (RFC 9221, só o audio tap PC→telemóvel por ora — ver
+  §audio): 2 bytes **big-endian** (`u16`, contador de sequência, sem
+  correlação de stream nenhuma) + payload cru, um datagrama por vez, sem
+  garantia de entrega nem ordem — ao contrário dos dois formatos acima, isto
+  é deliberadamente não-confiável. Exige `enableDatagramExtension()` no
+  builder da conexão do lado do telemóvel (Kwik vem com isso desligado por
+  padrão); o quinn do lado do daemon já aceita por padrão.
 
 ```
 Packet (envelope, CBOR map, definite-length):
@@ -196,14 +203,22 @@ telemóvel espera 15s à toa e marca "não verificado".
 | `audio.set_volume` | req/ack (5s) | `{kind:"sink"\|"app", id, volume(0-150)}` |
 | `audio.set_mute` | req/ack (5s) | `{kind, id, muted}` |
 | `audio.set_default_sink` | req/ack (5s) | `{name}` (nome técnico do sink, não a descrição) |
-| `audio.tap_start` → `audio.tap_ready` | req/resp | resp: `{id, rate:48000, channels:2}` — `id` correlaciona uni-stream PCM |
+| `audio.tap_start` → `audio.tap_ready` | req/resp | resp: `{id, rate:48000, channels:2}` — `id` mantido por compat, não é mais usado pra correlacionar nada (ver abaixo) |
 | `audio.tap_stop` | req/ack (5s) | `null` |
 | `audio.ack` | resp genérica | não parseado |
 
 Sink virtual do telemóvel convencionado: nome técnico `"hyprlink-speaker"`,
-descrição `"HyprLink-Phone"`, `is_phone:true`. Uni-stream de tap (D→P): 8
-bytes id + PCM cru **16-bit LE, 48000Hz, estéreo intercalado**, infinito até
-`tap_stop`/desconexão.
+descrição `"HyprLink-Phone"`, `is_phone:true`.
+
+**Tap (D→P) via QUIC DATAGRAM** (RFC 9221, não mais uni-stream — migrado
+2026-09-05, ver journal/decisão de arquitetura): cada datagrama é `[seq u16
+BE][PCM cru]`, PCM **16-bit LE, 48000Hz, estéreo intercalado**, fatiado em
+pedaços que cabem no tamanho de datagrama negociado da conexão
+(`connection.max_datagram_size()`/`maxDatagramDataSize()` — normalmente
+~1200 bytes, path-MTU dependente). Sem correlação de stream (só existe um
+tap ativo por conexão) e sem garantia de entrega/ordem — datagramas perdidos
+viram só silêncio momentâneo, não erro. Requer que os dois lados tenham
+habilitado a extensão de datagram na conexão QUIC (ver nota no framing).
 
 ### phone_audio
 
