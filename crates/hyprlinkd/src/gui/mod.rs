@@ -21,45 +21,50 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use iced::widget::{button, checkbox, column, container, row, scrollable, slider, text, text_editor, text_input, Space};
+use iced::widget::{
+    Space, button, checkbox, column, container, row, scrollable, slider, text, text_editor,
+    text_input,
+};
 use iced::window;
-use iced::{Alignment, Background, Border, Color, Element, Font, Length, Shadow, Task, Theme, Vector};
+use iced::{
+    Alignment, Background, Border, Color, Element, Font, Length, Shadow, Task, Theme, Vector,
+};
 
 use crate::active::ActiveConn;
 use crate::clip;
 use crate::config::{self, SharedConfig};
 use crate::state::{ConnState, HudState};
 use crate::theme::{
-    AMBER, AMBER_BG, AMBER_BRD, BRD_1, DIVIDER, GLASS, GLASS_BRD, GREEN, GREEN_BG, GREEN_BRD, MUTED, RED, RED_BRD, TERMINAL, TEXT, TEXT_1, TEXT_2, TEXT_3,
-    TEXT_4, TEXT_5, TEXT_6, WINDOW_BG, WINDOW_BRD,
+    AMBER, AMBER_BG, AMBER_BRD, BRD_1, DIVIDER, GLASS, GLASS_BRD, GREEN, GREEN_BG, GREEN_BRD,
+    MUTED, RED, RED_BRD, TERMINAL, TEXT, TEXT_1, TEXT_2, TEXT_3, TEXT_4, TEXT_5, TEXT_6, WINDOW_BG,
+    WINDOW_BRD,
 };
 
-
-mod i18n;
-mod widgets;
-mod clip_screen;
-mod files_screen;
-mod notif_screen;
-mod media_screen;
-mod batt_screen;
-mod control_screen;
 mod audio_screen;
-mod webcam_screen;
-mod track_screen;
+mod batt_screen;
+mod clip_screen;
+mod control_screen;
+mod files_screen;
+mod i18n;
+mod media_screen;
+mod notif_screen;
 mod settings_screen;
+mod track_screen;
+mod webcam_screen;
+mod widgets;
 
-use i18n::*;
-use widgets::*;
-use clip_screen::*;
-use files_screen::*;
-use notif_screen::*;
-use media_screen::*;
-use batt_screen::*;
-use control_screen::*;
 use audio_screen::*;
-use webcam_screen::*;
-use track_screen::*;
+use batt_screen::*;
+use clip_screen::*;
+use control_screen::*;
+use files_screen::*;
+use i18n::*;
+use media_screen::*;
+use notif_screen::*;
 use settings_screen::*;
+use track_screen::*;
+use webcam_screen::*;
+use widgets::*;
 
 /// Os 10 módulos do design (code-spec-iced.md §4) — todos têm tela própria
 /// agora (Ronda 6). Ordem = ordem na sidebar/régua, não mexer sem atualizar
@@ -77,7 +82,6 @@ enum ModuleId {
     Track,
     Config,
 }
-
 
 /// Glifo por módulo (code-spec-iced.md §4). ⚠ alguns (`≋ ◔ ◈ ⧉`) podem faltar
 /// em fontes monoespaçadas sem símbolos Unicode extras — se aparecerem como
@@ -97,7 +101,6 @@ fn module_glyph(id: ModuleId) -> &'static str {
     }
 }
 
-
 fn module_number(id: ModuleId) -> &'static str {
     match id {
         ModuleId::Clip => "01",
@@ -113,13 +116,11 @@ fn module_number(id: ModuleId) -> &'static str {
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq)]
 enum Screen {
     Dashboard,
     Module(ModuleId),
 }
-
 
 struct Hud {
     shared: Arc<Mutex<HudState>>,
@@ -182,7 +183,6 @@ struct Hud {
     notif_search: String,
     notif_app_filter: Option<String>,
 }
-
 
 #[derive(Debug, Clone)]
 enum Message {
@@ -253,7 +253,6 @@ enum Message {
     TrackVirtualKeyboard(bool),
 }
 
-
 impl Hud {
     fn new(
         shared: Arc<Mutex<HudState>>,
@@ -269,7 +268,14 @@ impl Hud {
         let console_len = snapshot.logs.len();
         let console_lang = config::lang(&config);
         i18n::set_current(console_lang);
-        let console = text_editor::Content::with_text(&snapshot.logs.iter().map(|l| i18n::tr_log(l)).collect::<Vec<_>>().join("\n"));
+        let console = text_editor::Content::with_text(
+            &snapshot
+                .logs
+                .iter()
+                .map(|l| i18n::tr_log(l))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
         let download_dir = config::download_dir(&config);
         Self {
             shared,
@@ -319,7 +325,6 @@ impl Hud {
     }
 }
 
-
 fn update(hud: &mut Hud, message: Message) -> Task<Message> {
     match message {
         Message::Tock => Task::none(),
@@ -330,19 +335,39 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
                 hud.console_len = hud.snapshot.logs.len();
                 hud.console_lang = current_lang;
                 i18n::set_current(current_lang);
-                hud.console = text_editor::Content::with_text(&hud.snapshot.logs.iter().map(|l| i18n::tr_log(l)).collect::<Vec<_>>().join("\n"));
+                hud.console = text_editor::Content::with_text(
+                    &hud.snapshot
+                        .logs
+                        .iter()
+                        .map(|l| i18n::tr_log(l))
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                );
             }
             if crate::tray::take_show_requested(&hud.tray_show) {
                 crate::state::push_log(&hud.shared, "[i] tray: restaurando janela".to_string());
-                return Task::perform(async { tokio::task::spawn_blocking(crate::hypr::tray_show).await.unwrap_or(false) }, |_| Message::Tick);
+                return Task::perform(
+                    async {
+                        tokio::task::spawn_blocking(crate::hypr::tray_show)
+                            .await
+                            .unwrap_or(false)
+                    },
+                    |_| Message::Tick,
+                );
             }
             if let WebcamTest::Running { started } = hud.webcam_test {
                 if started.elapsed() >= WEBCAM_TEST_DURATION {
                     let mbps = hud.snapshot.modules.webcam_mbps.unwrap_or(0.0);
-                    hud.webcam_test = WebcamTest::Done { mbps, suggested: suggest_webcam_config(mbps) };
+                    hud.webcam_test = WebcamTest::Done {
+                        mbps,
+                        suggested: suggest_webcam_config(mbps),
+                    };
                     *hud.pending_webcam.lock().unwrap() = None;
                     let active = hud.active.clone();
-                    return Task::perform(async move { crate::active::push(&active, "webcam.stop", None).await }, |_| Message::Tick);
+                    return Task::perform(
+                        async move { crate::active::push(&active, "webcam.stop", None).await },
+                        |_| Message::Tick,
+                    );
                 }
             }
             Task::none()
@@ -386,8 +411,12 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
         }
         Message::BattAlertToggle(kind, enabled) => {
             match kind {
-                config::BatteryAlertKind::Low => config::set_battery_alert_low(&hud.config, enabled),
-                config::BatteryAlertKind::Full => config::set_battery_alert_full(&hud.config, enabled),
+                config::BatteryAlertKind::Low => {
+                    config::set_battery_alert_low(&hud.config, enabled)
+                }
+                config::BatteryAlertKind::Full => {
+                    config::set_battery_alert_full(&hud.config, enabled)
+                }
             }
             Task::none()
         }
@@ -431,7 +460,14 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
         }
         Message::MinimizeToTray => {
             crate::state::push_log(&hud.shared, "[i] tray: minimizando".to_string());
-            Task::perform(async { tokio::task::spawn_blocking(crate::hypr::tray_hide).await.unwrap_or(false) }, |_| Message::Tick)
+            Task::perform(
+                async {
+                    tokio::task::spawn_blocking(crate::hypr::tray_hide)
+                        .await
+                        .unwrap_or(false)
+                },
+                |_| Message::Tick,
+            )
         }
         Message::ToggleTraySpecialWorkspace(enabled) => {
             config::set_tray_special_workspace(&hud.config, enabled);
@@ -453,9 +489,19 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
         }
         Message::PhoneMicRequestResult(enabled, ok) => {
             if ok {
-                crate::state::push_log(&hud.shared, format!("[i] microfone: pedido de {} enviado ao telemóvel", if enabled { "ligar" } else { "desligar" }));
+                crate::state::push_log(
+                    &hud.shared,
+                    format!(
+                        "[i] microfone: pedido de {} enviado ao telemóvel",
+                        if enabled { "ligar" } else { "desligar" }
+                    ),
+                );
             } else {
-                crate::state::push_log(&hud.shared, "[!] microfone: não foi possível enviar o pedido (sem conexão ativa?)".to_string());
+                crate::state::push_log(
+                    &hud.shared,
+                    "[!] microfone: não foi possível enviar o pedido (sem conexão ativa?)"
+                        .to_string(),
+                );
             }
             Task::none()
         }
@@ -509,13 +555,22 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
         }
         Message::DownloadDirPicked(None) => Task::none(),
         Message::PickFileToSend => Task::perform(
-            async { rfd::AsyncFileDialog::new().set_title("Ficheiro pra enviar pro telemóvel").pick_file().await.map(|handle| handle.path().to_path_buf()) },
+            async {
+                rfd::AsyncFileDialog::new()
+                    .set_title("Ficheiro pra enviar pro telemóvel")
+                    .pick_file()
+                    .await
+                    .map(|handle| handle.path().to_path_buf())
+            },
             Message::FileToSendPicked,
         ),
         Message::FileToSendPicked(Some(path)) => {
             let active = hud.active.clone();
             let shared = hud.shared.clone();
-            Task::perform(async move { crate::share::send_file(&active, &shared, &path).await }, |_| Message::Tick)
+            Task::perform(
+                async move { crate::share::send_file(&active, &shared, &path).await },
+                |_| Message::Tick,
+            )
         }
         Message::FileToSendPicked(None) => Task::none(),
         Message::OpenModule(id) => {
@@ -553,9 +608,10 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
             hud.notif_app_filter = app;
             Task::none()
         }
-        Message::MediaCommand(cmd) => {
-            Task::perform(async move { crate::media::handle_command(cmd).await }, |_| Message::Tick)
-        }
+        Message::MediaCommand(cmd) => Task::perform(
+            async move { crate::media::handle_command(cmd).await },
+            |_| Message::Tick,
+        ),
         Message::HyprInputChanged(value) => {
             hud.hypr_input = value;
             Task::none()
@@ -566,7 +622,11 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
                 return Task::none();
             }
             Task::perform(
-                async move { tokio::task::spawn_blocking(move || crate::hypr::dispatch(&cmd)).await.unwrap_or_default() },
+                async move {
+                    tokio::task::spawn_blocking(move || crate::hypr::dispatch(&cmd))
+                        .await
+                        .unwrap_or_default()
+                },
                 Message::HyprDispatchResult,
             )
         }
@@ -593,7 +653,11 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
         }
         Message::ShortcutAdd => {
             if !hud.shortcut_name.trim().is_empty() && !hud.shortcut_cmd.trim().is_empty() {
-                config::add_shortcut(&hud.config, hud.shortcut_name.trim().to_string(), hud.shortcut_cmd.trim().to_string());
+                config::add_shortcut(
+                    &hud.config,
+                    hud.shortcut_name.trim().to_string(),
+                    hud.shortcut_cmd.trim().to_string(),
+                );
                 hud.shortcut_name.clear();
                 hud.shortcut_cmd.clear();
             }
@@ -604,32 +668,54 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
             Task::none()
         }
         Message::ShortcutRun(cmd) => Task::perform(
-            async move { tokio::task::spawn_blocking(move || crate::hypr::dispatch(&cmd)).await.unwrap_or_default() },
+            async move {
+                tokio::task::spawn_blocking(move || crate::hypr::dispatch(&cmd))
+                    .await
+                    .unwrap_or_default()
+            },
             Message::HyprDispatchResult,
         ),
         Message::WorkspaceClicked(id) => Task::perform(
-            async move { tokio::task::spawn_blocking(move || crate::hypr::dispatch(&format!("workspace {id}"))).await.unwrap_or_default() },
+            async move {
+                tokio::task::spawn_blocking(move || {
+                    crate::hypr::dispatch(&format!("workspace {id}"))
+                })
+                .await
+                .unwrap_or_default()
+            },
             Message::HyprDispatchResult,
         ),
         Message::WebcamStart => {
             let active = hud.active.clone();
             let pending = hud.pending_webcam.clone();
-            let (width, height) = hud.webcam_resolution.split_once('x').and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?))).unwrap_or((1280, 720));
+            let (width, height) = hud
+                .webcam_resolution
+                .split_once('x')
+                .and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?)))
+                .unwrap_or((1280, 720));
             let fps = hud.webcam_fps;
             let codec = hud.webcam_codec;
             Task::perform(
-                async move { crate::webcam::request_start(&active, &pending, width, height, fps, codec).await },
+                async move {
+                    crate::webcam::request_start(&active, &pending, width, height, fps, codec).await
+                },
                 Message::WebcamStartResult,
             )
         }
         Message::WebcamStop => {
             *hud.pending_webcam.lock().unwrap() = None;
             let active = hud.active.clone();
-            Task::perform(async move { crate::active::push(&active, "webcam.stop", None).await }, |_| Message::Tick)
+            Task::perform(
+                async move { crate::active::push(&active, "webcam.stop", None).await },
+                |_| Message::Tick,
+            )
         }
         Message::WebcamStartResult(ok) => {
             if !ok {
-                crate::state::push_log(&hud.shared, "[!] webcam: não foi possível pedir o stream (sem conexão ativa?)".to_string());
+                crate::state::push_log(
+                    &hud.shared,
+                    "[!] webcam: não foi possível pedir o stream (sem conexão ativa?)".to_string(),
+                );
             }
             Task::none()
         }
@@ -646,18 +732,25 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
             Task::none()
         }
         Message::WebcamTestStart => {
-            hud.webcam_test = WebcamTest::Running { started: std::time::Instant::now() };
+            hud.webcam_test = WebcamTest::Running {
+                started: std::time::Instant::now(),
+            };
             let active = hud.active.clone();
             let pending = hud.pending_webcam.clone();
             Task::perform(
-                async move { crate::webcam::request_start(&active, &pending, 1920, 1080, 30, "h264").await },
+                async move {
+                    crate::webcam::request_start(&active, &pending, 1920, 1080, 30, "h264").await
+                },
                 Message::WebcamTestStartResult,
             )
         }
         Message::WebcamTestStartResult(ok) => {
             if !ok {
                 hud.webcam_test = WebcamTest::Idle;
-                crate::state::push_log(&hud.shared, "[!] webcam: não foi possível iniciar o teste (sem conexão ativa?)".to_string());
+                crate::state::push_log(
+                    &hud.shared,
+                    "[!] webcam: não foi possível iniciar o teste (sem conexão ativa?)".to_string(),
+                );
             }
             Task::none()
         }
@@ -679,7 +772,12 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
         }
         Message::AudioVolumeRelease(kind, id) => {
             let fallback = match kind {
-                "sink" => hud.audio.sinks.iter().find(|s| s.id == id).map(|s| s.volume),
+                "sink" => hud
+                    .audio
+                    .sinks
+                    .iter()
+                    .find(|s| s.id == id)
+                    .map(|s| s.volume),
                 "app" => hud.audio.apps.iter().find(|a| a.id == id).map(|a| a.volume),
                 _ => None,
             }
@@ -687,25 +785,35 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
             let volume = hud.pc_volume_drag.remove(&(kind, id)).unwrap_or(fallback);
             Task::perform(
                 async move {
-                    tokio::task::spawn_blocking(move || crate::audio::set_volume(kind, id, volume)).await.ok();
-                    tokio::task::spawn_blocking(crate::audio::snapshot).await.unwrap_or_default()
+                    tokio::task::spawn_blocking(move || crate::audio::set_volume(kind, id, volume))
+                        .await
+                        .ok();
+                    tokio::task::spawn_blocking(crate::audio::snapshot)
+                        .await
+                        .unwrap_or_default()
                 },
                 Message::AudioLoaded,
             )
         }
-        Message::AudioSetMute(kind, id, muted) => {
-            Task::perform(
-                async move {
-                    tokio::task::spawn_blocking(move || crate::audio::set_mute(kind, id, muted)).await.ok();
-                    tokio::task::spawn_blocking(crate::audio::snapshot).await.unwrap_or_default()
-                },
-                Message::AudioLoaded,
-            )
-        }
+        Message::AudioSetMute(kind, id, muted) => Task::perform(
+            async move {
+                tokio::task::spawn_blocking(move || crate::audio::set_mute(kind, id, muted))
+                    .await
+                    .ok();
+                tokio::task::spawn_blocking(crate::audio::snapshot)
+                    .await
+                    .unwrap_or_default()
+            },
+            Message::AudioLoaded,
+        ),
         Message::AudioSetDefaultSink(name) => Task::perform(
             async move {
-                tokio::task::spawn_blocking(move || crate::audio::set_default_sink(&name)).await.ok();
-                tokio::task::spawn_blocking(crate::audio::snapshot).await.unwrap_or_default()
+                tokio::task::spawn_blocking(move || crate::audio::set_default_sink(&name))
+                    .await
+                    .ok();
+                tokio::task::spawn_blocking(crate::audio::snapshot)
+                    .await
+                    .unwrap_or_default()
             },
             Message::AudioLoaded,
         ),
@@ -730,7 +838,9 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
                 async move {
                     crate::phone_audio::set_volume(&active, stream, percent).await;
                     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-                    crate::phone_audio::get_state(&active).await.unwrap_or_default()
+                    crate::phone_audio::get_state(&active)
+                        .await
+                        .unwrap_or_default()
                 },
                 Message::PhoneAudioLoaded,
             )
@@ -741,7 +851,9 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
                 async move {
                     crate::phone_audio::set_ringer_mode(&active, mode).await;
                     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-                    crate::phone_audio::get_state(&active).await.unwrap_or_default()
+                    crate::phone_audio::get_state(&active)
+                        .await
+                        .unwrap_or_default()
                 },
                 Message::PhoneAudioLoaded,
             )
@@ -752,14 +864,15 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
                 async move {
                     crate::phone_audio::set_dnd(&active, enabled).await;
                     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-                    crate::phone_audio::get_state(&active).await.unwrap_or_default()
+                    crate::phone_audio::get_state(&active)
+                        .await
+                        .unwrap_or_default()
                 },
                 Message::PhoneAudioLoaded,
             )
         }
     }
 }
-
 
 fn subscription(hud: &Hud) -> iced::Subscription<Message> {
     let mut subs = vec![
@@ -771,7 +884,6 @@ fn subscription(hud: &Hud) -> iced::Subscription<Message> {
     }
     iced::Subscription::batch(subs)
 }
-
 
 fn module_screen(hud: &Hud, id: ModuleId) -> Element<'_, Message> {
     let screen: Element<'_, Message> = match id {
@@ -786,9 +898,11 @@ fn module_screen(hud: &Hud, id: ModuleId) -> Element<'_, Message> {
         ModuleId::Track => track_screen(hud),
         ModuleId::Config => config_screen(hud),
     };
-    column![screen].width(Length::Fill).height(Length::Fill).into()
+    column![screen]
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
 }
-
 
 fn view(hud: &Hud) -> Element<'_, Message> {
     i18n::set_current(config::lang(&hud.config));
@@ -798,12 +912,28 @@ fn view(hud: &Hud) -> Element<'_, Message> {
     // "HyprLink" é uma palavra só — HYPR e LINK não podem ter o mesmo
     // espaçamento do ponto de estado, senão lê como duas palavras.
     let wordmark = row![
-        text("HYPR").size(21).font(Font { weight: iced::font::Weight::Bold, ..Font::default() }).color(TEXT),
-        text("LINK").size(21).font(Font { weight: iced::font::Weight::Bold, ..Font::default() }).color(accent),
+        text("HYPR")
+            .size(21)
+            .font(Font {
+                weight: iced::font::Weight::Bold,
+                ..Font::default()
+            })
+            .color(TEXT),
+        text("LINK")
+            .size(21)
+            .font(Font {
+                weight: iced::font::Weight::Bold,
+                ..Font::default()
+            })
+            .color(accent),
     ]
     .spacing(0);
     let logo = row![
-        container(breathing_dot(accent, 8.0, elapsed)).width(14).height(14).align_x(Alignment::Center).align_y(Alignment::Center),
+        container(breathing_dot(accent, 8.0, elapsed))
+            .width(14)
+            .height(14)
+            .align_x(Alignment::Center)
+            .align_y(Alignment::Center),
         wordmark,
     ]
     .spacing(10)
@@ -840,18 +970,36 @@ fn view(hud: &Hud) -> Element<'_, Message> {
     }
     let header_right: Element<'_, Message> = header_right_row.push(close_btn).into();
 
-    let header = row![logo, Space::new().width(Length::Fill), header_right].spacing(8).align_y(Alignment::Center);
+    let header = row![logo, Space::new().width(Length::Fill), header_right]
+        .spacing(8)
+        .align_y(Alignment::Center);
 
     let body: Element<'_, Message> = match (&hud.snapshot.conn, &hud.screen) {
-        (ConnState::Connected { .. }, Screen::Module(id)) => row![module_ruler(*id), module_screen(hud, *id)]
-            .spacing(16)
-            .height(Length::Fill)
-            .into(),
-        (ConnState::Connected { device_name, fingerprint_hex }, Screen::Dashboard) => {
+        (ConnState::Connected { .. }, Screen::Module(id)) => {
+            row![module_ruler(*id), module_screen(hud, *id)]
+                .spacing(16)
+                .height(Length::Fill)
+                .into()
+        }
+        (
+            ConnState::Connected {
+                device_name,
+                fingerprint_hex,
+            },
+            Screen::Dashboard,
+        ) => {
             let connbar = container(
                 column![
-                    text(device_name.clone()).size(14).color(TEXT).font(Font { weight: iced::font::Weight::Bold, ..Font::default() }),
-                    text(format!("TLS emparelhado · fp {}", short_fp(fingerprint_hex))).size(10).color(TEXT_2),
+                    text(device_name.clone()).size(14).color(TEXT).font(Font {
+                        weight: iced::font::Weight::Bold,
+                        ..Font::default()
+                    }),
+                    text(format!(
+                        "TLS emparelhado · fp {}",
+                        short_fp(fingerprint_hex)
+                    ))
+                    .size(10)
+                    .color(TEXT_2),
                 ]
                 .spacing(2),
             )
@@ -865,7 +1013,11 @@ fn view(hud: &Hud) -> Element<'_, Message> {
                     .padding([4, 10])
                     .style(|_, _| button::Style {
                         background: Some(Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.35))),
-                        border: Border { color: GLASS_BRD, width: 1.0, radius: 8.0.into() },
+                        border: Border {
+                            color: GLASS_BRD,
+                            width: 1.0,
+                            radius: 8.0.into()
+                        },
                         text_color: TEXT_2,
                         ..Default::default()
                     })
@@ -874,14 +1026,22 @@ fn view(hud: &Hud) -> Element<'_, Message> {
             .align_y(Alignment::Center);
 
             row![
-                column![connbar, module_list(&hud.download_dir, &hud.snapshot.modules, true)].spacing(14),
+                column![
+                    connbar,
+                    module_list(&hud.download_dir, &hud.snapshot.modules, true)
+                ]
+                .spacing(14),
                 container(column![console_header, console(&hud.console)].spacing(8))
                     .width(Length::Fill)
                     .height(Length::Fill)
                     .padding(18)
                     .style(move |_| container::Style {
                         background: Some(Background::Color(GLASS)),
-                        border: Border { color: Color { a: 0.35, ..accent }, width: 1.0, radius: 14.0.into() },
+                        border: Border {
+                            color: Color { a: 0.35, ..accent },
+                            width: 1.0,
+                            radius: 14.0.into()
+                        },
                         ..Default::default()
                     }),
             ]
@@ -892,20 +1052,34 @@ fn view(hud: &Hud) -> Element<'_, Message> {
         _ => {
             let payload = format!(
                 "{}|{}|{}",
-                hud.snapshot.server_fingerprint_hex, hud.snapshot.local_addr, hud.snapshot.pairing_token_hex
+                hud.snapshot.server_fingerprint_hex,
+                hud.snapshot.local_addr,
+                hud.snapshot.pairing_token_hex
             );
             let pairing_card = container(
                 column![
-                    text(t("APONTE A CÂMARA DO TELEMÓVEL")).size(11).color(TEXT_2),
+                    text(t("APONTE A CÂMARA DO TELEMÓVEL"))
+                        .size(11)
+                        .color(TEXT_2),
                     pairing_qr(&payload),
-                    text(t("Abra o HyprLink no Android e escaneie o código")).size(10).color(TEXT_2),
+                    text(t("Abra o HyprLink no Android e escaneie o código"))
+                        .size(10)
+                        .color(TEXT_2),
                     kv_row(
                         "FINGERPRINT",
                         short_fp(&hud.snapshot.server_fingerprint_hex),
                         hud.snapshot.server_fingerprint_hex.clone(),
                     ),
-                    kv_row("HOST : PORTA", hud.snapshot.local_addr.clone(), hud.snapshot.local_addr.clone()),
-                    kv_row("TOKEN", hud.snapshot.pairing_token_hex.clone(), hud.snapshot.pairing_token_hex.clone()),
+                    kv_row(
+                        "HOST : PORTA",
+                        hud.snapshot.local_addr.clone(),
+                        hud.snapshot.local_addr.clone()
+                    ),
+                    kv_row(
+                        "TOKEN",
+                        hud.snapshot.pairing_token_hex.clone(),
+                        hud.snapshot.pairing_token_hex.clone()
+                    ),
                 ]
                 .spacing(10)
                 .align_x(Alignment::Center),
@@ -917,15 +1091,28 @@ fn view(hud: &Hud) -> Element<'_, Message> {
             .align_y(Alignment::Center)
             .style(|_| container::Style {
                 background: Some(Background::Color(GLASS)),
-                border: Border { color: Color { a: 0.35, ..AMBER }, width: 1.0, radius: 14.0.into() },
+                border: Border {
+                    color: Color { a: 0.35, ..AMBER },
+                    width: 1.0,
+                    radius: 14.0.into(),
+                },
                 ..Default::default()
             });
 
-            row![module_list(&hud.download_dir, &hud.snapshot.modules, false), pairing_card].spacing(14).height(Length::Fill).into()
+            row![
+                module_list(&hud.download_dir, &hud.snapshot.modules, false),
+                pairing_card
+            ]
+            .spacing(14)
+            .height(Length::Fill)
+            .into()
         }
     };
 
-    let content = column![header, body].spacing(14).padding(22).height(Length::Fill);
+    let content = column![header, body]
+        .spacing(14)
+        .padding(22)
+        .height(Length::Fill);
 
     container(content)
         .width(PANEL_W as f32)
@@ -933,14 +1120,24 @@ fn view(hud: &Hud) -> Element<'_, Message> {
         .style(|_| container::Style {
             // alpha mais baixo que o WINDOW_BG do spec (0.82) — valor calibrado
             // ao vivo com o usuário contra o blur real do Hyprland (Fase 2).
-            background: Some(Background::Color(Color { a: 0.62, ..WINDOW_BG })),
-            border: Border { color: WINDOW_BRD, width: 1.0, radius: 28.0.into() },
-            shadow: Shadow { color: Color::from_rgba(0.0, 0.0, 0.0, 0.45), offset: Vector::new(0.0, 12.0), blur_radius: 40.0 },
+            background: Some(Background::Color(Color {
+                a: 0.62,
+                ..WINDOW_BG
+            })),
+            border: Border {
+                color: WINDOW_BRD,
+                width: 1.0,
+                radius: 28.0.into(),
+            },
+            shadow: Shadow {
+                color: Color::from_rgba(0.0, 0.0, 0.0, 0.45),
+                offset: Vector::new(0.0, 12.0),
+                blur_radius: 40.0,
+            },
             ..Default::default()
         })
         .into()
 }
-
 
 /// Botão "×": mata qualquer outra instância órfã do daemon (comum durante
 /// desenvolvimento, quando um `cargo run` anterior fica preso na porta 7443)
@@ -953,15 +1150,23 @@ fn view(hud: &Hud) -> Element<'_, Message> {
 /// a tempo.
 fn kill_other_instances() {
     let my_pid = std::process::id().to_string();
-    let Ok(output) = std::process::Command::new("pgrep").args(["-x", "hyprlink-daemon"]).output() else {
+    let Ok(output) = std::process::Command::new("pgrep")
+        .args(["-x", "hyprlink-daemon"])
+        .output()
+    else {
         return;
     };
     let Ok(text) = String::from_utf8(output.stdout) else {
         return;
     };
-    let others: Vec<&str> = text.lines().filter(|p| !p.is_empty() && *p != my_pid).collect();
+    let others: Vec<&str> = text
+        .lines()
+        .filter(|p| !p.is_empty() && *p != my_pid)
+        .collect();
     for pid in &others {
-        let _ = std::process::Command::new("kill").args(["-TERM", pid]).status();
+        let _ = std::process::Command::new("kill")
+            .args(["-TERM", pid])
+            .status();
     }
     if others.is_empty() {
         return;
@@ -969,13 +1174,17 @@ fn kill_other_instances() {
     std::thread::sleep(Duration::from_millis(500));
     for pid in &others {
         // -0 só testa se o processo ainda existe, não manda sinal nenhum.
-        let ainda_vivo = std::process::Command::new("kill").args(["-0", pid]).status().is_ok_and(|s| s.success());
+        let ainda_vivo = std::process::Command::new("kill")
+            .args(["-0", pid])
+            .status()
+            .is_ok_and(|s| s.success());
         if ainda_vivo {
-            let _ = std::process::Command::new("kill").args(["-9", pid]).status();
+            let _ = std::process::Command::new("kill")
+                .args(["-9", pid])
+                .status();
         }
     }
 }
-
 
 fn short_fp(fp: &str) -> String {
     let clean: String = fp.chars().filter(|c| *c != ':').collect();
@@ -985,14 +1194,12 @@ fn short_fp(fp: &str) -> String {
     format!("{}…{}", &clean[..8], &clean[clean.len() - 8..])
 }
 
-
 fn style(_hud: &Hud, theme: &Theme) -> iced::theme::Style {
     iced::theme::Style {
         background_color: Color::TRANSPARENT,
         text_color: theme.palette().text,
     }
 }
-
 
 pub fn run(
     shared: Arc<Mutex<HudState>>,
@@ -1020,33 +1227,33 @@ pub fn run(
         update,
         view,
     )
-        .title("HyprLink")
-        .style(style)
-        .subscription(subscription)
-        .window(window::Settings {
-            size: iced::Size::new(PANEL_W as f32, PANEL_H as f32),
-            // ponytail: canto superior direito em vez de centralizada — a
-            // cada restart do daemon (frequente durante desenvolvimento) ela
-            // reabre do zero e cobria o terminal. Fixo pra uma tela 1920x1080;
-            // se um dia rodar noutra resolução, mover manualmente (SUPER +
-            // clique esquerdo arrasta, sem barra de título) resolve.
-            position: window::Position::Specific(iced::Point::new(1920.0 - PANEL_W as f32 - 20.0, 20.0)),
-            resizable: false,
-            decorations: false,
-            transparent: true,
-            blur: true,
-            platform_specific: window::settings::PlatformSpecific {
-                application_id: "hyprlink-hud".to_string(),
-                ..Default::default()
-            },
+    .title("HyprLink")
+    .style(style)
+    .subscription(subscription)
+    .window(window::Settings {
+        size: iced::Size::new(PANEL_W as f32, PANEL_H as f32),
+        // ponytail: canto superior direito em vez de centralizada — a
+        // cada restart do daemon (frequente durante desenvolvimento) ela
+        // reabre do zero e cobria o terminal. Fixo pra uma tela 1920x1080;
+        // se um dia rodar noutra resolução, mover manualmente (SUPER +
+        // clique esquerdo arrasta, sem barra de título) resolve.
+        position: window::Position::Specific(iced::Point::new(
+            1920.0 - PANEL_W as f32 - 20.0,
+            20.0,
+        )),
+        resizable: false,
+        decorations: false,
+        transparent: true,
+        blur: true,
+        platform_specific: window::settings::PlatformSpecific {
+            application_id: "hyprlink-hud".to_string(),
             ..Default::default()
-        })
-        .run()
+        },
+        ..Default::default()
+    })
+    .run()
 }
-
 
 const PANEL_W: u32 = 900;
 
-
 const PANEL_H: u32 = 800;
-

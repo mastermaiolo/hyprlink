@@ -8,7 +8,7 @@ use ciborium::Value;
 use zbus::zvariant::OwnedValue;
 use zbus::{Connection, Proxy};
 
-use crate::active::{push, ActiveConn};
+use crate::active::{ActiveConn, push};
 use crate::state::{self, HudState};
 
 const PLAYER_PATH: &str = "/org/mpris/MediaPlayer2";
@@ -20,8 +20,12 @@ const PLAYER_IFACE: &str = "org.mpris.MediaPlayer2.Player";
 /// path" mesmo listado no bus). Consultar os players reais direto é mais
 /// simples e mais robusto.
 async fn candidate_names(conn: &Connection) -> Vec<String> {
-    let Ok(dbus) = zbus::fdo::DBusProxy::new(conn).await else { return Vec::new() };
-    let Ok(names) = dbus.list_names().await else { return Vec::new() };
+    let Ok(dbus) = zbus::fdo::DBusProxy::new(conn).await else {
+        return Vec::new();
+    };
+    let Ok(names) = dbus.list_names().await else {
+        return Vec::new();
+    };
     names
         .into_iter()
         .map(|n| n.to_string())
@@ -36,8 +40,12 @@ async fn best_player(conn: &Connection) -> Option<(String, String)> {
     let names = candidate_names(conn).await;
     let mut fallback = None;
     for name in names {
-        let Ok(proxy) = Proxy::new(conn, name.clone(), PLAYER_PATH, PLAYER_IFACE).await else { continue };
-        let Ok(status) = proxy.get_property::<String>("PlaybackStatus").await else { continue };
+        let Ok(proxy) = Proxy::new(conn, name.clone(), PLAYER_PATH, PLAYER_IFACE).await else {
+            continue;
+        };
+        let Ok(status) = proxy.get_property::<String>("PlaybackStatus").await else {
+            continue;
+        };
         if status == "Playing" {
             return Some((name, status));
         }
@@ -66,9 +74,15 @@ pub async fn handle_command(cmd: &str) {
         "previous" => "Previous",
         _ => return,
     };
-    let Ok(conn) = Connection::session().await else { return };
-    let Some((name, _)) = best_player(&conn).await else { return };
-    let Ok(proxy) = Proxy::new(&conn, name, PLAYER_PATH, PLAYER_IFACE).await else { return };
+    let Ok(conn) = Connection::session().await else {
+        return;
+    };
+    let Some((name, _)) = best_player(&conn).await else {
+        return;
+    };
+    let Ok(proxy) = Proxy::new(&conn, name, PLAYER_PATH, PLAYER_IFACE).await else {
+        return;
+    };
     let _: Result<(), _> = proxy.call(method, &()).await;
 }
 
@@ -93,8 +107,11 @@ struct NowPlaying {
 
 async fn snapshot(conn: &Connection) -> Option<NowPlaying> {
     let (name, status) = best_player(conn).await?;
-    let proxy = Proxy::new(conn, name.clone(), PLAYER_PATH, PLAYER_IFACE).await.ok()?;
-    let meta: HashMap<String, OwnedValue> = proxy.get_property("Metadata").await.unwrap_or_default();
+    let proxy = Proxy::new(conn, name.clone(), PLAYER_PATH, PLAYER_IFACE)
+        .await
+        .ok()?;
+    let meta: HashMap<String, OwnedValue> =
+        proxy.get_property("Metadata").await.unwrap_or_default();
     let player = name
         .trim_start_matches("org.mpris.MediaPlayer2.")
         .split('.')
@@ -129,7 +146,11 @@ fn to_body(np: &NowPlaying) -> Value {
 
 /// Poll baixo (2s) do player MPRIS ativo, empurra `media.state` só quando
 /// algo muda de verdade.
-pub async fn poll_and_push(active: ActiveConn, hud: Arc<Mutex<HudState>>, dbus: Option<Connection>) {
+pub async fn poll_and_push(
+    active: ActiveConn,
+    hud: Arc<Mutex<HudState>>,
+    dbus: Option<Connection>,
+) {
     let mut last_key: Option<(String, String, Option<String>)> = None;
     loop {
         if let Some(conn) = &dbus {
@@ -170,11 +191,16 @@ mod tests {
     #[ignore]
     async fn manual_snapshot() {
         let conn = Connection::session().await.expect("D-Bus de sessão");
-        let np = snapshot(&conn).await.expect("nenhum player MPRIS respondeu");
+        let np = snapshot(&conn)
+            .await
+            .expect("nenhum player MPRIS respondeu");
         println!(
             "player={} status={} title={:?} artist={:?} album={:?}",
             np.player, np.status, np.title, np.artist, np.album
         );
-        assert!(np.title.is_some(), "esperava título com um player real tocando/pausado");
+        assert!(
+            np.title.is_some(),
+            "esperava título com um player real tocando/pausado"
+        );
     }
 }

@@ -20,14 +20,14 @@ mod speaker;
 mod state;
 mod tap;
 mod theme;
-mod tray;
 mod tls_verifier;
+mod tray;
 mod webcam;
 
 use std::sync::{Arc, Mutex};
 
-use qrcode::render::unicode;
 use qrcode::QrCode;
+use qrcode::render::unicode;
 
 const PORT: u16 = 7443;
 
@@ -37,7 +37,11 @@ fn main() -> anyhow::Result<()> {
     let local_ip = local_ip_guess();
 
     let token_hex = pairing.lock().unwrap().current_token_hex.clone();
-    let hud = state::HudState::new(format!("{local_ip}:{PORT}"), identity.fingerprint_hex.clone(), token_hex.clone());
+    let hud = state::HudState::new(
+        format!("{local_ip}:{PORT}"),
+        identity.fingerprint_hex.clone(),
+        token_hex.clone(),
+    );
     let config = config::load();
     // Sessão anterior morreu com o modo coluna ativo? Devolve o som do PC
     // ao sink original antes de qualquer outra coisa — sem isto, o PC
@@ -74,13 +78,31 @@ fn main() -> anyhow::Result<()> {
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().expect("falha ao criar runtime tokio");
             rt.block_on(run_daemon(
-                identity, pairing, hud, config, active, pending_webcam, tray_show, tap_handle, speaker_handle, local_ip,
+                identity,
+                pairing,
+                hud,
+                config,
+                active,
+                pending_webcam,
+                tray_show,
+                tap_handle,
+                speaker_handle,
+                local_ip,
             ));
         });
     }
 
-    gui::run(hud, config, active, pending_webcam, tray_show, pairing_for_gui, tap_handle, speaker_handle)
-        .map_err(|e| anyhow::anyhow!("erro na GUI: {e}"))
+    gui::run(
+        hud,
+        config,
+        active,
+        pending_webcam,
+        tray_show,
+        pairing_for_gui,
+        tap_handle,
+        speaker_handle,
+    )
+    .map_err(|e| anyhow::anyhow!("erro na GUI: {e}"))
 }
 
 async fn run_daemon(
@@ -95,7 +117,9 @@ async fn run_daemon(
     speaker_handle: speaker::SpeakerHandle,
     local_ip: std::net::IpAddr,
 ) {
-    let addr: std::net::SocketAddr = format!("0.0.0.0:{PORT}").parse().expect("porta fixa válida");
+    let addr: std::net::SocketAddr = format!("0.0.0.0:{PORT}")
+        .parse()
+        .expect("porta fixa válida");
     let _ = local_ip;
     let endpoint = match server::build_endpoint(&identity, addr) {
         Ok(e) => e,
@@ -107,13 +131,25 @@ async fn run_daemon(
     // Uma sessão D-Bus só, reusada por notif.rs/media.rs (ver `Ctx::dbus`) —
     // criada aqui (não em Ctx::new, que é síncrona) porque conectar é async.
     let dbus = zbus::Connection::session().await.ok();
-    let ctx = server::Ctx::new(hud, config, active, pending_webcam, dbus, tap_handle, speaker_handle);
+    let ctx = server::Ctx::new(
+        hud,
+        config,
+        active,
+        pending_webcam,
+        dbus,
+        tap_handle,
+        speaker_handle,
+    );
     server::spawn_background_tasks(ctx.clone());
     tokio::spawn(tray::spawn(tray_show));
     server::run(endpoint, pairing, ctx).await;
 }
 
-fn print_terminal_qr(fingerprint_hex: &str, local_ip: std::net::IpAddr, token_hex: &str) -> anyhow::Result<()> {
+fn print_terminal_qr(
+    fingerprint_hex: &str,
+    local_ip: std::net::IpAddr,
+    token_hex: &str,
+) -> anyhow::Result<()> {
     let qr_payload = format!("{fingerprint_hex}|{local_ip}:{PORT}|{token_hex}");
 
     println!("{}", "=".repeat(60));
@@ -127,7 +163,9 @@ fn print_terminal_qr(fingerprint_hex: &str, local_ip: std::net::IpAddr, token_he
     let code = QrCode::new(qr_payload.as_bytes())?;
     let qr_ascii = code.render::<unicode::Dense1x2>().quiet_zone(true).build();
     println!("{qr_ascii}");
-    println!("\n[+] Aponte a câmara do app HyprLink para o QR Code acima, ou use a GUI que vai abrir.\n");
+    println!(
+        "\n[+] Aponte a câmara do app HyprLink para o QR Code acima, ou use a GUI que vai abrir.\n"
+    );
     Ok(())
 }
 

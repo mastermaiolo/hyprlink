@@ -41,19 +41,23 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app::AppSrc;
 
-use crate::active::{push, ActiveConn};
-use crate::state::{self, push_log, HudState};
+use crate::active::{ActiveConn, push};
+use crate::state::{self, HudState, push_log};
 
 /// Pede pro telemóvel ligar/desligar o mic dele (botão na GUI do PC) —
 /// equivalente a tocar o botão por lá; o telemóvel decide se aceita (ex:
 /// permissão concedida) e o `webcam.mic_start`/uni-stream normal segue
 /// depois por conta dele, sem resposta direta a este pedido.
 pub async fn request_start(active: &ActiveConn) -> bool {
-    push(active, "webcam.mic_start_request", None).await.is_some()
+    push(active, "webcam.mic_start_request", None)
+        .await
+        .is_some()
 }
 
 pub async fn request_stop(active: &ActiveConn) -> bool {
-    push(active, "webcam.mic_stop_request", None).await.is_some()
+    push(active, "webcam.mic_stop_request", None)
+        .await
+        .is_some()
 }
 
 pub type MicHandle = Arc<Mutex<Option<gst::Pipeline>>>;
@@ -98,7 +102,10 @@ pub async fn feed(mut recv: quinn::RecvStream, handle: MicHandle, hud: Arc<Mutex
             Ok(Ok(None)) => break,
             Ok(Err(_)) => break,
             Err(_) => {
-                push_log(&hud, "[!] microfone: sem dados há 15s, encerrando stream travado".to_string());
+                push_log(
+                    &hud,
+                    "[!] microfone: sem dados há 15s, encerrando stream travado".to_string(),
+                );
                 break;
             }
         };
@@ -108,7 +115,13 @@ pub async fn feed(mut recv: quinn::RecvStream, handle: MicHandle, hud: Arc<Mutex
         }
     }
     drop(tx); // sinaliza fim pra thread do GStreamer
-    push_log(&hud, format!("[i] microfone: stream encerrado ({} KB recebidos)", total / 1024));
+    push_log(
+        &hud,
+        format!(
+            "[i] microfone: stream encerrado ({} KB recebidos)",
+            total / 1024
+        ),
+    );
     let _ = gst_thread.join();
 }
 
@@ -117,7 +130,10 @@ pub async fn feed(mut recv: quinn::RecvStream, handle: MicHandle, hud: Arc<Mutex
 /// canal, e limpa tudo quando o canal fecha (rede encerrou).
 fn run_gst_thread(rx: Receiver<Vec<u8>>, handle: MicHandle, hud: Arc<Mutex<HudState>>) {
     if let Err(e) = gst::init() {
-        push_log(&hud, format!("[!] microfone: GStreamer não inicializou: {e}"));
+        push_log(
+            &hud,
+            format!("[!] microfone: GStreamer não inicializou: {e}"),
+        );
         return;
     }
 
@@ -138,12 +154,21 @@ fn run_gst_thread(rx: Receiver<Vec<u8>>, handle: MicHandle, hud: Arc<Mutex<HudSt
             }
         },
         Err(e) => {
-            push_log(&hud, format!("[!] microfone: falha ao montar o pipeline: {e}"));
+            push_log(
+                &hud,
+                format!("[!] microfone: falha ao montar o pipeline: {e}"),
+            );
             return;
         }
     };
-    let Some(appsrc) = pipeline.by_name("src").and_then(|e| e.downcast::<AppSrc>().ok()) else {
-        push_log(&hud, "[!] microfone: appsrc não encontrado no pipeline".to_string());
+    let Some(appsrc) = pipeline
+        .by_name("src")
+        .and_then(|e| e.downcast::<AppSrc>().ok())
+    else {
+        push_log(
+            &hud,
+            "[!] microfone: appsrc não encontrado no pipeline".to_string(),
+        );
         return;
     };
 
@@ -155,12 +180,19 @@ fn run_gst_thread(rx: Receiver<Vec<u8>>, handle: MicHandle, hud: Arc<Mutex<HudSt
     pipeline.use_clock(None::<&gst::Clock>);
 
     if pipeline.set_state(gst::State::Playing).is_err() {
-        push_log(&hud, "[!] microfone: não foi possível iniciar o pipeline".to_string());
+        push_log(
+            &hud,
+            "[!] microfone: não foi possível iniciar o pipeline".to_string(),
+        );
         return;
     }
     *handle.lock().unwrap() = Some(pipeline.clone());
     state::set_mic_active(&hud, true);
-    push_log(&hud, "[+] microfone: stream iniciado — selecione \"HyprLink-Mic\" como entrada de áudio".to_string());
+    push_log(
+        &hud,
+        "[+] microfone: stream iniciado — selecione \"HyprLink-Mic\" como entrada de áudio"
+            .to_string(),
+    );
 
     // timed_pop + Weak em vez de iter_timed(NONE): um stop limpo não posta
     // Eos/Error, então a versão antiga deixava esta thread presa pra sempre;
@@ -169,21 +201,30 @@ fn run_gst_thread(rx: Receiver<Vec<u8>>, handle: MicHandle, hud: Arc<Mutex<HudSt
         let pipeline_weak = pipeline.downgrade();
         let handle_bus = handle.clone();
         let hud_bus = hud.clone();
-        std::thread::spawn(move || loop {
-            let Some(msg) = bus.timed_pop(gst::ClockTime::from_seconds(1)) else {
-                if pipeline_weak.upgrade().is_none() {
-                    break;
+        std::thread::spawn(move || {
+            loop {
+                let Some(msg) = bus.timed_pop(gst::ClockTime::from_seconds(1)) else {
+                    if pipeline_weak.upgrade().is_none() {
+                        break;
+                    }
+                    continue;
+                };
+                match msg.view() {
+                    gst::MessageView::Error(err) => {
+                        push_log(
+                            &hud_bus,
+                            format!(
+                                "[!] microfone: erro no pipeline GStreamer: {} ({:?})",
+                                err.error(),
+                                err.debug()
+                            ),
+                        );
+                        stop(&handle_bus, &hud_bus);
+                        break;
+                    }
+                    gst::MessageView::Eos(_) => break,
+                    _ => {}
                 }
-                continue;
-            };
-            match msg.view() {
-                gst::MessageView::Error(err) => {
-                    push_log(&hud_bus, format!("[!] microfone: erro no pipeline GStreamer: {} ({:?})", err.error(), err.debug()));
-                    stop(&handle_bus, &hud_bus);
-                    break;
-                }
-                gst::MessageView::Eos(_) => break,
-                _ => {}
             }
         });
     }

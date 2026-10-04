@@ -41,7 +41,11 @@ struct PaSinkInput {
 }
 
 fn run(args: &[&str]) -> bool {
-    Command::new("pactl").args(args).output().map(|o| o.status.success()).unwrap_or(false)
+    Command::new("pactl")
+        .args(args)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 fn run_text(args: &[&str]) -> String {
@@ -59,8 +63,10 @@ fn run_json<T: serde::de::DeserializeOwned>(args: &[&str]) -> Vec<T> {
 }
 
 fn avg_percent(volume: &PaVolume) -> i64 {
-    let vals: Vec<i64> =
-        volume.values().filter_map(|c| c.value_percent.trim_end_matches('%').parse().ok()).collect();
+    let vals: Vec<i64> = volume
+        .values()
+        .filter_map(|c| c.value_percent.trim_end_matches('%').parse().ok())
+        .collect();
     if vals.is_empty() {
         100
     } else {
@@ -146,7 +152,11 @@ pub fn snapshot() -> AudioSnapshot {
         })
         .collect();
 
-    AudioSnapshot { default_sink, sinks, apps }
+    AudioSnapshot {
+        default_sink,
+        sinks,
+        apps,
+    }
 }
 
 /// `audio.state_reply`: sinks (saídas de som) + apps (streams por aplicação).
@@ -159,8 +169,14 @@ pub fn state_body() -> Value {
             Value::Map(vec![
                 (Value::Text("id".into()), Value::Integer(s.id.into())),
                 (Value::Text("name".into()), Value::Text(s.name.clone())),
-                (Value::Text("description".into()), Value::Text(s.description.clone())),
-                (Value::Text("volume".into()), Value::Integer(s.volume.into())),
+                (
+                    Value::Text("description".into()),
+                    Value::Text(s.description.clone()),
+                ),
+                (
+                    Value::Text("volume".into()),
+                    Value::Integer(s.volume.into()),
+                ),
                 (Value::Text("muted".into()), Value::Bool(s.muted)),
                 (Value::Text("is_default".into()), Value::Bool(s.is_default)),
                 (Value::Text("is_phone".into()), Value::Bool(s.is_phone)),
@@ -177,15 +193,24 @@ pub fn state_body() -> Value {
                 (Value::Text("id".into()), Value::Integer(a.id.into())),
                 (Value::Text("name".into()), Value::Text(a.name.clone())),
                 (Value::Text("media".into()), media),
-                (Value::Text("volume".into()), Value::Integer(a.volume.into())),
+                (
+                    Value::Text("volume".into()),
+                    Value::Integer(a.volume.into()),
+                ),
                 (Value::Text("muted".into()), Value::Bool(a.muted)),
-                (Value::Text("sink_id".into()), Value::Integer(a.sink_id.into())),
+                (
+                    Value::Text("sink_id".into()),
+                    Value::Integer(a.sink_id.into()),
+                ),
             ])
         })
         .collect();
 
     Value::Map(vec![
-        (Value::Text("default_sink".into()), Value::Text(s.default_sink)),
+        (
+            Value::Text("default_sink".into()),
+            Value::Text(s.default_sink),
+        ),
         (Value::Text("sinks".into()), Value::Array(sinks_val)),
         (Value::Text("apps".into()), Value::Array(apps_val)),
     ])
@@ -239,8 +264,16 @@ mod tests {
     fn manual_state() {
         let body = state_body();
         println!("{body:#?}");
-        let Value::Map(pairs) = &body else { panic!("esperava um mapa") };
-        let sinks = pairs.iter().find(|(k, _)| k.as_text() == Some("sinks")).map(|(_, v)| v);
-        assert!(matches!(sinks, Some(Value::Array(v)) if !v.is_empty()), "esperava pelo menos um sink real");
+        let Value::Map(pairs) = &body else {
+            panic!("esperava um mapa")
+        };
+        let sinks = pairs
+            .iter()
+            .find(|(k, _)| k.as_text() == Some("sinks"))
+            .map(|(_, v)| v);
+        assert!(
+            matches!(sinks, Some(Value::Array(v)) if !v.is_empty()),
+            "esperava pelo menos um sink real"
+        );
     }
 }

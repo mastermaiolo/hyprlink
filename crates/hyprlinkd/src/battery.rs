@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use ciborium::Value;
 
-use crate::active::{push, ActiveConn};
+use crate::active::{ActiveConn, push};
 use crate::state::{self, HudState};
 
 /// `(nível 0-100, a carregar)` — `None` se a máquina não tiver bateria

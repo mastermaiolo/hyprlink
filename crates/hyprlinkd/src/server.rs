@@ -13,11 +13,11 @@ use crate::active::{self, ActiveConn};
 use crate::clip::{self, LastLocalSet};
 use crate::config::{self, SharedConfig};
 use crate::ctl;
-use crate::identity::{fingerprint_der, ServerIdentity};
+use crate::identity::{ServerIdentity, fingerprint_der};
 use crate::input::InputDevice;
 use crate::notif;
 use crate::pairing::PairingStore;
-use crate::protocol::{body_get_bytes, body_get_str, read_frame, write_frame, Packet};
+use crate::protocol::{Packet, body_get_bytes, body_get_str, read_frame, write_frame};
 use crate::share;
 use crate::state::{self, HudState};
 use crate::tls_verifier::AcceptAnyClientCert;
@@ -86,7 +86,10 @@ impl Ctx {
     }
 }
 
-pub fn build_endpoint(identity: &ServerIdentity, addr: SocketAddr) -> anyhow::Result<quinn::Endpoint> {
+pub fn build_endpoint(
+    identity: &ServerIdentity,
+    addr: SocketAddr,
+) -> anyhow::Result<quinn::Endpoint> {
     let provider = rustls::crypto::ring::default_provider();
     let _ = provider.clone().install_default(); // ok se outro código já instalou
 
@@ -96,7 +99,10 @@ pub fn build_endpoint(identity: &ServerIdentity, addr: SocketAddr) -> anyhow::Re
         .with_protocol_versions(&[&rustls::version::TLS13])
         .expect("TLS 1.3 é sempre suportado pelo provider ring")
         .with_client_cert_verifier(verifier)
-        .with_single_cert(vec![identity.cert_der.clone()], identity.key_der.clone_key())?;
+        .with_single_cert(
+            vec![identity.cert_der.clone()],
+            identity.key_der.clone_key(),
+        )?;
     tls_config.alpn_protocols = vec![b"hyprlink/1".to_vec()];
     // ponytail: 0-RTT (max_early_data_size = MAX) permite ao cliente retomar
     // sessão sem reapresentar o certificado — mTLS é obrigatório aqui, e o
@@ -133,12 +139,28 @@ pub fn build_endpoint(identity: &ServerIdentity, addr: SocketAddr) -> anyhow::Re
 /// de estar ou não conectado no momento (elas checam `ctx.active` sozinhas) —
 /// chamado uma vez, na subida do daemon.
 pub fn spawn_background_tasks(ctx: Ctx) {
-    tokio::spawn(clip::watch(ctx.active.clone(), ctx.clip_guard.clone(), ctx.hud.clone()));
-    tokio::spawn(clip::watch_images(ctx.active.clone(), ctx.clip_img.clone(), ctx.hud.clone()));
+    tokio::spawn(clip::watch(
+        ctx.active.clone(),
+        ctx.clip_guard.clone(),
+        ctx.hud.clone(),
+    ));
+    tokio::spawn(clip::watch_images(
+        ctx.active.clone(),
+        ctx.clip_img.clone(),
+        ctx.hud.clone(),
+    ));
     tokio::spawn(hypr::watch_events(ctx.active.clone(), ctx.hud.clone()));
     tokio::spawn(battery::poll_and_push(ctx.active.clone(), ctx.hud.clone()));
-    tokio::spawn(media::poll_and_push(ctx.active.clone(), ctx.hud.clone(), ctx.dbus.clone()));
-    tokio::spawn(notif::watch(ctx.active.clone(), ctx.notif.clone(), ctx.hud.clone()));
+    tokio::spawn(media::poll_and_push(
+        ctx.active.clone(),
+        ctx.hud.clone(),
+        ctx.dbus.clone(),
+    ));
+    tokio::spawn(notif::watch(
+        ctx.active.clone(),
+        ctx.notif.clone(),
+        ctx.hud.clone(),
+    ));
     // Camada de ecossistema (hyprlinkctl/Waybar): socket de comandos +
     // status.json no $XDG_RUNTIME_DIR (ver ctl.rs).
     tokio::spawn(ctl::serve(ctl::Ctl {
@@ -172,7 +194,11 @@ pub async fn run(endpoint: quinn::Endpoint, pairing: Arc<Mutex<PairingStore>>, c
     }
 }
 
-async fn handle_connection(incoming: quinn::Incoming, pairing: Arc<Mutex<PairingStore>>, ctx: Ctx) -> anyhow::Result<()> {
+async fn handle_connection(
+    incoming: quinn::Incoming,
+    pairing: Arc<Mutex<PairingStore>>,
+    ctx: Ctx,
+) -> anyhow::Result<()> {
     let connection = incoming.await?;
     let peer_fingerprint = peer_cert_fingerprint(&connection)
         .ok_or_else(|| anyhow::anyhow!("cliente não apresentou certificado (mTLS obrigatório)"))?;
@@ -185,7 +211,10 @@ async fn handle_connection(incoming: quinn::Incoming, pairing: Arc<Mutex<Pairing
     let frame = read_frame(&mut recv).await?;
     let hello = Packet::decode(&frame)?;
     if hello.kind != "core.hello" {
-        anyhow::bail!("primeiro pacote não foi core.hello (recebido: {})", hello.kind);
+        anyhow::bail!(
+            "primeiro pacote não foi core.hello (recebido: {})",
+            hello.kind
+        );
     }
 
     let device_name = hello
@@ -217,7 +246,10 @@ async fn handle_connection(incoming: quinn::Incoming, pairing: Arc<Mutex<Pairing
 
     println!("[+] core.hello de '{device_name}' — dispositivo autorizado");
     state::set_connected(&ctx.hud, device_name.clone(), peer_fingerprint.clone());
-    state::push_log(&ctx.hud, format!("[+] core.hello autorizado · {device_name}"));
+    state::push_log(
+        &ctx.hud,
+        format!("[+] core.hello autorizado · {device_name}"),
+    );
     active::set(&ctx.active, connection.clone());
 
     let reply_body = {
@@ -322,7 +354,15 @@ async fn route_uni_stream(mut recv: quinn::RecvStream, ctx: Ctx) {
     } else if clip_img_res {
         clip::receive_image_stream(recv, ctx.clip_img.clone(), ctx.hud.clone()).await;
     } else {
-        share::receive_uni_stream(recv, id, ctx.incoming_files.clone(), ctx.active.clone(), ctx.hud.clone(), ctx.config.clone()).await;
+        share::receive_uni_stream(
+            recv,
+            id,
+            ctx.incoming_files.clone(),
+            ctx.active.clone(),
+            ctx.hud.clone(),
+            ctx.config.clone(),
+        )
+        .await;
     }
 }
 
@@ -360,9 +400,14 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
             // NÃO fazer return aqui: o finish() no fim do handler é o que
             // destrava o app (ele bloqueia lendo a bidi até EOF —
             // PROTOCOL.md §4).
-            if body.and_then(|b| body_get_str(b, "mime")).as_deref() == Some("image/png") && packet.has_payload {
+            if body.and_then(|b| body_get_str(b, "mime")).as_deref() == Some("image/png")
+                && packet.has_payload
+            {
                 *ctx.pending_clip.lock().unwrap() = Some(packet.id);
-                state::push_log(hud, "[i] clipboard.set · telemóvel → PC · imagem anunciada".to_string());
+                state::push_log(
+                    hud,
+                    "[i] clipboard.set · telemóvel → PC · imagem anunciada".to_string(),
+                );
             } else if let Some(text) = body.and_then(|b| body_get_str(b, "text")) {
                 clip::set_from_remote(text, &ctx.clip_guard).await;
                 state::push_clip_entry(hud, "telemóvel → PC", text.to_string());
@@ -372,21 +417,48 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
 
         "hypr.workspaces" => {
             let data = hypr::workspaces_json();
-            reply(&mut send, packet.id, "hypr.workspaces_state", Some(ok_data(data))).await;
+            reply(
+                &mut send,
+                packet.id,
+                "hypr.workspaces_state",
+                Some(ok_data(data)),
+            )
+            .await;
         }
         "hypr.clients" => {
             let data = hypr::clients_json();
-            reply(&mut send, packet.id, "hypr.clients_state", Some(ok_data(data))).await;
+            reply(
+                &mut send,
+                packet.id,
+                "hypr.clients_state",
+                Some(ok_data(data)),
+            )
+            .await;
         }
         "hypr.dispatch" => {
-            let cmd = body.and_then(|b| body_get_str(b, "cmd")).unwrap_or("").to_string();
+            let cmd = body
+                .and_then(|b| body_get_str(b, "cmd"))
+                .unwrap_or("")
+                .to_string();
             let data = hypr::dispatch(&cmd);
             state::push_log(hud, format!("[i] hypr.dispatch {cmd}"));
-            reply(&mut send, packet.id, "hypr.dispatch_result", Some(ok_data(data))).await;
+            reply(
+                &mut send,
+                packet.id,
+                "hypr.dispatch_result",
+                Some(ok_data(data)),
+            )
+            .await;
         }
 
         "audio.state" => {
-            reply(&mut send, packet.id, "audio.state_reply", Some(audio::state_body())).await;
+            reply(
+                &mut send,
+                packet.id,
+                "audio.state_reply",
+                Some(audio::state_body()),
+            )
+            .await;
         }
         "audio.set_volume" => {
             if let (Some(kind), Some(id), Some(volume)) = (
@@ -402,7 +474,8 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
             if let (Some(kind), Some(id), Some(muted)) = (
                 body.and_then(|b| body_get_str(b, "kind")),
                 body.and_then(|b| crate::protocol::body_get_i64(b, "id")),
-                body.and_then(|b| crate::protocol::body_get(b, "muted")).and_then(|v| v.as_bool()),
+                body.and_then(|b| crate::protocol::body_get(b, "muted"))
+                    .and_then(|v| v.as_bool()),
             ) {
                 audio::set_mute(kind, id, muted);
             }
@@ -432,7 +505,12 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                 } else {
                     None
                 };
-                tokio::spawn(crate::tap::start(connection, sink, ctx.tap.clone(), ctx.hud.clone()));
+                tokio::spawn(crate::tap::start(
+                    connection,
+                    sink,
+                    ctx.tap.clone(),
+                    ctx.hud.clone(),
+                ));
             }
             return; // já fechou o stream de controlo acima
         }
@@ -442,52 +520,89 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
         }
 
         "webcam.error" => {
-            let message = body.and_then(|b| body_get_str(b, "message")).unwrap_or("erro desconhecido");
+            let message = body
+                .and_then(|b| body_get_str(b, "message"))
+                .unwrap_or("erro desconhecido");
             state::push_log(hud, format!("[!] webcam (telemóvel): {message}"));
             webcam::stop(&ctx.webcam, hud);
         }
         "webcam.transform" => {
             if let (Some(rotation), Some(mirror)) = (
                 body.and_then(|b| crate::protocol::body_get_i64(b, "rotation")),
-                body.and_then(|b| crate::protocol::body_get(b, "mirror")).and_then(|v| v.as_bool()),
+                body.and_then(|b| crate::protocol::body_get(b, "mirror"))
+                    .and_then(|v| v.as_bool()),
             ) {
                 webcam::apply_transform(&ctx.webcam, rotation, mirror);
             }
         }
         "webcam.mic_start" => {
             *ctx.pending_mic.lock().unwrap() = Some(packet.id);
-            state::push_log(hud, "[i] microfone: telemóvel anunciou stream de áudio".to_string());
+            state::push_log(
+                hud,
+                "[i] microfone: telemóvel anunciou stream de áudio".to_string(),
+            );
         }
         "webcam.mic_stop" => {
             crate::mic::stop(&ctx.mic, hud);
         }
 
         "battery.request" => {
-            reply(&mut send, packet.id, "battery.state", Some(battery::state_body())).await;
+            reply(
+                &mut send,
+                packet.id,
+                "battery.state",
+                Some(battery::state_body()),
+            )
+            .await;
         }
         "battery.state" => {
             if let (Some(level), Some(charging)) = (
                 body.and_then(|b| crate::protocol::body_get_i64(b, "level")),
-                body.and_then(|b| crate::protocol::body_get(b, "charging")).and_then(|v| v.as_bool()),
+                body.and_then(|b| crate::protocol::body_get(b, "charging"))
+                    .and_then(|v| v.as_bool()),
             ) {
                 let previous = state::phone_battery_pct(hud);
                 state::set_phone_battery(hud, level);
-                state::push_log(hud, format!("[i] bateria do telemóvel: {level}% · carregando={charging}"));
+                state::push_log(
+                    hud,
+                    format!("[i] bateria do telemóvel: {level}% · carregando={charging}"),
+                );
 
                 // Alertas do BATT (CONFIG do usuário) — dispara só na transição
                 // pro limiar, não a cada battery.state enquanto já está lá.
                 let alerts = config::battery_alerts(&ctx.config);
                 if alerts.low && level <= 20 && previous.is_none_or(|p| p > 20) {
-                    notif::post("HyprLink", "Bateria do telemóvel baixa", &format!("{level}% restantes"), "hyprlink-batt-low", &[], &ctx.notif, &ctx.dbus).await;
+                    notif::post(
+                        "HyprLink",
+                        "Bateria do telemóvel baixa",
+                        &format!("{level}% restantes"),
+                        "hyprlink-batt-low",
+                        &[],
+                        &ctx.notif,
+                        &ctx.dbus,
+                    )
+                    .await;
                 }
                 if alerts.full && level >= 100 && previous.is_none_or(|p| p < 100) {
-                    notif::post("HyprLink", "Telemóvel carregado", "Bateria a 100%", "hyprlink-batt-full", &[], &ctx.notif, &ctx.dbus).await;
+                    notif::post(
+                        "HyprLink",
+                        "Telemóvel carregado",
+                        "Bateria a 100%",
+                        "hyprlink-batt-full",
+                        &[],
+                        &ctx.notif,
+                        &ctx.dbus,
+                    )
+                    .await;
                 }
             }
         }
 
         "media.command" => {
-            let cmd = body.and_then(|b| body_get_str(b, "command")).unwrap_or("").to_string();
+            let cmd = body
+                .and_then(|b| body_get_str(b, "command"))
+                .unwrap_or("")
+                .to_string();
             media::handle_command(&cmd).await;
         }
 
@@ -505,7 +620,9 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                                 let idx = crate::protocol::body_get(item, "idx")?
                                     .as_integer()
                                     .and_then(|i| i64::try_from(i).ok())?;
-                                let label = crate::protocol::body_get(item, "label")?.as_text()?.to_string();
+                                let label = crate::protocol::body_get(item, "label")?
+                                    .as_text()?
+                                    .to_string();
                                 Some((idx, label))
                             })
                             .collect()
@@ -531,7 +648,8 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                 // ponytail: "aceleração" é só um multiplicador extra fixo, não
                 // uma curva real (ver TrackSettings) — bom o bastante por ora.
                 let mult = t.sensitivity * if t.acceleration { 1.6 } else { 1.0 };
-                ctx.input.move_relative((dx as f32 * mult) as i32, (dy as f32 * mult) as i32);
+                ctx.input
+                    .move_relative((dx as f32 * mult) as i32, (dy as f32 * mult) as i32);
             }
         }
         "input.scroll" => {
@@ -541,11 +659,16 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
             ) {
                 let t = config::track_settings(&ctx.config);
                 let sign = if t.invert_scroll { -1.0 } else { 1.0 };
-                ctx.input.scroll((dx as f32 * t.scroll_speed * sign) as i32, (dy as f32 * t.scroll_speed * sign) as i32);
+                ctx.input.scroll(
+                    (dx as f32 * t.scroll_speed * sign) as i32,
+                    (dy as f32 * t.scroll_speed * sign) as i32,
+                );
             }
         }
         "input.click" => {
-            let button = body.and_then(|b| body_get_str(b, "button")).unwrap_or("left");
+            let button = body
+                .and_then(|b| body_get_str(b, "button"))
+                .unwrap_or("left");
             ctx.input.click(button);
         }
         "input.type" => {
@@ -567,7 +690,10 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
             if let Some(b) = body {
                 let name = body_get_str(b, "name").unwrap_or("arquivo").to_string();
                 let size = crate::protocol::body_get_i64(b, "size").unwrap_or(0).max(0) as u64;
-                state::push_log(hud, format!("[i] share.file · recebendo {name} ({size} bytes)"));
+                state::push_log(
+                    hud,
+                    format!("[i] share.file · recebendo {name} ({size} bytes)"),
+                );
                 share::announce_incoming(packet.id, name, size, &ctx.incoming_files);
             }
         }
@@ -594,7 +720,10 @@ async fn reply(send: &mut quinn::SendStream, id: u64, kind: &str, body: Option<V
 }
 
 fn ok_data(data: String) -> Value {
-    Value::Map(vec![(Value::Text("ok".into()), Value::Bool(true)), (Value::Text("data".into()), Value::Text(data))])
+    Value::Map(vec![
+        (Value::Text("ok".into()), Value::Bool(true)),
+        (Value::Text("data".into()), Value::Text(data)),
+    ])
 }
 
 fn ok_bool(ok: bool) -> Value {
@@ -613,7 +742,11 @@ fn peer_cert_fingerprint(connection: &quinn::Connection) -> Option<String> {
 fn hostname() -> String {
     std::env::var("HOSTNAME")
         .ok()
-        .or_else(|| std::fs::read_to_string("/etc/hostname").ok().map(|s| s.trim().to_string()))
+        .or_else(|| {
+            std::fs::read_to_string("/etc/hostname")
+                .ok()
+                .map(|s| s.trim().to_string())
+        })
         .unwrap_or_else(|| "HyprLink-Desktop".to_string())
 }
 
@@ -621,13 +754,18 @@ fn hostname() -> String {
 /// heurística do `local_ip_guess` do main. Best-effort: falha silenciosa
 /// vira campo ausente (a app só oferece WoL quando tem MAC gravado).
 fn default_iface_mac() -> Option<String> {
-    let out = std::process::Command::new("ip").args(["-o", "route", "get", "10.255.255.255"]).output().ok()?;
+    let out = std::process::Command::new("ip")
+        .args(["-o", "route", "get", "10.255.255.255"])
+        .output()
+        .ok()?;
     if !out.status.success() {
         return None;
     }
     let line = String::from_utf8_lossy(&out.stdout);
     let mut tokens = line.split_whitespace();
-    let iface = tokens.position(|t| t == "dev").and_then(|_| tokens.next())?;
+    let iface = tokens
+        .position(|t| t == "dev")
+        .and_then(|_| tokens.next())?;
     let mac = std::fs::read_to_string(format!("/sys/class/net/{iface}/address")).ok()?;
     let mac = mac.trim().to_string();
     (mac.len() == 17).then_some(mac)

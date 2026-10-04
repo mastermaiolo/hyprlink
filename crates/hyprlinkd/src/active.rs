@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use ciborium::Value;
 
-use crate::protocol::{read_frame, write_frame, Packet};
+use crate::protocol::{Packet, read_frame, write_frame};
 
 pub type ActiveConn = Arc<Mutex<Option<quinn::Connection>>>;
 
@@ -73,6 +73,9 @@ pub async fn request(active: &ActiveConn, kind: &str, body: Option<Value>) -> Op
     let packet = Packet::new(id, kind, body, false);
     write_frame(&mut send, &packet.encode()).await.ok()?;
     send.finish().ok()?;
-    let raw = tokio::time::timeout(std::time::Duration::from_secs(5), read_frame(&mut recv)).await.ok()?.ok()?;
+    let raw = tokio::time::timeout(std::time::Duration::from_secs(5), read_frame(&mut recv))
+        .await
+        .ok()?
+        .ok()?;
     Packet::decode(&raw).ok()
 }

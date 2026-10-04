@@ -78,8 +78,15 @@ impl PairingStore {
     }
 
     /// Autoriza um novo dispositivo se o token bater com o desta sessão do daemon.
-    pub fn try_pair_with_token(&mut self, fingerprint: &str, token_hex: &str) -> std::io::Result<bool> {
-        if constant_time_eq(token_hex.to_ascii_lowercase().as_bytes(), self.current_token_hex.as_bytes()) {
+    pub fn try_pair_with_token(
+        &mut self,
+        fingerprint: &str,
+        token_hex: &str,
+    ) -> std::io::Result<bool> {
+        if constant_time_eq(
+            token_hex.to_ascii_lowercase().as_bytes(),
+            self.current_token_hex.as_bytes(),
+        ) {
             self.devices.fingerprints.insert(fingerprint.to_string());
             self.save()?;
             // Uso único por boot: gera um token novo pra este já não valer mais.

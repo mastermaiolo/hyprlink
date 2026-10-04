@@ -8,9 +8,9 @@ use ciborium::Value;
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::active::{announce, push, ActiveConn};
+use crate::active::{ActiveConn, announce, push};
 use crate::config::{self, SharedConfig};
-use crate::state::{push_log, HudState};
+use crate::state::{HudState, push_log};
 
 pub(crate) struct PendingIncoming {
     name: String,
@@ -26,7 +26,10 @@ pub fn new_incoming_registry() -> IncomingRegistry {
 }
 
 pub fn announce_incoming(id: u64, name: String, size: u64, registry: &IncomingRegistry) {
-    registry.lock().unwrap().insert(id, PendingIncoming { name, size });
+    registry
+        .lock()
+        .unwrap()
+        .insert(id, PendingIncoming { name, size });
 }
 
 /// Só o último componente do caminho, rejeitando `.`/`..`/vazio — mesma
@@ -62,13 +65,22 @@ pub async fn receive_uni_stream(
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     let Some(pending) = pending else {
-        push_log(&hud, format!("[!] share.file: stream sem anúncio correspondente (id={id})"));
+        push_log(
+            &hud,
+            format!("[!] share.file: stream sem anúncio correspondente (id={id})"),
+        );
         return;
     };
 
     let dir = config::download_dir(&config);
     if let Err(e) = tokio::fs::create_dir_all(&dir).await {
-        push_log(&hud, format!("[!] share.file: não foi possível criar {}: {e}", dir.display()));
+        push_log(
+            &hud,
+            format!(
+                "[!] share.file: não foi possível criar {}: {e}",
+                dir.display()
+            ),
+        );
         return;
     }
     let filename = sanitize_filename(&pending.name);
@@ -77,7 +89,13 @@ pub async fn receive_uni_stream(
     let mut file = match tokio::fs::File::create(&path).await {
         Ok(f) => f,
         Err(e) => {
-            push_log(&hud, format!("[!] share.file: não foi possível criar {}: {e}", path.display()));
+            push_log(
+                &hud,
+                format!(
+                    "[!] share.file: não foi possível criar {}: {e}",
+                    path.display()
+                ),
+            );
             return;
         }
     };
@@ -86,7 +104,8 @@ pub async fn receive_uni_stream(
     let mut buf = vec![0u8; 32 * 1024];
     let mut total: u64 = 0;
     let mut last_progress = 0u64;
-    let cancel = crate::state::start_file_transfer(&hud, filename.clone(), "recebendo", pending.size);
+    let cancel =
+        crate::state::start_file_transfer(&hud, filename.clone(), "recebendo", pending.size);
 
     let mut size_exceeded = false;
     loop {
@@ -118,29 +137,55 @@ pub async fn receive_uni_stream(
             let body = Value::Map(vec![
                 (Value::Text("id".into()), Value::Integer(id.into())),
                 (Value::Text("bytes".into()), Value::Integer(total.into())),
-                (Value::Text("total".into()), Value::Integer(pending.size.into())),
+                (
+                    Value::Text("total".into()),
+                    Value::Integer(pending.size.into()),
+                ),
             ]);
             push(&active, "share.progress", Some(body)).await;
         }
     }
     let _ = file.flush().await;
     let cancelled = cancel.load(std::sync::atomic::Ordering::Relaxed);
-    crate::state::finish_file_transfer(&hud, !cancelled && !size_exceeded, match (cancelled, size_exceeded) {
-        (true, _) => Some("cancelado pelo usuário".to_string()),
-        (_, true) => Some("excedeu o tamanho anunciado".to_string()),
-        _ => None,
-    });
+    crate::state::finish_file_transfer(
+        &hud,
+        !cancelled && !size_exceeded,
+        match (cancelled, size_exceeded) {
+            (true, _) => Some("cancelado pelo usuário".to_string()),
+            (_, true) => Some("excedeu o tamanho anunciado".to_string()),
+            _ => None,
+        },
+    );
     if size_exceeded {
-        push_log(&hud, format!("[!] ficheiro recebido excedeu o tamanho anunciado: {filename} ({total} > {} bytes), abortado", pending.size));
+        push_log(
+            &hud,
+            format!(
+                "[!] ficheiro recebido excedeu o tamanho anunciado: {filename} ({total} > {} bytes), abortado",
+                pending.size
+            ),
+        );
         return;
     }
     if cancelled {
-        push_log(&hud, format!("[!] ficheiro recebido cancelado: {filename} ({total} de {} bytes)", pending.size));
+        push_log(
+            &hud,
+            format!(
+                "[!] ficheiro recebido cancelado: {filename} ({total} de {} bytes)",
+                pending.size
+            ),
+        );
         return;
     }
 
-    let sha_hex: String = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect();
-    push_log(&hud, format!("[+] ficheiro recebido: {filename} ({total} bytes) · sha256 {sha_hex}"));
+    let sha_hex: String = hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    push_log(
+        &hud,
+        format!("[+] ficheiro recebido: {filename} ({total} bytes) · sha256 {sha_hex}"),
+    );
 
     let body = Value::Map(vec![
         (Value::Text("id".into()), Value::Integer(id.into())),
@@ -158,11 +203,21 @@ pub async fn receive_uni_stream(
 /// em chunks de 32 KiB. Não espera pelo `share.done` de volta — isso chega
 /// como qualquer outro pacote em `server.rs` e só é logado.
 pub async fn send_file(active: &ActiveConn, hud: &Arc<Mutex<HudState>>, path: &std::path::Path) {
-    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("arquivo").to_string();
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("arquivo")
+        .to_string();
     let size = match tokio::fs::metadata(path).await {
         Ok(m) => m.len(),
         Err(e) => {
-            push_log(hud, format!("[!] share.file: não foi possível ler {}: {e}", path.display()));
+            push_log(
+                hud,
+                format!(
+                    "[!] share.file: não foi possível ler {}: {e}",
+                    path.display()
+                ),
+            );
             return;
         }
     };
@@ -172,7 +227,10 @@ pub async fn send_file(active: &ActiveConn, hud: &Arc<Mutex<HudState>>, path: &s
         (Value::Text("size".into()), Value::Integer(size.into())),
     ]);
     let Some(id) = announce(active, "share.file", Some(body)).await else {
-        push_log(hud, "[!] share.file: sem conexão ativa pra enviar".to_string());
+        push_log(
+            hud,
+            "[!] share.file: sem conexão ativa pra enviar".to_string(),
+        );
         return;
     };
 
@@ -181,7 +239,10 @@ pub async fn send_file(active: &ActiveConn, hud: &Arc<Mutex<HudState>>, path: &s
     let mut send = match connection.open_uni().await {
         Ok(s) => s,
         Err(e) => {
-            push_log(hud, format!("[!] share.file: não foi possível abrir o uni-stream: {e}"));
+            push_log(
+                hud,
+                format!("[!] share.file: não foi possível abrir o uni-stream: {e}"),
+            );
             return;
         }
     };
@@ -192,12 +253,21 @@ pub async fn send_file(active: &ActiveConn, hud: &Arc<Mutex<HudState>>, path: &s
     let mut file = match tokio::fs::File::open(path).await {
         Ok(f) => f,
         Err(e) => {
-            push_log(hud, format!("[!] share.file: não foi possível abrir {}: {e}", path.display()));
+            push_log(
+                hud,
+                format!(
+                    "[!] share.file: não foi possível abrir {}: {e}",
+                    path.display()
+                ),
+            );
             return;
         }
     };
 
-    push_log(hud, format!("[i] share.file · enviando {name} ({size} bytes)"));
+    push_log(
+        hud,
+        format!("[i] share.file · enviando {name} ({size} bytes)"),
+    );
     let mut hasher = Sha256::new();
     let mut buf = vec![0u8; 32 * 1024];
     let mut total: u64 = 0;
@@ -206,8 +276,15 @@ pub async fn send_file(active: &ActiveConn, hud: &Arc<Mutex<HudState>>, path: &s
     loop {
         if cancel.load(std::sync::atomic::Ordering::Relaxed) {
             let _ = send.reset(0u32.into());
-            crate::state::finish_file_transfer(hud, false, Some("cancelado pelo usuário".to_string()));
-            push_log(hud, format!("[!] envio cancelado: {name} ({total} de {size} bytes)"));
+            crate::state::finish_file_transfer(
+                hud,
+                false,
+                Some("cancelado pelo usuário".to_string()),
+            );
+            push_log(
+                hud,
+                format!("[!] envio cancelado: {name} ({total} de {size} bytes)"),
+            );
             return;
         }
         let n = match file.read(&mut buf).await {
@@ -217,7 +294,10 @@ pub async fn send_file(active: &ActiveConn, hud: &Arc<Mutex<HudState>>, path: &s
         };
         if send.write_all(&buf[..n]).await.is_err() {
             crate::state::finish_file_transfer(hud, false, Some("falha de rede".to_string()));
-            push_log(hud, format!("[!] share.file: falha ao enviar {name} em {total} bytes"));
+            push_log(
+                hud,
+                format!("[!] share.file: falha ao enviar {name} em {total} bytes"),
+            );
             return;
         }
         hasher.update(&buf[..n]);
@@ -233,7 +313,11 @@ pub async fn send_file(active: &ActiveConn, hud: &Arc<Mutex<HudState>>, path: &s
     // O telemóvel (receptor nessa direção) espera um `share.done` do
     // remetente pra confirmar/verificar — mesmo papel que o daemon já faz
     // pra ficheiros telemóvel→PC, só invertido (ver `receive_uni_stream`).
-    let sha_hex: String = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect();
+    let sha_hex: String = hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
     let done_body = Value::Map(vec![
         (Value::Text("id".into()), Value::Integer(id.into())),
         (Value::Text("ok".into()), Value::Bool(true)),
@@ -242,5 +326,8 @@ pub async fn send_file(active: &ActiveConn, hud: &Arc<Mutex<HudState>>, path: &s
         (Value::Text("error".into()), Value::Null),
     ]);
     push(active, "share.done", Some(done_body)).await;
-    push_log(hud, format!("[+] ficheiro enviado: {name} ({total} bytes) · sha256 {sha_hex}"));
+    push_log(
+        hud,
+        format!("[+] ficheiro enviado: {name} ({total} bytes) · sha256 {sha_hex}"),
+    );
 }

@@ -6,7 +6,7 @@ use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 
-use rcgen::{generate_simple_self_signed, CertifiedKey};
+use rcgen::{CertifiedKey, generate_simple_self_signed};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use sha2::{Digest, Sha256};
 
@@ -51,10 +51,9 @@ pub fn load_or_generate() -> std::io::Result<ServerIdentity> {
         });
     }
 
-    let CertifiedKey { cert, signing_key } = generate_simple_self_signed(vec![
-        "HyprLink-Desktop".to_string(),
-    ])
-    .expect("falha ao gerar certificado ECDSA P-256 autoassinado");
+    let CertifiedKey { cert, signing_key } =
+        generate_simple_self_signed(vec!["HyprLink-Desktop".to_string()])
+            .expect("falha ao gerar certificado ECDSA P-256 autoassinado");
 
     let cert_der = cert.der().clone();
     let key_bytes = signing_key.serialize_der();

@@ -18,8 +18,8 @@ use futures_util::StreamExt;
 use zbus::zvariant::Value as ZValue;
 use zbus::{Connection, Proxy};
 
-use crate::active::{push, ActiveConn};
-use crate::state::{push_log, HudState};
+use crate::active::{ActiveConn, push};
+use crate::state::{HudState, push_log};
 
 const DEST: &str = "org.freedesktop.Notifications";
 const PATH: &str = "/org/freedesktop/Notifications";
@@ -36,16 +36,32 @@ pub fn new_registry() -> Registry {
 /// `notification.post` (telemóvel → PC): espelha no servidor de
 /// notificações existente. `actions` é `(idx, label)` — o `idx` vira a
 /// action key crua, sem tradução, pra bater de volta em `ActionInvoked`.
-pub async fn post(app: &str, title: &str, text: &str, key: &str, actions: &[(i64, String)], registry: &Registry, dbus: &Option<Connection>) {
+pub async fn post(
+    app: &str,
+    title: &str,
+    text: &str,
+    key: &str,
+    actions: &[(i64, String)],
+    registry: &Registry,
+    dbus: &Option<Connection>,
+) {
     let Some(conn) = dbus else { return };
-    let Ok(proxy) = Proxy::new(conn, DEST, PATH, IFACE).await else { return };
+    let Ok(proxy) = Proxy::new(conn, DEST, PATH, IFACE).await else {
+        return;
+    };
 
-    let action_pairs: Vec<String> =
-        actions.iter().flat_map(|(idx, label)| vec![idx.to_string(), label.clone()]).collect();
+    let action_pairs: Vec<String> = actions
+        .iter()
+        .flat_map(|(idx, label)| vec![idx.to_string(), label.clone()])
+        .collect();
     let hints: HashMap<&str, ZValue> = HashMap::new();
 
-    let result: zbus::Result<u32> =
-        proxy.call("Notify", &(app, 0u32, "", title, text, action_pairs, hints, -1i32)).await;
+    let result: zbus::Result<u32> = proxy
+        .call(
+            "Notify",
+            &(app, 0u32, "", title, text, action_pairs, hints, -1i32),
+        )
+        .await;
     if let Ok(id) = result {
         registry.lock().unwrap().insert(id, key.to_string());
     }
@@ -64,7 +80,9 @@ pub async fn dismiss_local(key: &str, registry: &Registry, dbus: &Option<Connect
     };
     let Some(id) = id else { return };
     let Some(conn) = dbus else { return };
-    let Ok(proxy) = Proxy::new(conn, DEST, PATH, IFACE).await else { return };
+    let Ok(proxy) = Proxy::new(conn, DEST, PATH, IFACE).await else {
+        return;
+    };
     let _: zbus::Result<()> = proxy.call("CloseNotification", &(id,)).await;
 }
 
@@ -136,6 +154,10 @@ mod tests {
             &dbus,
         )
         .await;
-        assert_eq!(registry.lock().unwrap().len(), 1, "esperava um id registado após o Notify()");
+        assert_eq!(
+            registry.lock().unwrap().len(),
+            1,
+            "esperava um id registado após o Notify()"
+        );
     }
 }

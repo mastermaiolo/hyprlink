@@ -2,13 +2,20 @@ use super::*;
 use iced::widget::column;
 
 pub fn media_screen(modules: &crate::state::ModuleStatus) -> Element<'static, Message> {
-    let now_playing = modules.media.clone().unwrap_or_else(|| t("Nenhum leitor MPRIS ativo").to_string());
+    let now_playing = modules
+        .media
+        .clone()
+        .unwrap_or_else(|| t("Nenhum leitor MPRIS ativo").to_string());
     let card = container(text(now_playing).size(14).color(TEXT))
         .padding(20)
         .width(Length::Fill)
         .style(|_| container::Style {
             background: Some(Background::Color(GREEN_BG)),
-            border: Border { color: GREEN_BRD, width: 1.0, radius: 14.0.into() },
+            border: Border {
+                color: GREEN_BRD,
+                width: 1.0,
+                radius: 14.0.into(),
+            },
             ..Default::default()
         });
 
@@ -29,6 +36,12 @@ pub fn media_screen(modules: &crate::state::ModuleStatus) -> Element<'static, Me
         .size(10)
         .color(TEXT_3);
 
-    column![module_header("MEDIA", "MPRIS".to_string(), GREEN), card, transport, note].spacing(16).into()
+    column![
+        module_header("MEDIA", "MPRIS".to_string(), GREEN),
+        card,
+        transport,
+        note
+    ]
+    .spacing(16)
+    .into()
 }
-

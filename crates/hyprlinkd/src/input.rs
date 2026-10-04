@@ -7,10 +7,10 @@
 
 use std::sync::Mutex;
 
+use uinput::Device;
 use uinput::event::controller::{Controller, Mouse};
 use uinput::event::keyboard::{Key, Keyboard};
 use uinput::event::relative::{Position, Relative, Wheel};
-use uinput::Device;
 
 pub struct InputDevice(Mutex<Option<Device>>);
 
@@ -28,7 +28,9 @@ impl InputDevice {
         match device {
             Ok(d) => Self(Mutex::new(Some(d))),
             Err(e) => {
-                eprintln!("[!] /dev/uinput indisponível, touchpad/teclado remotos desativados: {e}");
+                eprintln!(
+                    "[!] /dev/uinput indisponível, touchpad/teclado remotos desativados: {e}"
+                );
                 Self(Mutex::new(None))
             }
         }
@@ -77,7 +79,9 @@ impl InputDevice {
     pub fn type_text(&self, text: &str) {
         self.with_device(|d| {
             for c in text.chars() {
-                let Some((key, shift)) = char_key(c) else { continue };
+                let Some((key, shift)) = char_key(c) else {
+                    continue;
+                };
                 if shift {
                     d.press(&Keyboard::Key(Key::LeftShift))?;
                 }
@@ -115,11 +119,45 @@ fn special_key(name: &str) -> Option<Key> {
 /// `(tecla, precisa de shift)` pra um caractere ASCII imprimível, layout US.
 fn char_key(c: char) -> Option<(Key, bool)> {
     const LETTERS: [Key; 26] = [
-        Key::A, Key::B, Key::C, Key::D, Key::E, Key::F, Key::G, Key::H, Key::I, Key::J, Key::K, Key::L, Key::M,
-        Key::N, Key::O, Key::P, Key::Q, Key::R, Key::S, Key::T, Key::U, Key::V, Key::W, Key::X, Key::Y, Key::Z,
+        Key::A,
+        Key::B,
+        Key::C,
+        Key::D,
+        Key::E,
+        Key::F,
+        Key::G,
+        Key::H,
+        Key::I,
+        Key::J,
+        Key::K,
+        Key::L,
+        Key::M,
+        Key::N,
+        Key::O,
+        Key::P,
+        Key::Q,
+        Key::R,
+        Key::S,
+        Key::T,
+        Key::U,
+        Key::V,
+        Key::W,
+        Key::X,
+        Key::Y,
+        Key::Z,
     ];
-    const DIGITS: [Key; 10] =
-        [Key::_0, Key::_1, Key::_2, Key::_3, Key::_4, Key::_5, Key::_6, Key::_7, Key::_8, Key::_9];
+    const DIGITS: [Key; 10] = [
+        Key::_0,
+        Key::_1,
+        Key::_2,
+        Key::_3,
+        Key::_4,
+        Key::_5,
+        Key::_6,
+        Key::_7,
+        Key::_8,
+        Key::_9,
+    ];
     const DIGIT_SYMBOLS: [char; 10] = ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')'];
 
     if c.is_ascii_lowercase() {

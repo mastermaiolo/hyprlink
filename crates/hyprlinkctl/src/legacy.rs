@@ -28,14 +28,24 @@ use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 
 /// Subcomandos que só existem no protocolo de texto do `cmd.sock`.
-pub const ONLY_HERE: &[&str] = &["send", "dispatch", "lock", "notif", "url", "phone-url", "phone-app"];
+pub const ONLY_HERE: &[&str] = &[
+    "send",
+    "dispatch",
+    "lock",
+    "notif",
+    "url",
+    "phone-url",
+    "phone-app",
+];
 
 /// Subcomandos que existem nas duas metades: sem `--json` vêm para aqui.
 pub const SHARED: &[&str] = &["status", "ping", "mic", "tap", "speaker"];
 
 pub fn run(args: Vec<String>) -> ! {
     if args.is_empty() {
-        eprintln!("uso: hyprlinkctl <status|send|dispatch|lock|tap|speaker|mic|notif|url|phone-url|phone-app|ping> [argumentos]");
+        eprintln!(
+            "uso: hyprlinkctl <status|send|dispatch|lock|tap|speaker|mic|notif|url|phone-url|phone-app|ping> [argumentos]"
+        );
         std::process::exit(2);
     }
 
@@ -48,7 +58,10 @@ pub fn run(args: Vec<String>) -> ! {
     let mut stream = match UnixStream::connect(&socket) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("erro: não foi possível falar com o daemon em {}: {e}", socket.display());
+            eprintln!(
+                "erro: não foi possível falar com o daemon em {}: {e}",
+                socket.display()
+            );
             eprintln!("       (o daemon está a correr? `cargo run -p hyprlinkd`)");
             std::process::exit(1);
         }

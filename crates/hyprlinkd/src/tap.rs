@@ -14,7 +14,7 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app::AppSink;
 
-use crate::state::{self, push_audio_vu, push_log, HudState};
+use crate::state::{self, HudState, push_audio_vu, push_log};
 
 pub type TapHandle = Arc<Mutex<Option<gst::Pipeline>>>;
 
@@ -85,11 +85,19 @@ fn stop_if_current(handle: &TapHandle, pipeline: &gst::Pipeline, hud: &Arc<Mutex
 /// virtual `hyprlink-speaker` — nome explícito (em vez de depender do
 /// default, que o modo coluna também muda) torna a intenção determinística
 /// mesmo que o default mude a meio da sessão.
-pub async fn start(connection: quinn::Connection, sink: Option<String>, handle: TapHandle, hud: Arc<Mutex<HudState>>) {
+pub async fn start(
+    connection: quinn::Connection,
+    sink: Option<String>,
+    handle: TapHandle,
+    hud: Arc<Mutex<HudState>>,
+) {
     stop(&handle, &hud);
 
     if let Err(e) = gst::init() {
-        push_log(&hud, format!("[!] audio tap: GStreamer não inicializou: {e}"));
+        push_log(
+            &hud,
+            format!("[!] audio tap: GStreamer não inicializou: {e}"),
+        );
         return;
     }
 
@@ -121,19 +129,28 @@ pub async fn start(connection: quinn::Connection, sink: Option<String>, handle: 
             }
         },
         Err(e) => {
-            push_log(&hud, format!("[!] audio tap: falha ao montar o pipeline: {e}"));
+            push_log(
+                &hud,
+                format!("[!] audio tap: falha ao montar o pipeline: {e}"),
+            );
             return;
         }
     };
 
     let Some(sink_el) = pipeline.by_name("hyprlink_tap") else {
-        push_log(&hud, "[!] audio tap: appsink não encontrado no pipeline".to_string());
+        push_log(
+            &hud,
+            "[!] audio tap: appsink não encontrado no pipeline".to_string(),
+        );
         return;
     };
     let appsink = match sink_el.downcast::<AppSink>() {
         Ok(s) => s,
         Err(_) => {
-            push_log(&hud, "[!] audio tap: appsink com tipo inesperado".to_string());
+            push_log(
+                &hud,
+                "[!] audio tap: appsink com tipo inesperado".to_string(),
+            );
             return;
         }
     };
@@ -143,7 +160,10 @@ pub async fn start(connection: quinn::Connection, sink: Option<String>, handle: 
     pipeline.use_clock(None::<&gst::Clock>);
 
     if pipeline.set_state(gst::State::Playing).is_err() {
-        push_log(&hud, "[!] audio tap: não foi possível iniciar o pipeline".to_string());
+        push_log(
+            &hud,
+            "[!] audio tap: não foi possível iniciar o pipeline".to_string(),
+        );
         return;
     }
     *handle.lock().unwrap() = Some(pipeline.clone());
@@ -161,26 +181,32 @@ pub async fn start(connection: quinn::Connection, sink: Option<String>, handle: 
         let pipeline_weak = pipeline.downgrade();
         let handle_bus = handle.clone();
         let hud_bus = hud.clone();
-        std::thread::spawn(move || loop {
-            let Some(msg) = bus.timed_pop(gst::ClockTime::from_seconds(1)) else {
-                if pipeline_weak.upgrade().is_none() {
-                    break;
-                }
-                continue;
-            };
-            match msg.view() {
-                gst::MessageView::Error(err) => {
-                    push_log(
-                        &hud_bus,
-                        format!("[!] audio tap: erro no pipeline GStreamer: {} ({:?})", err.error(), err.debug()),
-                    );
-                    if let Some(p) = pipeline_weak.upgrade() {
-                        stop_if_current(&handle_bus, &p, &hud_bus);
+        std::thread::spawn(move || {
+            loop {
+                let Some(msg) = bus.timed_pop(gst::ClockTime::from_seconds(1)) else {
+                    if pipeline_weak.upgrade().is_none() {
+                        break;
                     }
-                    break;
+                    continue;
+                };
+                match msg.view() {
+                    gst::MessageView::Error(err) => {
+                        push_log(
+                            &hud_bus,
+                            format!(
+                                "[!] audio tap: erro no pipeline GStreamer: {} ({:?})",
+                                err.error(),
+                                err.debug()
+                            ),
+                        );
+                        if let Some(p) = pipeline_weak.upgrade() {
+                            stop_if_current(&handle_bus, &p, &hud_bus);
+                        }
+                        break;
+                    }
+                    gst::MessageView::Eos(_) => break,
+                    _ => {}
                 }
-                gst::MessageView::Eos(_) => break,
-                _ => {}
             }
         });
     }
@@ -192,11 +218,17 @@ pub async fn start(connection: quinn::Connection, sink: Option<String>, handle: 
     };
     let chunk_size = max_dgram.saturating_sub(2); // 2 bytes de seq na frente de cada datagrama
     if chunk_size == 0 {
-        push_log(&hud, "[!] audio tap: tamanho de datagrama insuficiente pra qualquer payload".to_string());
+        push_log(
+            &hud,
+            "[!] audio tap: tamanho de datagrama insuficiente pra qualquer payload".to_string(),
+        );
         stop(&handle, &hud);
         return;
     }
-    push_log(&hud, format!("[i] audio tap: enviando via datagram (payload até {chunk_size} bytes)"));
+    push_log(
+        &hud,
+        format!("[i] audio tap: enviando via datagram (payload até {chunk_size} bytes)"),
+    );
 
     // pull_sample() bloqueia — roda numa thread própria. `send_datagram` do
     // quinn é síncrono (só enfileira, sem handshake de stream), então a
@@ -211,8 +243,12 @@ pub async fn start(connection: quinn::Connection, sink: Option<String>, handle: 
         'capture: loop {
             match appsink.pull_sample() {
                 Ok(sample) => {
-                    let Some(buffer) = sample.buffer() else { continue };
-                    let Ok(map) = buffer.map_readable() else { continue };
+                    let Some(buffer) = sample.buffer() else {
+                        continue;
+                    };
+                    let Ok(map) = buffer.map_readable() else {
+                        continue;
+                    };
                     let data = map.as_slice();
                     push_audio_vu(&hud_thread, peak_percent(data));
 
@@ -223,7 +259,10 @@ pub async fn start(connection: quinn::Connection, sink: Option<String>, handle: 
                         seq = seq.wrapping_add(1);
 
                         if let Err(e) = connection.send_datagram(Bytes::from(datagram)) {
-                            push_log(&hud_thread, format!("[!] audio tap: envio de datagram falhou: {e}"));
+                            push_log(
+                                &hud_thread,
+                                format!("[!] audio tap: envio de datagram falhou: {e}"),
+                            );
                             break 'capture;
                         }
                         total += chunk.len() as u64;
@@ -231,16 +270,25 @@ pub async fn start(connection: quinn::Connection, sink: Option<String>, handle: 
                     state::set_audio_tap_bytes(&hud_thread, total);
                     if total.saturating_sub(last_logged) >= 1_000_000 {
                         last_logged = total;
-                        push_log(&hud_thread, format!("[i] audio tap: {} KB enviados", total / 1024));
+                        push_log(
+                            &hud_thread,
+                            format!("[i] audio tap: {} KB enviados", total / 1024),
+                        );
                     }
                 }
                 Err(e) => {
-                    push_log(&hud_thread, format!("[!] audio tap: pull_sample parou: {e}"));
+                    push_log(
+                        &hud_thread,
+                        format!("[!] audio tap: pull_sample parou: {e}"),
+                    );
                     break;
                 }
             }
         }
-        push_log(&hud_thread, format!("[i] audio tap: encerrado ({} KB no total)", total / 1024));
+        push_log(
+            &hud_thread,
+            format!("[i] audio tap: encerrado ({} KB no total)", total / 1024),
+        );
         // ponytail: sem isso o pipeline GStreamer fica "zumbi" — rodando em
         // Playing mesmo depois do envio falhar (peer desconectou). Só mata
         // se ainda for ESTE pipeline — um restart rápido (tap_stop +
@@ -270,12 +318,22 @@ mod tests {
              ! audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved \
              ! appsink name=hyprlink_tap sync=false max-buffers=8 drop=true"
         );
-        let pipeline =
-            gst::parse::launch(&pipeline_str).unwrap().downcast::<gst::Pipeline>().unwrap();
-        let appsink = pipeline.by_name("hyprlink_tap").unwrap().downcast::<AppSink>().unwrap();
-        pipeline.set_state(gst::State::Playing).expect("pipeline deveria iniciar");
+        let pipeline = gst::parse::launch(&pipeline_str)
+            .unwrap()
+            .downcast::<gst::Pipeline>()
+            .unwrap();
+        let appsink = pipeline
+            .by_name("hyprlink_tap")
+            .unwrap()
+            .downcast::<AppSink>()
+            .unwrap();
+        pipeline
+            .set_state(gst::State::Playing)
+            .expect("pipeline deveria iniciar");
 
-        let sample = appsink.pull_sample().expect("deveria sair pelo menos uma amostra");
+        let sample = appsink
+            .pull_sample()
+            .expect("deveria sair pelo menos uma amostra");
         let buffer = sample.buffer().expect("amostra deveria ter buffer");
         let map = buffer.map_readable().expect("buffer deveria ser legível");
         println!("recebido: {} bytes", map.len());
@@ -300,18 +358,33 @@ mod tests {
              ! audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved \
              ! appsink name=hyprlink_tap sync=false max-buffers=8 drop=true"
         );
-        let pipeline =
-            gst::parse::launch(&pipeline_str).unwrap().downcast::<gst::Pipeline>().unwrap();
-        let appsink = pipeline.by_name("hyprlink_tap").unwrap().downcast::<AppSink>().unwrap();
-        pipeline.set_state(gst::State::Playing).expect("pipeline deveria iniciar");
+        let pipeline = gst::parse::launch(&pipeline_str)
+            .unwrap()
+            .downcast::<gst::Pipeline>()
+            .unwrap();
+        let appsink = pipeline
+            .by_name("hyprlink_tap")
+            .unwrap()
+            .downcast::<AppSink>()
+            .unwrap();
+        pipeline
+            .set_state(gst::State::Playing)
+            .expect("pipeline deveria iniciar");
 
         let start = std::time::Instant::now();
         for i in 0..30 {
             let t0 = std::time::Instant::now();
-            let sample = appsink.pull_sample().expect(&format!("pull #{i} deveria funcionar"));
+            let sample = appsink
+                .pull_sample()
+                .expect(&format!("pull #{i} deveria funcionar"));
             let buffer = sample.buffer().expect("amostra deveria ter buffer");
             let map = buffer.map_readable().expect("buffer deveria ser legível");
-            println!("pull #{i}: {} bytes em {:?} (total decorrido: {:?})", map.len(), t0.elapsed(), start.elapsed());
+            println!(
+                "pull #{i}: {} bytes em {:?} (total decorrido: {:?})",
+                map.len(),
+                t0.elapsed(),
+                start.elapsed()
+            );
         }
 
         pipeline.set_state(gst::State::Null).ok();

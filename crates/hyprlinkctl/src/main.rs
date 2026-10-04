@@ -106,7 +106,11 @@ impl Transport for Simulator {
     }
 }
 
-const DAEMON: &str = if cfg!(feature = "mock") { "mock" } else { "down" };
+const DAEMON: &str = if cfg!(feature = "mock") {
+    "mock"
+} else {
+    "down"
+};
 
 /// Mock backend: the simulator plus the persisted toggles.
 struct Backend {
@@ -251,7 +255,10 @@ fn usage() -> ExitCode {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let json = args.iter().any(|a| a == "--json");
-    let first = args.iter().find(|a| !a.starts_with("--")).map(String::as_str);
+    let first = args
+        .iter()
+        .find(|a| !a.starts_with("--"))
+        .map(String::as_str);
     if let Some(cmd) = first {
         if legacy::ONLY_HERE.contains(&cmd) || (!json && legacy::SHARED.contains(&cmd)) {
             legacy::run(args);

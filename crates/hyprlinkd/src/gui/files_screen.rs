@@ -9,7 +9,9 @@ pub fn files_screen(hud: &Hud) -> Element<'_, Message> {
         row![
             column![
                 text(t("PASTA DE DESTINO")).size(9).color(TEXT_2),
-                text(hud.download_dir.display().to_string()).size(12).color(TEXT_1),
+                text(hud.download_dir.display().to_string())
+                    .size(12)
+                    .color(TEXT_1),
             ]
             .spacing(7)
             .width(Length::Fill),
@@ -31,33 +33,70 @@ pub fn files_screen(hud: &Hud) -> Element<'_, Message> {
 
     let progress_card: Element<'_, Message> = match &hud.snapshot.modules.file_transfer {
         Some(xfer) => {
-            let pct = if xfer.total > 0 { (xfer.bytes as f64 / xfer.total as f64 * 100.0).clamp(0.0, 100.0) } else { 0.0 };
+            let pct = if xfer.total > 0 {
+                (xfer.bytes as f64 / xfer.total as f64 * 100.0).clamp(0.0, 100.0)
+            } else {
+                0.0
+            };
             let elapsed = xfer.started_at.elapsed().as_secs_f64().max(0.1);
             let rate_mbps = (xfer.bytes as f64 / elapsed) / 1_000_000.0;
             container(
                 column![
                     row![
-                        text(xfer.name.clone()).size(12).color(TEXT_1).width(Length::Fill),
-                        text(format!("{} · {rate_mbps:.1} MB/s", xfer.direction)).size(10).color(AMBER),
+                        text(xfer.name.clone())
+                            .size(12)
+                            .color(TEXT_1)
+                            .width(Length::Fill),
+                        text(format!("{} · {rate_mbps:.1} MB/s", xfer.direction))
+                            .size(10)
+                            .color(AMBER),
                     ]
                     .align_y(Alignment::Center),
                     row![
-                        container(text("")).height(4).width(Length::FillPortion((pct.round() as u16).max(1))).style(|_| container::Style {
-                            background: Some(Background::Color(AMBER)),
-                            border: Border { radius: 2.0.into(), ..Default::default() },
-                            ..Default::default()
-                        }),
-                        container(text("")).height(4).width(Length::FillPortion((100 - pct.round() as u16).max(1))).style(|_| container::Style {
-                            background: Some(Background::Color(AMBER_BRD)),
-                            border: Border { radius: 2.0.into(), ..Default::default() },
-                            ..Default::default()
-                        }),
+                        container(text(""))
+                            .height(4)
+                            .width(Length::FillPortion((pct.round() as u16).max(1)))
+                            .style(|_| container::Style {
+                                background: Some(Background::Color(AMBER)),
+                                border: Border {
+                                    radius: 2.0.into(),
+                                    ..Default::default()
+                                },
+                                ..Default::default()
+                            }),
+                        container(text(""))
+                            .height(4)
+                            .width(Length::FillPortion((100 - pct.round() as u16).max(1)))
+                            .style(|_| container::Style {
+                                background: Some(Background::Color(AMBER_BRD)),
+                                border: Border {
+                                    radius: 2.0.into(),
+                                    ..Default::default()
+                                },
+                                ..Default::default()
+                            }),
                     ],
                     row![
-                        text(format!("{:.1} / {:.1} MB", xfer.bytes as f64 / 1_000_000.0, xfer.total as f64 / 1_000_000.0)).size(10).color(TEXT_4).width(Length::Fill),
+                        text(format!(
+                            "{:.1} / {:.1} MB",
+                            xfer.bytes as f64 / 1_000_000.0,
+                            xfer.total as f64 / 1_000_000.0
+                        ))
+                        .size(10)
+                        .color(TEXT_4)
+                        .width(Length::Fill),
                         button(text(t("cancelar")).size(9).color(RED))
                             .padding([5, 10])
-                            .style(|_, _| button::Style { background: None, border: Border { color: RED_BRD, width: 1.0, radius: 7.0.into() }, text_color: RED, ..Default::default() })
+                            .style(|_, _| button::Style {
+                                background: None,
+                                border: Border {
+                                    color: RED_BRD,
+                                    width: 1.0,
+                                    radius: 7.0.into()
+                                },
+                                text_color: RED,
+                                ..Default::default()
+                            })
                             .on_press(Message::FileTransferCancel),
                     ]
                     .align_y(Alignment::Center),
@@ -68,7 +107,11 @@ pub fn files_screen(hud: &Hud) -> Element<'_, Message> {
             .width(Length::Fill)
             .style(move |_| container::Style {
                 background: Some(Background::Color(AMBER_BG)),
-                border: Border { color: AMBER_BRD, width: 1.0, radius: 14.0.into() },
+                border: Border {
+                    color: AMBER_BRD,
+                    width: 1.0,
+                    radius: 14.0.into(),
+                },
                 ..Default::default()
             })
             .into()
@@ -86,14 +129,29 @@ pub fn files_screen(hud: &Hud) -> Element<'_, Message> {
                 _ => ("↑", TEXT_3),
             };
             let meta = if r.ok {
-                format!("{} · {:.1} MB · {}s · {}", t(if r.direction == "recebendo" { "recebido" } else { "enviado" }), r.bytes as f64 / 1_000_000.0, r.duration_secs, r.at)
+                format!(
+                    "{} · {:.1} MB · {}s · {}",
+                    t(if r.direction == "recebendo" {
+                        "recebido"
+                    } else {
+                        "enviado"
+                    }),
+                    r.bytes as f64 / 1_000_000.0,
+                    r.duration_secs,
+                    r.at
+                )
             } else {
                 format!("{} · {}", t("falhou"), r.error.clone().unwrap_or_default())
             };
             container(
                 row![
                     text(arrow).size(11).color(arrow_color).width(14),
-                    column![text(r.name.clone()).size(11).color(TEXT_1), text(meta).size(9).color(if r.ok { TEXT_4 } else { RED })].spacing(3).width(Length::Fill),
+                    column![
+                        text(r.name.clone()).size(11).color(TEXT_1),
+                        text(meta).size(9).color(if r.ok { TEXT_4 } else { RED })
+                    ]
+                    .spacing(3)
+                    .width(Length::Fill),
                 ]
                 .spacing(10)
                 .align_y(Alignment::Start),
@@ -107,11 +165,25 @@ pub fn files_screen(hud: &Hud) -> Element<'_, Message> {
     let note = text(t("Sem \"pausar\" — o protocolo só permite continuar ou cancelar uma transferência em andamento.")).size(10).color(TEXT_5);
 
     column![
-        module_header("FILES", format!("{}{}", t("Transferência de ficheiros sobre QUIC"), if hud.snapshot.modules.file_transfer.is_some() { t(" · 1 a transferir") } else { "" }), TEXT_2),
+        module_header(
+            "FILES",
+            format!(
+                "{}{}",
+                t("Transferência de ficheiros sobre QUIC"),
+                if hud.snapshot.modules.file_transfer.is_some() {
+                    t(" · 1 a transferir")
+                } else {
+                    ""
+                }
+            ),
+            TEXT_2
+        ),
         dest_card,
         send_btn,
         progress_card,
-        text(t1("HISTÓRICO · {} TRANSFERÊNCIA(S)", history.len())).size(9).color(TEXT_5),
+        text(t1("HISTÓRICO · {} TRANSFERÊNCIA(S)", history.len()))
+            .size(9)
+            .color(TEXT_5),
         history_list(history_rows, "Nenhuma transferência ainda nesta sessão."),
         note,
     ]
@@ -119,4 +191,3 @@ pub fn files_screen(hud: &Hud) -> Element<'_, Message> {
     .height(Length::Fill)
     .into()
 }
-

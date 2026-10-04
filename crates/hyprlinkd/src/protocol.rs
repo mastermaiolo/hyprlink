@@ -41,7 +41,9 @@ impl Packet {
 }
 
 /// Lê um frame de um stream bidirecional: 4 bytes BE (tamanho) + payload CBOR cru.
-pub async fn read_frame<R: tokio::io::AsyncRead + Unpin>(reader: &mut R) -> std::io::Result<Vec<u8>> {
+pub async fn read_frame<R: tokio::io::AsyncRead + Unpin>(
+    reader: &mut R,
+) -> std::io::Result<Vec<u8>> {
     let mut len_buf = [0u8; 4];
     reader.read_exact(&mut len_buf).await?;
     let len = u32::from_be_bytes(len_buf);
@@ -61,7 +63,9 @@ pub async fn write_frame<W: tokio::io::AsyncWrite + Unpin>(
     writer: &mut W,
     payload: &[u8],
 ) -> std::io::Result<()> {
-    writer.write_all(&(payload.len() as u32).to_be_bytes()).await?;
+    writer
+        .write_all(&(payload.len() as u32).to_be_bytes())
+        .await?;
     writer.write_all(payload).await?;
     Ok(())
 }
@@ -83,7 +87,9 @@ pub fn body_get_bytes<'a>(body: &'a Value, key: &str) -> Option<&'a [u8]> {
 }
 
 pub fn body_get_i64(body: &Value, key: &str) -> Option<i64> {
-    body_get(body, key)?.as_integer().and_then(|i| i64::try_from(i).ok())
+    body_get(body, key)?
+        .as_integer()
+        .and_then(|i| i64::try_from(i).ok())
 }
 
 pub fn body_get_bool(body: &Value, key: &str) -> Option<bool> {
@@ -129,15 +135,15 @@ mod tests {
 
     #[test]
     fn round_trips_encode_decode() {
-        let body = Value::Map(vec![(Value::Text("text".into()), Value::Text("olá".into()))]);
+        let body = Value::Map(vec![(
+            Value::Text("text".into()),
+            Value::Text("olá".into()),
+        )]);
         let original = Packet::new(42, "clipboard.set", Some(body), false);
         let bytes = original.encode();
         let decoded = Packet::decode(&bytes).unwrap();
         assert_eq!(decoded.id, 42);
         assert_eq!(decoded.kind, "clipboard.set");
-        assert_eq!(
-            body_get_str(&decoded.body.unwrap(), "text"),
-            Some("olá")
-        );
+        assert_eq!(body_get_str(&decoded.body.unwrap(), "text"), Some("olá"));
     }
 }

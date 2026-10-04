@@ -14,8 +14,8 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app::AppSrc;
 
-use crate::active::{push, ActiveConn};
-use crate::state::{self, push_log, HudState};
+use crate::active::{ActiveConn, push};
+use crate::state::{self, HudState, push_log};
 
 pub type WebcamHandle = Arc<Mutex<Option<gst::Pipeline>>>;
 
@@ -43,7 +43,10 @@ fn ensure_v4l2loopback_loaded(hud: &Arc<Mutex<HudState>>) -> bool {
     if std::path::Path::new(V4L2_DEVICE_PATH).exists() {
         return true;
     }
-    push_log(hud, "[i] webcam: carregando v4l2loopback (pode pedir sua senha)...".to_string());
+    push_log(
+        hud,
+        "[i] webcam: carregando v4l2loopback (pode pedir sua senha)...".to_string(),
+    );
     let status = std::process::Command::new("pkexec")
         .args([
             "modprobe",
@@ -73,7 +76,14 @@ pub fn stop(handle: &WebcamHandle, hud: &Arc<Mutex<HudState>>) {
 /// Chamado pela GUI ("iniciar stream"): manda `webcam.start` pro telemóvel
 /// e guarda o id retornado — o uni-stream de vídeo que chegar com esse id
 /// é reconhecido pelo roteador em `server.rs` e despachado pra `feed()`.
-pub async fn request_start(active: &ActiveConn, pending: &PendingWebcam, width: i64, height: i64, fps: i64, codec: &str) -> bool {
+pub async fn request_start(
+    active: &ActiveConn,
+    pending: &PendingWebcam,
+    width: i64,
+    height: i64,
+    fps: i64,
+    codec: &str,
+) -> bool {
     let body = Value::Map(vec![
         (Value::Text("width".into()), Value::Integer(width.into())),
         (Value::Text("height".into()), Value::Integer(height.into())),
@@ -92,7 +102,9 @@ pub async fn request_start(active: &ActiveConn, pending: &PendingWebcam, width: 
 /// cuidam de cada eixo separadamente (evita a matemática de combinar os 8
 /// métodos diagonais do `videoflip` numa propriedade só).
 pub fn apply_transform(handle: &WebcamHandle, rotation: i64, mirror: bool) {
-    let Some(pipeline) = handle.lock().unwrap().clone() else { return };
+    let Some(pipeline) = handle.lock().unwrap().clone() else {
+        return;
+    };
     let rotate_method = match rotation {
         90 => "clockwise",
         180 => "rotate-180",
@@ -111,21 +123,34 @@ pub fn apply_transform(handle: &WebcamHandle, rotation: i64, mirror: bool) {
 /// `PendingWebcam`): lê o byte de codec, monta o pipeline GStreamer
 /// (decodifica H.264/H.265 → escreve no `/dev/video42` via v4l2loopback) e
 /// alimenta o `appsrc` com os bytes crus conforme chegam.
-pub async fn feed(mut recv: quinn::RecvStream, handle: WebcamHandle, hud: Arc<Mutex<HudState>>, width: i64, height: i64) {
+pub async fn feed(
+    mut recv: quinn::RecvStream,
+    handle: WebcamHandle,
+    hud: Arc<Mutex<HudState>>,
+    width: i64,
+    height: i64,
+) {
     if !ensure_v4l2loopback_loaded(&hud) {
         return;
     }
 
     let mut codec_byte = [0u8; 1];
     if recv.read_exact(&mut codec_byte).await.is_err() {
-        push_log(&hud, "[!] webcam: stream fechou antes do byte de codec".to_string());
+        push_log(
+            &hud,
+            "[!] webcam: stream fechou antes do byte de codec".to_string(),
+        );
         return;
     }
     let (decoder, label) = match codec_byte[0] {
         0x02 => ("avdec_h265", "H.265"),
         _ => ("avdec_h264", "H.264"),
     };
-    let parser = if decoder == "avdec_h265" { "h265parse" } else { "h264parse" };
+    let parser = if decoder == "avdec_h265" {
+        "h265parse"
+    } else {
+        "h264parse"
+    };
 
     if let Err(e) = gst::init() {
         push_log(&hud, format!("[!] webcam: GStreamer não inicializou: {e}"));
@@ -156,17 +181,29 @@ pub async fn feed(mut recv: quinn::RecvStream, handle: WebcamHandle, hud: Arc<Mu
             return;
         }
     };
-    let Some(appsrc) = pipeline.by_name("src").and_then(|e| e.downcast::<AppSrc>().ok()) else {
-        push_log(&hud, "[!] webcam: appsrc não encontrado no pipeline".to_string());
+    let Some(appsrc) = pipeline
+        .by_name("src")
+        .and_then(|e| e.downcast::<AppSrc>().ok())
+    else {
+        push_log(
+            &hud,
+            "[!] webcam: appsrc não encontrado no pipeline".to_string(),
+        );
         return;
     };
     if pipeline.set_state(gst::State::Playing).is_err() {
-        push_log(&hud, "[!] webcam: não foi possível iniciar o pipeline".to_string());
+        push_log(
+            &hud,
+            "[!] webcam: não foi possível iniciar o pipeline".to_string(),
+        );
         return;
     }
     *handle.lock().unwrap() = Some(pipeline.clone());
     state::set_webcam_active(&hud, true);
-    push_log(&hud, format!("[+] webcam: stream iniciado ({label}) · {V4L2_DEVICE_PATH}"));
+    push_log(
+        &hud,
+        format!("[+] webcam: stream iniciado ({label}) · {V4L2_DEVICE_PATH}"),
+    );
 
     if let Some(bus) = pipeline.bus() {
         let hud_bus = hud.clone();
@@ -174,7 +211,14 @@ pub async fn feed(mut recv: quinn::RecvStream, handle: WebcamHandle, hud: Arc<Mu
             for msg in bus.iter_timed(gst::ClockTime::NONE) {
                 match msg.view() {
                     gst::MessageView::Error(err) => {
-                        push_log(&hud_bus, format!("[!] webcam: erro no pipeline GStreamer: {} ({:?})", err.error(), err.debug()));
+                        push_log(
+                            &hud_bus,
+                            format!(
+                                "[!] webcam: erro no pipeline GStreamer: {} ({:?})",
+                                err.error(),
+                                err.debug()
+                            ),
+                        );
                         break;
                     }
                     gst::MessageView::Eos(_) => break,
@@ -201,7 +245,10 @@ pub async fn feed(mut recv: quinn::RecvStream, handle: WebcamHandle, hud: Arc<Mu
             Ok(Ok(None)) => break,
             Ok(Err(_)) => break,
             Err(_) => {
-                push_log(&hud, "[!] webcam: sem dados há 15s, encerrando stream travado".to_string());
+                push_log(
+                    &hud,
+                    "[!] webcam: sem dados há 15s, encerrando stream travado".to_string(),
+                );
                 break;
             }
         };
@@ -219,7 +266,13 @@ pub async fn feed(mut recv: quinn::RecvStream, handle: WebcamHandle, hud: Arc<Mu
             window_start = std::time::Instant::now();
         }
     }
-    push_log(&hud, format!("[i] webcam: stream encerrado ({} KB recebidos)", total / 1024));
+    push_log(
+        &hud,
+        format!(
+            "[i] webcam: stream encerrado ({} KB recebidos)",
+            total / 1024
+        ),
+    );
     let _ = appsrc.end_of_stream();
     stop(&handle, &hud);
 }

@@ -64,7 +64,10 @@ pub enum ConnState {
     /// Handshake em andamento (QUIC/mTLS negociando).
     Connecting,
     /// core.hello trocado e autorizado.
-    Connected { device_name: String, fingerprint_hex: String },
+    Connected {
+        device_name: String,
+        fingerprint_hex: String,
+    },
 }
 
 /// Estado real de cada módulo pra sidebar — `None`/`false` = cinza (sem
@@ -123,7 +126,11 @@ pub struct HudState {
 }
 
 impl HudState {
-    pub fn new(local_addr: String, server_fingerprint_hex: String, pairing_token_hex: String) -> Arc<Mutex<Self>> {
+    pub fn new(
+        local_addr: String,
+        server_fingerprint_hex: String,
+        pairing_token_hex: String,
+    ) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
             conn: ConnState::Pairing,
             local_addr,
@@ -136,7 +143,11 @@ impl HudState {
 }
 
 pub fn push_log(state: &Arc<Mutex<HudState>>, line: impl Into<String>) {
-    let line = format!("{} {}", chrono::Local::now().format("%H:%M:%S"), line.into());
+    let line = format!(
+        "{} {}",
+        chrono::Local::now().format("%H:%M:%S"),
+        line.into()
+    );
     println!("{line}");
     let mut s = state.lock().unwrap();
     s.logs.push(line);
@@ -151,7 +162,10 @@ pub fn set_connecting(state: &Arc<Mutex<HudState>>) {
 }
 
 pub fn set_connected(state: &Arc<Mutex<HudState>>, device_name: String, fingerprint_hex: String) {
-    state.lock().unwrap().conn = ConnState::Connected { device_name, fingerprint_hex };
+    state.lock().unwrap().conn = ConnState::Connected {
+        device_name,
+        fingerprint_hex,
+    };
 }
 
 pub fn set_pairing(state: &Arc<Mutex<HudState>>) {
@@ -163,7 +177,13 @@ pub fn push_clip_entry(state: &Arc<Mutex<HudState>>, direction: &'static str, te
     let at = chrono::Local::now().format("%H:%M:%S").to_string();
     let id = s.modules.clip_next_id;
     s.modules.clip_next_id += 1;
-    s.modules.clip_history.push_front(ClipEntry { id, at, direction, text, pinned: false });
+    s.modules.clip_history.push_front(ClipEntry {
+        id,
+        at,
+        direction,
+        text,
+        pinned: false,
+    });
     s.modules.clip_history.truncate(MAX_HISTORY);
 }
 
@@ -181,16 +201,32 @@ pub fn push_notif_entry(state: &Arc<Mutex<HudState>>, app: String, title: String
     let mut s = state.lock().unwrap();
     s.modules.notif_count += 1;
     let at = chrono::Local::now().format("%H:%M:%S").to_string();
-    s.modules.notif_history.push_front(NotifEntry { at, app, title, text });
+    s.modules.notif_history.push_front(NotifEntry {
+        at,
+        app,
+        title,
+        text,
+    });
     s.modules.notif_history.truncate(MAX_HISTORY);
 }
 
 /// Marca o início de uma transferência e devolve a flag de cancelamento —
 /// `share.rs` checa essa flag a cada bloco lido/escrito.
-pub fn start_file_transfer(state: &Arc<Mutex<HudState>>, name: String, direction: &'static str, total: u64) -> Arc<AtomicBool> {
+pub fn start_file_transfer(
+    state: &Arc<Mutex<HudState>>,
+    name: String,
+    direction: &'static str,
+    total: u64,
+) -> Arc<AtomicBool> {
     let cancel = Arc::new(AtomicBool::new(false));
     let mut s = state.lock().unwrap();
-    s.modules.file_transfer = Some(TransferProgress { name, direction, bytes: 0, total, started_at: std::time::Instant::now() });
+    s.modules.file_transfer = Some(TransferProgress {
+        name,
+        direction,
+        bytes: 0,
+        total,
+        started_at: std::time::Instant::now(),
+    });
     s.modules.file_cancel = Some(cancel.clone());
     cancel
 }
@@ -211,7 +247,15 @@ pub fn finish_file_transfer(state: &Arc<Mutex<HudState>>, ok: bool, error: Optio
     let mut s = state.lock().unwrap();
     if let Some(t) = s.modules.file_transfer.take() {
         let duration_secs = t.started_at.elapsed().as_secs();
-        s.modules.file_history.push_front(TransferRecord { at: chrono::Local::now().format("%H:%M").to_string(), name: t.name, direction: t.direction, bytes: t.bytes, duration_secs, ok, error });
+        s.modules.file_history.push_front(TransferRecord {
+            at: chrono::Local::now().format("%H:%M").to_string(),
+            name: t.name,
+            direction: t.direction,
+            bytes: t.bytes,
+            duration_secs,
+            ok,
+            error,
+        });
         s.modules.file_history.truncate(MAX_HISTORY);
     }
     s.modules.file_cancel = None;
@@ -239,9 +283,16 @@ pub fn set_pc_battery(state: &Arc<Mutex<HudState>>, level: i64, charging: bool) 
 /// recente conhecido de cada bateria, não força uma leitura nova.
 pub fn sample_battery_history(state: &Arc<Mutex<HudState>>) {
     let mut s = state.lock().unwrap();
-    let sample = BatterySample { pc: s.modules.pc_battery_pct, phone: s.modules.phone_battery_pct };
+    let sample = BatterySample {
+        pc: s.modules.pc_battery_pct,
+        phone: s.modules.phone_battery_pct,
+    };
     s.modules.battery_history.push(sample);
-    let overflow = s.modules.battery_history.len().saturating_sub(MAX_BATTERY_SAMPLES);
+    let overflow = s
+        .modules
+        .battery_history
+        .len()
+        .saturating_sub(MAX_BATTERY_SAMPLES);
     if overflow > 0 {
         s.modules.battery_history.drain(0..overflow);
     }
@@ -273,7 +324,12 @@ pub fn set_audio_tap_bytes(state: &Arc<Mutex<HudState>>, bytes: u64) {
 
 /// Segundos desde que o tap começou nesta sessão — `None` se estiver parado.
 pub fn audio_tap_elapsed_secs(state: &Arc<Mutex<HudState>>) -> Option<u64> {
-    state.lock().unwrap().modules.audio_tap_started_at.map(|t| t.elapsed().as_secs())
+    state
+        .lock()
+        .unwrap()
+        .modules
+        .audio_tap_started_at
+        .map(|t| t.elapsed().as_secs())
 }
 
 const MAX_VU_SAMPLES: usize = 16;
@@ -294,8 +350,13 @@ pub fn set_webcam_active(state: &Arc<Mutex<HudState>>, active: bool) {
     } else if let Some(start) = s.modules.webcam_started_at.take() {
         let dur = start.elapsed();
         let (mins, secs) = (dur.as_secs() / 60, dur.as_secs() % 60);
-        let dur_str = if mins > 0 { format!("{mins} min {secs} s") } else { format!("{secs} s") };
-        s.modules.webcam_last_used = Some((chrono::Local::now().format("%H:%M").to_string(), dur_str));
+        let dur_str = if mins > 0 {
+            format!("{mins} min {secs} s")
+        } else {
+            format!("{secs} s")
+        };
+        s.modules.webcam_last_used =
+            Some((chrono::Local::now().format("%H:%M").to_string(), dur_str));
     }
     s.modules.webcam_active = active;
     if !active {

@@ -5,17 +5,14 @@ use iced::widget::column;
 // cinema). Suporte real a 2K/4K/60fps depende do hardware de câmara do
 // telemóvel (CameraX/MediaCodec) — o daemon aceita qualquer valor, só não
 // tem como garantir que o telemóvel consiga entregar.
-pub const WEBCAM_RESOLUTIONS: &[&str] = &["640x480", "1280x720", "1920x1080", "2560x1440", "3840x2160"];
-
+pub const WEBCAM_RESOLUTIONS: &[&str] =
+    &["640x480", "1280x720", "1920x1080", "2560x1440", "3840x2160"];
 
 pub const WEBCAM_FPS_OPTIONS: &[i64] = &[15, 24, 30, 60];
 
-
 pub const WEBCAM_CODECS: &[&str] = &["h264", "h265"];
 
-
 pub const WEBCAM_TEST_DURATION: Duration = Duration::from_secs(60);
-
 
 /// Estado do teste de rede/hardware da webcam — transmite um stream de
 /// verdade em 1080p30 (ver `suggest_webcam_config` sobre por que não testa
@@ -25,10 +22,14 @@ pub const WEBCAM_TEST_DURATION: Duration = Duration::from_secs(60);
 #[derive(Debug, Clone)]
 pub enum WebcamTest {
     Idle,
-    Running { started: std::time::Instant },
-    Done { mbps: f64, suggested: (&'static str, i64) },
+    Running {
+        started: std::time::Instant,
+    },
+    Done {
+        mbps: f64,
+        suggested: (&'static str, i64),
+    },
 }
-
 
 /// Combina o que a rede aguenta com o que a CPU aguenta decodificar (por
 /// software — `avdec_h264`/`avdec_h265`, sem aceleração de hardware) e pega
@@ -50,7 +51,9 @@ pub fn suggest_webcam_config(mbps: f64) -> (&'static str, i64) {
             _ => 0,
         }
     }
-    let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(2);
+    let cores = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(2);
     let cpu_cap: (&'static str, i64) = if cores >= 8 {
         ("1920x1080", 60)
     } else if cores >= 6 {
@@ -71,9 +74,12 @@ pub fn suggest_webcam_config(mbps: f64) -> (&'static str, i64) {
     } else {
         ("640x480", 15)
     };
-    if rank(cpu_cap) <= rank(net_cap) { cpu_cap } else { net_cap }
+    if rank(cpu_cap) <= rank(net_cap) {
+        cpu_cap
+    } else {
+        net_cap
+    }
 }
-
 
 pub fn webcam_screen(hud: &Hud) -> Element<'_, Message> {
     let modules = &hud.snapshot.modules;
@@ -81,57 +87,93 @@ pub fn webcam_screen(hud: &Hud) -> Element<'_, Message> {
         (t("Stream ativo — a escrever em /dev/video42, use como webcam em qualquer app (Chrome, OBS, etc.)").to_string(), GREEN)
     } else {
         (
-            tn("Parado. Ao iniciar, o telemóvel é trazido pro primeiro plano e passa a filmar em {}@{}fps ({}).", &[&hud.webcam_resolution, &hud.webcam_fps, &hud.webcam_codec.to_uppercase()]),
+            tn(
+                "Parado. Ao iniciar, o telemóvel é trazido pro primeiro plano e passa a filmar em {}@{}fps ({}).",
+                &[
+                    &hud.webcam_resolution,
+                    &hud.webcam_fps,
+                    &hud.webcam_codec.to_uppercase(),
+                ],
+            ),
             TEXT_3,
         )
     };
     let preview = container(
-        column![text(if modules.webcam_active { "●" } else { "◎" }).size(26).color(status_color), text(status_text.clone()).size(11).color(TEXT_2)]
-            .spacing(10)
-            .align_x(Alignment::Center),
+        column![
+            text(if modules.webcam_active { "●" } else { "◎" })
+                .size(26)
+                .color(status_color),
+            text(status_text.clone()).size(11).color(TEXT_2)
+        ]
+        .spacing(10)
+        .align_x(Alignment::Center),
     )
     .padding(30)
     .width(Length::Fill)
     .align_x(Alignment::Center)
     .style(move |_| container::Style {
-        background: Some(Background::Color(Color::from_rgba(0x07 as f32 / 255.0, 0x07 as f32 / 255.0, 0x07 as f32 / 255.0, 1.0))),
-        border: Border { radius: 14.0.into(), ..Default::default() },
+        background: Some(Background::Color(Color::from_rgba(
+            0x07 as f32 / 255.0,
+            0x07 as f32 / 255.0,
+            0x07 as f32 / 255.0,
+            1.0,
+        ))),
+        border: Border {
+            radius: 14.0.into(),
+            ..Default::default()
+        },
         ..Default::default()
     });
 
-
-    let picker_style = |_theme: &Theme, _status: iced::widget::pick_list::Status| iced::widget::pick_list::Style {
-        text_color: TEXT,
-        placeholder_color: TEXT_3,
-        handle_color: TEXT_3,
-        background: Background::Color(GLASS),
-        border: Border { color: GLASS_BRD, width: 1.0, radius: 10.0.into() },
-    };
+    let picker_style =
+        |_theme: &Theme, _status: iced::widget::pick_list::Status| iced::widget::pick_list::Style {
+            text_color: TEXT,
+            placeholder_color: TEXT_3,
+            handle_color: TEXT_3,
+            background: Background::Color(GLASS),
+            border: Border {
+                color: GLASS_BRD,
+                width: 1.0,
+                radius: 10.0.into(),
+            },
+        };
     let config_row = row![
         column![
             text(t("resolução")).size(9).color(TEXT_2),
-            iced::widget::pick_list(WEBCAM_RESOLUTIONS, Some(hud.webcam_resolution), Message::WebcamResolutionChanged)
-                .text_size(11)
-                .padding([8, 12])
-                .style(picker_style),
+            iced::widget::pick_list(
+                WEBCAM_RESOLUTIONS,
+                Some(hud.webcam_resolution),
+                Message::WebcamResolutionChanged
+            )
+            .text_size(11)
+            .padding([8, 12])
+            .style(picker_style),
         ]
         .spacing(4)
         .width(Length::Fill),
         column![
             text(t("fps")).size(9).color(TEXT_2),
-            iced::widget::pick_list(WEBCAM_FPS_OPTIONS, Some(hud.webcam_fps), Message::WebcamFpsChanged)
-                .text_size(11)
-                .padding([8, 12])
-                .style(picker_style),
+            iced::widget::pick_list(
+                WEBCAM_FPS_OPTIONS,
+                Some(hud.webcam_fps),
+                Message::WebcamFpsChanged
+            )
+            .text_size(11)
+            .padding([8, 12])
+            .style(picker_style),
         ]
         .spacing(4)
         .width(Length::Fixed(80.0)),
         column![
             text(t("codec")).size(9).color(TEXT_2),
-            iced::widget::pick_list(WEBCAM_CODECS, Some(hud.webcam_codec), Message::WebcamCodecChanged)
-                .text_size(11)
-                .padding([8, 12])
-                .style(picker_style),
+            iced::widget::pick_list(
+                WEBCAM_CODECS,
+                Some(hud.webcam_codec),
+                Message::WebcamCodecChanged
+            )
+            .text_size(11)
+            .padding([8, 12])
+            .style(picker_style),
         ]
         .spacing(4)
         .width(Length::Fixed(100.0)),
@@ -160,12 +202,20 @@ pub fn webcam_screen(hud: &Hud) -> Element<'_, Message> {
         action_row = action_row.push(test_btn);
     }
 
-    let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(2);
+    let cores = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(2);
     let test_panel: Element<'_, Message> = match hud.webcam_test {
         WebcamTest::Idle => Space::new().height(0).into(),
         WebcamTest::Running { started } => {
-            let remaining = WEBCAM_TEST_DURATION.saturating_sub(started.elapsed()).as_secs() + 1;
-            let mbps_text = modules.webcam_mbps.map(|m| format!("{m:.1} Mbps")).unwrap_or_else(|| t("medindo…").to_string());
+            let remaining = WEBCAM_TEST_DURATION
+                .saturating_sub(started.elapsed())
+                .as_secs()
+                + 1;
+            let mbps_text = modules
+                .webcam_mbps
+                .map(|m| format!("{m:.1} Mbps"))
+                .unwrap_or_else(|| t("medindo…").to_string());
             container(text(tn("Testando em 1920×1080@30 (baseline — não testa 2K/4K, ver nota abaixo) · {} · {}s restantes", &[&mbps_text, &remaining])).size(11).color(AMBER))
                 .padding(12)
                 .width(Length::Fill)
@@ -178,10 +228,13 @@ pub fn webcam_screen(hud: &Hud) -> Element<'_, Message> {
         }
         WebcamTest::Done { mbps, suggested } => container(
             row![
-                text(tn("Sugestão: {} @ {}fps  ·  medido: {} Mbps na rede, {} núcleos de CPU", &[&suggested.0, &suggested.1, &format!("{mbps:.1}"), &cores]))
-                    .size(11)
-                    .color(GREEN)
-                    .width(Length::Fill),
+                text(tn(
+                    "Sugestão: {} @ {}fps  ·  medido: {} Mbps na rede, {} núcleos de CPU",
+                    &[&suggested.0, &suggested.1, &format!("{mbps:.1}"), &cores]
+                ))
+                .size(11)
+                .color(GREEN)
+                .width(Length::Fill),
                 button(text(t("aplicar")).size(11).color(GREEN))
                     .padding([6, 14])
                     .style(accent_button(GREEN, 8.0))
@@ -194,7 +247,11 @@ pub fn webcam_screen(hud: &Hud) -> Element<'_, Message> {
         .width(Length::Fill)
         .style(|_| container::Style {
             background: Some(Background::Color(Color { a: 0.10, ..GREEN })),
-            border: Border { color: Color { a: 0.35, ..GREEN }, width: 1.0, radius: 10.0.into() },
+            border: Border {
+                color: Color { a: 0.35, ..GREEN },
+                width: 1.0,
+                radius: 10.0.into(),
+            },
             ..Default::default()
         })
         .into(),
@@ -205,12 +262,27 @@ pub fn webcam_screen(hud: &Hud) -> Element<'_, Message> {
         .color(TEXT_3);
 
     let footer: Element<'_, Message> = match &modules.webcam_last_used {
-        Some((at, dur)) => container(text(tn("último uso · {} · {}", &[at, dur])).size(10).color(TEXT_4)).padding([10, 12]).width(Length::Fill).style(|_| glass(10.0)).into(),
+        Some((at, dur)) => container(
+            text(tn("último uso · {} · {}", &[at, dur]))
+                .size(10)
+                .color(TEXT_4),
+        )
+        .padding([10, 12])
+        .width(Length::Fill)
+        .style(|_| glass(10.0))
+        .into(),
         None => Space::new().height(0).into(),
     };
 
-    column![module_header("WEBCAM", t("Câmara remota do PC").to_string(), status_color), preview, config_row, action_row, test_panel, footer, note]
-        .spacing(16)
-        .into()
+    column![
+        module_header("WEBCAM", t("Câmara remota do PC").to_string(), status_color),
+        preview,
+        config_row,
+        action_row,
+        test_panel,
+        footer,
+        note
+    ]
+    .spacing(16)
+    .into()
 }
-

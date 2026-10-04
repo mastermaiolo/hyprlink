@@ -22,8 +22,8 @@ use serde_json::json;
 
 use crate::active::ActiveConn;
 use crate::config::SharedConfig;
-use crate::state::{ConnState, HudState};
 use crate::speaker::SpeakerHandle;
+use crate::state::{ConnState, HudState};
 use crate::tap::TapHandle;
 
 /// O que o servidor de comandos precisa — montado a partir do `Ctx`.
@@ -41,7 +41,8 @@ pub fn socket_path() -> Option<PathBuf> {
 }
 
 pub fn status_path() -> Option<PathBuf> {
-    std::env::var_os("XDG_RUNTIME_DIR").map(|d| PathBuf::from(d).join("hyprlink").join("status.json"))
+    std::env::var_os("XDG_RUNTIME_DIR")
+        .map(|d| PathBuf::from(d).join("hyprlink").join("status.json"))
 }
 
 /// Snapshot do estado do daemon como JSON — a mesma coisa que o comando
@@ -49,9 +50,15 @@ pub fn status_path() -> Option<PathBuf> {
 pub fn status_json(hud: &Arc<Mutex<HudState>>) -> serde_json::Value {
     let s = hud.lock().unwrap();
     let (connected, connecting, device, fingerprint) = match &s.conn {
-        ConnState::Connected { device_name, fingerprint_hex } => {
-            (true, false, Some(device_name.clone()), Some(fingerprint_hex.clone()))
-        }
+        ConnState::Connected {
+            device_name,
+            fingerprint_hex,
+        } => (
+            true,
+            false,
+            Some(device_name.clone()),
+            Some(fingerprint_hex.clone()),
+        ),
         ConnState::Connecting => (false, true, None, None),
         ConnState::Pairing => (false, false, None, None),
     };
@@ -105,7 +112,10 @@ pub async fn serve(ctl: Ctl) {
         if std::os::unix::net::UnixStream::connect(&path).is_err() {
             let _ = std::fs::remove_file(&path);
         } else {
-            eprintln!("[!] ctl: já existe um daemon a escutar em {}", path.display());
+            eprintln!(
+                "[!] ctl: já existe um daemon a escutar em {}",
+                path.display()
+            );
             return;
         }
     }
@@ -113,13 +123,18 @@ pub async fn serve(ctl: Ctl) {
     let listener = match tokio::net::UnixListener::bind(&path) {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("[!] ctl: não foi possível abrir o socket {}: {e}", path.display());
+            eprintln!(
+                "[!] ctl: não foi possível abrir o socket {}: {e}",
+                path.display()
+            );
             return;
         }
     };
 
     loop {
-        let Ok((stream, _)) = listener.accept().await else { continue };
+        let Ok((stream, _)) = listener.accept().await else {
+            continue;
+        };
         let ctl = ctl.clone();
         tokio::spawn(async move {
             use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -187,7 +202,12 @@ async fn handle(line: &str, ctl: &Ctl) -> String {
         "tap" => match rest.first().copied() {
             Some("on") => {
                 if let Some(connection) = ctl.active.lock().unwrap().clone() {
-                    tokio::spawn(crate::tap::start(connection, None, ctl.tap.clone(), ctl.hud.clone()));
+                    tokio::spawn(crate::tap::start(
+                        connection,
+                        None,
+                        ctl.tap.clone(),
+                        ctl.hud.clone(),
+                    ));
                     "ok tap iniciado".to_string()
                 } else {
                     "erro: sem telemóvel conectado".to_string()
@@ -202,12 +222,28 @@ async fn handle(line: &str, ctl: &Ctl) -> String {
 
         "speaker" => match rest.first().copied() {
             Some("on") => {
-                let ok = crate::speaker::enable(&ctl.active, &ctl.tap, &ctl.hud, &ctl.config, &ctl.speaker).await;
-                if ok { "ok telemóvel é agora a coluna do PC".to_string() } else { "erro: ver painel do daemon".to_string() }
+                let ok = crate::speaker::enable(
+                    &ctl.active,
+                    &ctl.tap,
+                    &ctl.hud,
+                    &ctl.config,
+                    &ctl.speaker,
+                )
+                .await;
+                if ok {
+                    "ok telemóvel é agora a coluna do PC".to_string()
+                } else {
+                    "erro: ver painel do daemon".to_string()
+                }
             }
             Some("off") => {
-                let ok = crate::speaker::disable(&ctl.tap, &ctl.hud, &ctl.config, &ctl.speaker).await;
-                if ok { "ok som devolvido às colunas".to_string() } else { "erro: modo coluna não estava ativo".to_string() }
+                let ok =
+                    crate::speaker::disable(&ctl.tap, &ctl.hud, &ctl.config, &ctl.speaker).await;
+                if ok {
+                    "ok som devolvido às colunas".to_string()
+                } else {
+                    "erro: modo coluna não estava ativo".to_string()
+                }
             }
             _ => "erro: uso: speaker on|off".to_string(),
         },
@@ -215,11 +251,19 @@ async fn handle(line: &str, ctl: &Ctl) -> String {
         "mic" => match rest.first().copied() {
             Some("on") => {
                 let ok = crate::mic::request_start(&ctl.active).await;
-                if ok { "ok pedido enviado (telemóvel decide)".to_string() } else { "erro: sem telemóvel conectado".to_string() }
+                if ok {
+                    "ok pedido enviado (telemóvel decide)".to_string()
+                } else {
+                    "erro: sem telemóvel conectado".to_string()
+                }
             }
             Some("off") => {
                 let ok = crate::mic::request_stop(&ctl.active).await;
-                if ok { "ok pedido enviado".to_string() } else { "erro: sem telemóvel conectado".to_string() }
+                if ok {
+                    "ok pedido enviado".to_string()
+                } else {
+                    "erro: sem telemóvel conectado".to_string()
+                }
             }
             _ => "erro: uso: mic on|off".to_string(),
         },
@@ -231,9 +275,18 @@ async fn handle(line: &str, ctl: &Ctl) -> String {
             let title = rest[0];
             let body = rest[1..].join(" ");
             let packet_body = Some(ciborium::Value::Map(vec![
-                (ciborium::Value::Text("title".into()), ciborium::Value::Text(title.into())),
-                (ciborium::Value::Text("body".into()), ciborium::Value::Text(body.into())),
-                (ciborium::Value::Text("app_name".into()), ciborium::Value::Text("HyprLink".into())),
+                (
+                    ciborium::Value::Text("title".into()),
+                    ciborium::Value::Text(title.into()),
+                ),
+                (
+                    ciborium::Value::Text("body".into()),
+                    ciborium::Value::Text(body.into()),
+                ),
+                (
+                    ciborium::Value::Text("app_name".into()),
+                    ciborium::Value::Text("HyprLink".into()),
+                ),
             ]));
             match crate::active::push(&ctl.active, "notification.send", packet_body).await {
                 Some(_) => "ok notificação enviada".to_string(),
@@ -276,6 +329,8 @@ async fn handle(line: &str, ctl: &Ctl) -> String {
         }
 
         "" => "erro: comando vazio".to_string(),
-        _ => format!("erro: comando desconhecido: {cmd} (ping, status, send, dispatch, lock, tap, speaker, mic, notif, url, phone-url, phone-app)"),
+        _ => format!(
+            "erro: comando desconhecido: {cmd} (ping, status, send, dispatch, lock, tap, speaker, mic, notif, url, phone-url, phone-app)"
+        ),
     }
 }

@@ -7,8 +7,8 @@ use ciborium::Value;
 use tokio::io::AsyncBufReadExt;
 use tokio::net::UnixStream;
 
-use crate::active::{push, ActiveConn};
-use crate::state::{self, push_log, HudState};
+use crate::active::{ActiveConn, push};
+use crate::state::{self, HudState, push_log};
 
 fn run_hyprctl(args: &[&str]) -> String {
     std::process::Command::new("hyprctl")
@@ -23,44 +23,74 @@ fn run_hyprctl(args: &[&str]) -> String {
 /// alguns forks — ex. Hyprland-Lua — substituem isso por avaliação de Lua e
 /// retornam código de saída != 0 quando recebem a sintaxe clássica).
 fn run_hyprctl_checked(args: &[&str]) -> Option<String> {
-    let output = std::process::Command::new("hyprctl").args(args).output().ok()?;
-    output.status.success().then(|| String::from_utf8_lossy(&output.stdout).to_string())
+    let output = std::process::Command::new("hyprctl")
+        .args(args)
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 pub fn workspaces_json() -> String {
     let data = run_hyprctl(&["workspaces", "-j"]);
-    if data.trim().is_empty() { "[]".to_string() } else { data }
+    if data.trim().is_empty() {
+        "[]".to_string()
+    } else {
+        data
+    }
 }
 
 pub fn clients_json() -> String {
     let data = run_hyprctl(&["clients", "-j"]);
-    if data.trim().is_empty() { "[]".to_string() } else { data }
+    if data.trim().is_empty() {
+        "[]".to_string()
+    } else {
+        data
+    }
 }
 
 /// A janela focada agora — usado só pra linha de contexto do CONTROL
 /// (`activewindow` do socket2 já cobre o resto em tempo real).
 pub fn active_window_json() -> String {
     let data = run_hyprctl(&["activewindow", "-j"]);
-    if data.trim().is_empty() { "{}".to_string() } else { data }
+    if data.trim().is_empty() {
+        "{}".to_string()
+    } else {
+        data
+    }
 }
 
 /// Posição do cursor — só pro espelho visual do TRACK, polling leve (1x/seg,
 /// só com essa tela aberta).
 pub fn cursor_pos_json() -> String {
     let data = run_hyprctl(&["cursorpos", "-j"]);
-    if data.trim().is_empty() { "{}".to_string() } else { data }
+    if data.trim().is_empty() {
+        "{}".to_string()
+    } else {
+        data
+    }
 }
 
 pub fn monitors_json() -> String {
     let data = run_hyprctl(&["monitors", "-j"]);
-    if data.trim().is_empty() { "[]".to_string() } else { data }
+    if data.trim().is_empty() {
+        "[]".to_string()
+    } else {
+        data
+    }
 }
 
 /// `cmd` vem como "workspace 2", "focuswindow address:0x..", etc — o primeiro
 /// espaço separa o dispatcher do argumento, igual ao app manda.
 pub fn dispatch(cmd: &str) -> String {
     let (disp, arg) = cmd.split_once(' ').unwrap_or((cmd, ""));
-    let classic: Vec<&str> = if arg.is_empty() { vec!["dispatch", disp] } else { vec!["dispatch", disp, arg] };
+    let classic: Vec<&str> = if arg.is_empty() {
+        vec!["dispatch", disp]
+    } else {
+        vec!["dispatch", disp, arg]
+    };
     if let Some(out) = run_hyprctl_checked(&classic) {
         return finish(out);
     }
@@ -78,12 +108,18 @@ pub fn dispatch(cmd: &str) -> String {
 
 fn finish(out: String) -> String {
     let out = out.trim();
-    if out.is_empty() { "ok".to_string() } else { out.to_string() }
+    if out.is_empty() {
+        "ok".to_string()
+    } else {
+        out.to_string()
+    }
 }
 
 fn lua_fallback(disp: &str, arg: &str) -> Option<String> {
     match disp {
-        "workspace" if arg.parse::<i64>().is_ok() => Some(format!("hl.dsp.focus({{workspace = {arg}}})")),
+        "workspace" if arg.parse::<i64>().is_ok() => {
+            Some(format!("hl.dsp.focus({{workspace = {arg}}})"))
+        }
         "focuswindow" => Some(format!("hl.dsp.focus({{window = \"{arg}\"}})")),
         "closewindow" => Some(format!("hl.dsp.window.close({{address = \"{arg}\"}})")),
         // `follow = false` é o que faz o "silent" ser silent de verdade —
@@ -92,7 +128,9 @@ fn lua_fallback(disp: &str, arg: &str) -> Option<String> {
         // discussions/14205), o que trava a janela "seguindo" o usuário por
         // todas as telas e rouba o foco de tudo — exatamente o sintoma
         // visto ao vivo com "minimizar" indo pra `special:hyprlinktray`.
-        "movetoworkspacesilent" => Some(format!("hl.dsp.window.move({{workspace = \"{arg}\", follow = false}})")),
+        "movetoworkspacesilent" => Some(format!(
+            "hl.dsp.window.move({{workspace = \"{arg}\", follow = false}})"
+        )),
         _ => None,
     }
 }
@@ -118,14 +156,19 @@ fn own_window_address() -> Option<String> {
 
 fn active_workspace_id() -> i64 {
     let data = run_hyprctl(&["activeworkspace", "-j"]);
-    serde_json::from_str::<serde_json::Value>(&data).ok().and_then(|v| v.get("id")?.as_i64()).unwrap_or(1)
+    serde_json::from_str::<serde_json::Value>(&data)
+        .ok()
+        .and_then(|v| v.get("id")?.as_i64())
+        .unwrap_or(1)
 }
 
 /// Move a própria janela da GUI pra uma workspace especial — como ela nunca
 /// é mostrada sozinha (ninguém chama `togglespecialworkspace`), fica
 /// efetivamente escondida até `tray_show()` a trazer de volta.
 pub fn tray_hide() -> bool {
-    let Some(addr) = own_window_address() else { return false };
+    let Some(addr) = own_window_address() else {
+        return false;
+    };
     dispatch(&format!("focuswindow address:{addr}"));
     !dispatch(&format!("movetoworkspacesilent {TRAY_WORKSPACE}")).starts_with("erro")
 }
@@ -133,7 +176,9 @@ pub fn tray_hide() -> bool {
 /// Move a janela de volta pra workspace ativa no momento — determinístico
 /// (não depende de saber se estava escondida ou não).
 pub fn tray_show() -> bool {
-    let Some(addr) = own_window_address() else { return false };
+    let Some(addr) = own_window_address() else {
+        return false;
+    };
     let ws = active_workspace_id();
     dispatch(&format!("focuswindow address:{addr}"));
     !dispatch(&format!("movetoworkspacesilent {ws}")).starts_with("erro")
@@ -154,7 +199,10 @@ fn socket2_path() -> Option<String> {
 /// reconecta sozinho se o socket cair (ex: Hyprland reiniciou).
 pub async fn watch_events(active: ActiveConn, hud: Arc<Mutex<HudState>>) {
     let Some(path) = socket2_path() else {
-        push_log(&hud, "[!] HYPRLAND_INSTANCE_SIGNATURE ausente — hypr.event desativado".to_string());
+        push_log(
+            &hud,
+            "[!] HYPRLAND_INSTANCE_SIGNATURE ausente — hypr.event desativado".to_string(),
+        );
         return;
     };
     loop {
@@ -167,7 +215,8 @@ pub async fn watch_events(active: ActiveConn, hud: Arc<Mutex<HudState>>) {
                             if let Some(ws) = line.strip_prefix("workspace>>") {
                                 state::set_workspace(&hud, ws.to_string());
                             }
-                            let body = Value::Map(vec![(Value::Text("event".into()), Value::Text(line))]);
+                            let body =
+                                Value::Map(vec![(Value::Text("event".into()), Value::Text(line))]);
                             push(&active, "hypr.event", Some(body)).await;
                         }
                         _ => break, // socket fechou, reconecta
@@ -190,7 +239,10 @@ mod tests {
     /// silenciosamente para de funcionar nesses forks.
     #[test]
     fn lua_fallback_matches_verified_syntax() {
-        assert_eq!(lua_fallback("workspace", "2").as_deref(), Some("hl.dsp.focus({workspace = 2})"));
+        assert_eq!(
+            lua_fallback("workspace", "2").as_deref(),
+            Some("hl.dsp.focus({workspace = 2})")
+        );
         assert_eq!(
             lua_fallback("focuswindow", "address:0x559fbda7b900").as_deref(),
             Some(r#"hl.dsp.focus({window = "address:0x559fbda7b900"})"#)

@@ -32,7 +32,9 @@ pub async fn get_state(active: &ActiveConn) -> Option<PhoneAudioState> {
         ring_percent: body_get_i64(&body, "ring_percent").unwrap_or(0),
         media_percent: body_get_i64(&body, "media_percent").unwrap_or(0),
         alarm_percent: body_get_i64(&body, "alarm_percent").unwrap_or(0),
-        ringer_mode: body_get_str(&body, "ringer_mode").unwrap_or("normal").to_string(),
+        ringer_mode: body_get_str(&body, "ringer_mode")
+            .unwrap_or("normal")
+            .to_string(),
         dnd_access: body_get_bool(&body, "dnd_access").unwrap_or(false),
         dnd_enabled: body_get_bool(&body, "dnd_enabled").unwrap_or(false),
     })
@@ -40,14 +42,23 @@ pub async fn get_state(active: &ActiveConn) -> Option<PhoneAudioState> {
 
 pub async fn set_volume(active: &ActiveConn, stream: &str, percent: i64) {
     let body = Value::Map(vec![
-        (Value::Text("stream".into()), Value::Text(stream.to_string())),
-        (Value::Text("percent".into()), Value::Integer(percent.clamp(0, 100).into())),
+        (
+            Value::Text("stream".into()),
+            Value::Text(stream.to_string()),
+        ),
+        (
+            Value::Text("percent".into()),
+            Value::Integer(percent.clamp(0, 100).into()),
+        ),
     ]);
     active::push(active, "phone_audio.set_volume", Some(body)).await;
 }
 
 pub async fn set_ringer_mode(active: &ActiveConn, mode: &str) {
-    let body = Value::Map(vec![(Value::Text("mode".into()), Value::Text(mode.to_string()))]);
+    let body = Value::Map(vec![(
+        Value::Text("mode".into()),
+        Value::Text(mode.to_string()),
+    )]);
     active::push(active, "phone_audio.set_ringer_mode", Some(body)).await;
 }
 

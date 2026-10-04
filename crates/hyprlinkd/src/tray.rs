@@ -2,11 +2,11 @@
 //! nele ou no menu "Mostrar" sinaliza a GUI (que faz polling no `Tick`, já
 //! que ksni roda numa thread/executor próprio, separado da thread da GUI).
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use ksni::menu::StandardItem;
 use ksni::TrayMethods;
+use ksni::menu::StandardItem;
 
 pub type ShowRequested = Arc<AtomicBool>;
 
@@ -45,12 +45,16 @@ impl ksni::Tray for HyprlinkTray {
         // ponytail: só "mostrar" — sair fica só no botão × da GUI (com
         // fechamento educado da conexão QUIC), não é pra ter um jeito de
         // matar o processo inteiro sem confirmação num clique de menu.
-        vec![StandardItem {
-            label: "Mostrar HyprLink".into(),
-            activate: Box::new(|this: &mut Self| this.show_requested.store(true, Ordering::Relaxed)),
-            ..Default::default()
-        }
-        .into()]
+        vec![
+            StandardItem {
+                label: "Mostrar HyprLink".into(),
+                activate: Box::new(|this: &mut Self| {
+                    this.show_requested.store(true, Ordering::Relaxed)
+                }),
+                ..Default::default()
+            }
+            .into(),
+        ]
     }
 }
 

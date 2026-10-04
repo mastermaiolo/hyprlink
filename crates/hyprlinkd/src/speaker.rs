@@ -31,7 +31,7 @@ use std::sync::{Arc, Mutex};
 use crate::active::ActiveConn;
 use crate::audio::PHONE_SINK_NAME;
 use crate::config::SharedConfig;
-use crate::state::{self, push_log, HudState};
+use crate::state::{self, HudState, push_log};
 use crate::tap::TapHandle;
 
 /// Índice do `module-null-sink` carregado (`pactl unload-module <idx>` pra
@@ -77,7 +77,9 @@ fn unload_module(index: u32) -> bool {
 /// daemon que morreu com o modo ativo (o módulo vive no servidor
 /// pipewire-pulse, não morre junto com o daemon).
 fn orphan_module_indexes() -> Vec<u32> {
-    let Some(listing) = pactl(&["list", "short", "modules"]) else { return Vec::new() };
+    let Some(listing) = pactl(&["list", "short", "modules"]) else {
+        return Vec::new();
+    };
     listing
         .lines()
         .filter_map(|line| {
@@ -107,31 +109,53 @@ pub async fn enable(
     }
 
     let Some(connection) = active.lock().unwrap().clone() else {
-        push_log(hud, "[!] coluna: sem telemóvel conectado pra ouvir o som do PC".to_string());
+        push_log(
+            hud,
+            "[!] coluna: sem telemóvel conectado pra ouvir o som do PC".to_string(),
+        );
         return false;
     };
 
     // Restos de uma sessão anterior que morreu no meio? Limpa antes de
     // criar outro (o load com o mesmo sink_name falharia, ou pior, criaria
     // um segundo módulo com nome alternativo).
-    for idx in tokio::task::spawn_blocking(orphan_module_indexes).await.unwrap_or_default() {
+    for idx in tokio::task::spawn_blocking(orphan_module_indexes)
+        .await
+        .unwrap_or_default()
+    {
         let _ = tokio::task::spawn_blocking(move || unload_module(idx)).await;
     }
 
-    let Some(prev) = tokio::task::spawn_blocking(default_sink_name).await.unwrap_or(None) else {
-        push_log(hud, "[!] coluna: não foi possível descobrir o sink padrão atual".to_string());
+    let Some(prev) = tokio::task::spawn_blocking(default_sink_name)
+        .await
+        .unwrap_or(None)
+    else {
+        push_log(
+            hud,
+            "[!] coluna: não foi possível descobrir o sink padrão atual".to_string(),
+        );
         return false;
     };
     if prev == PHONE_SINK_NAME {
-        push_log(hud, "[!] coluna: o sink do telemóvel já é o padrão (estado inconsistente), recusando".to_string());
+        push_log(
+            hud,
+            "[!] coluna: o sink do telemóvel já é o padrão (estado inconsistente), recusando"
+                .to_string(),
+        );
         return false;
     }
 
     crate::config::set_speaker_prev_sink(config, Some(&prev));
 
-    let Some(index) = tokio::task::spawn_blocking(load_speaker_module).await.unwrap_or(None) else {
+    let Some(index) = tokio::task::spawn_blocking(load_speaker_module)
+        .await
+        .unwrap_or(None)
+    else {
         crate::config::set_speaker_prev_sink(config, None);
-        push_log(hud, "[!] coluna: o PipeWire não aceitou criar o sink virtual".to_string());
+        push_log(
+            hud,
+            "[!] coluna: o PipeWire não aceitou criar o sink virtual".to_string(),
+        );
         return false;
     };
     *handle.lock().unwrap() = Some(index);
@@ -152,7 +176,13 @@ pub async fn enable(
         format!("[+] coluna: telemóvel é agora a saída de som do PC (antes: {prev})"),
     );
 
-    crate::tap::start(connection, Some(PHONE_SINK_NAME.to_string()), tap.clone(), hud.clone()).await;
+    crate::tap::start(
+        connection,
+        Some(PHONE_SINK_NAME.to_string()),
+        tap.clone(),
+        hud.clone(),
+    )
+    .await;
     true
 }
 
@@ -160,7 +190,12 @@ pub async fn enable(
 /// deliberada: restaura o default PRIMEIRO (as streams em curso voltam pras
 /// colunas de uma vez), para o tap, e só então descarrega o módulo —
 /// descarregar antes mataria as streams em vez de movê-las.
-pub async fn disable(tap: &TapHandle, hud: &Arc<Mutex<HudState>>, config: &SharedConfig, handle: &SpeakerHandle) -> bool {
+pub async fn disable(
+    tap: &TapHandle,
+    hud: &Arc<Mutex<HudState>>,
+    config: &SharedConfig,
+    handle: &SpeakerHandle,
+) -> bool {
     let index = handle.lock().unwrap().take();
     if index.is_none() {
         return false; // já estava desligado
@@ -170,8 +205,12 @@ pub async fn disable(tap: &TapHandle, hud: &Arc<Mutex<HudState>>, config: &Share
     let prev = crate::config::speaker_prev_sink(config);
     if let Some(prev_name) = prev.clone() {
         // Log ANTES do move pra closure (spawn_blocking exige posse).
-        push_log(hud, format!("[i] coluna: a devolver a saída de som a {prev_name}"));
-        let _ = tokio::task::spawn_blocking(move || crate::audio::set_default_sink(&prev_name)).await;
+        push_log(
+            hud,
+            format!("[i] coluna: a devolver a saída de som a {prev_name}"),
+        );
+        let _ =
+            tokio::task::spawn_blocking(move || crate::audio::set_default_sink(&prev_name)).await;
         crate::config::set_speaker_prev_sink(config, None);
     }
 
@@ -192,7 +231,9 @@ pub fn cleanup_orphans(config: &SharedConfig) {
     if let Some(prev) = crate::config::speaker_prev_sink(config) {
         if !orphans.is_empty() {
             crate::audio::set_default_sink(&prev);
-            println!("[i] coluna: sessão anterior terminou com o telemóvel como saída — a devolver pra {prev}");
+            println!(
+                "[i] coluna: sessão anterior terminou com o telemóvel como saída — a devolver pra {prev}"
+            );
         }
         crate::config::set_speaker_prev_sink(config, None);
     }

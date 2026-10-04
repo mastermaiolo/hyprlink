@@ -4,7 +4,11 @@ use iced::widget::column;
 pub fn clip_screen(hud: &Hud) -> Element<'_, Message> {
     let modules = &hud.snapshot.modules;
     let query = &hud.clip_search;
-    let mut visible: Vec<&crate::state::ClipEntry> = modules.clip_history.iter().filter(|e| matches_search(&e.text, query)).collect();
+    let mut visible: Vec<&crate::state::ClipEntry> = modules
+        .clip_history
+        .iter()
+        .filter(|e| matches_search(&e.text, query))
+        .collect();
     visible.sort_by_key(|e| !e.pinned); // fixados primeiro, mantém ordem relativa (stable sort)
 
     let action_btn = |label: &'static str, msg: Message| {
@@ -23,11 +27,16 @@ pub fn clip_screen(hud: &Hud) -> Element<'_, Message> {
             container(
                 column![
                     row![
-                        text(t(entry.direction)).size(9).color(if pinned { GREEN } else { TEXT_3 }),
+                        text(t(entry.direction))
+                            .size(9)
+                            .color(if pinned { GREEN } else { TEXT_3 }),
                         Space::new().width(Length::Fill),
                         text(entry.at.clone()).size(9).color(TEXT_5),
                     ],
-                    text(entry.text.clone()).size(11).color(TEXT).line_height(text::LineHeight::Relative(1.4)),
+                    text(entry.text.clone())
+                        .size(11)
+                        .color(TEXT)
+                        .line_height(text::LineHeight::Relative(1.4)),
                     row![
                         action_btn("copiar", Message::CopyText(entry.text.clone())),
                         action_btn(pin_label, Message::ClipPin(id)),
@@ -39,7 +48,11 @@ pub fn clip_screen(hud: &Hud) -> Element<'_, Message> {
             .padding([10, 12])
             .width(Length::Fill)
             .style(move |_| container::Style {
-                background: if pinned { Some(Background::Color(Color { a: 0.03, ..GREEN })) } else { None },
+                background: if pinned {
+                    Some(Background::Color(Color { a: 0.03, ..GREEN }))
+                } else {
+                    None
+                },
                 ..Default::default()
             })
             .into()
@@ -47,14 +60,27 @@ pub fn clip_screen(hud: &Hud) -> Element<'_, Message> {
         .collect();
 
     let header_row = row![
-        text(t1("HISTÓRICO · {} NESTA SESSÃO", modules.clip_history.len())).size(9).color(TEXT_5),
+        text(t1(
+            "HISTÓRICO · {} NESTA SESSÃO",
+            modules.clip_history.len()
+        ))
+        .size(9)
+        .color(TEXT_5),
         Space::new().width(Length::Fill),
-        search_row(query, Message::ClipSearch, Message::ClipSearch(String::new())),
+        search_row(
+            query,
+            Message::ClipSearch,
+            Message::ClipSearch(String::new())
+        ),
     ]
     .align_y(Alignment::Center);
 
     column![
-        module_header("CLIP", t1("{} no histórico desta sessão", modules.clip_history.len()), TEXT_2),
+        module_header(
+            "CLIP",
+            t1("{} no histórico desta sessão", modules.clip_history.len()),
+            TEXT_2
+        ),
         header_row,
         history_list(rows, "Nada sincronizado ainda nesta sessão."),
     ]
@@ -62,4 +88,3 @@ pub fn clip_screen(hud: &Hud) -> Element<'_, Message> {
     .height(Length::Fill)
     .into()
 }
-

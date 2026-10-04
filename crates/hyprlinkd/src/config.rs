@@ -45,7 +45,13 @@ fn default_true() -> bool {
 
 impl Default for TrackSettings {
     fn default() -> Self {
-        Self { sensitivity: 1.0, scroll_speed: 1.0, acceleration: false, invert_scroll: false, virtual_keyboard: true }
+        Self {
+            sensitivity: 1.0,
+            scroll_speed: 1.0,
+            acceleration: false,
+            invert_scroll: false,
+            virtual_keyboard: true,
+        }
     }
 }
 
@@ -103,7 +109,9 @@ pub struct AppConfig {
 }
 
 fn default_download_dir() -> PathBuf {
-    dirs::download_dir().unwrap_or_else(|| dirs::home_dir().unwrap_or_default()).join("HyprLink")
+    dirs::download_dir()
+        .unwrap_or_else(|| dirs::home_dir().unwrap_or_default())
+        .join("HyprLink")
 }
 
 fn default_tray_special_workspace() -> bool {

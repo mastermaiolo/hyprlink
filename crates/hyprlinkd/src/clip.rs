@@ -11,8 +11,8 @@ use sha2::{Digest, Sha256};
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 
-use crate::active::{announce, push, ActiveConn};
-use crate::state::{self, push_log, HudState};
+use crate::active::{ActiveConn, announce, push};
+use crate::state::{self, HudState, push_log};
 
 /// Teto pra aceitar uma imagem do clipboard (32 MiB) — maior que isso é
 /// recusado com log; imagem de clipboard tem de ser "uma foto/screenshot",
@@ -57,7 +57,11 @@ pub fn new_pending_clip() -> PendingClipImage {
 fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    hasher.finalize().iter().map(|b| format!("{b:02x}")).collect()
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 /// `clipboard.set` recebido do telemóvel: escreve no clipboard do Wayland.
@@ -92,7 +96,9 @@ pub async fn watch(active: ActiveConn, guard: LastLocalSet, hud: Arc<Mutex<HudSt
                 return;
             }
         };
-        let Some(mut stdout) = child.stdout.take() else { return };
+        let Some(mut stdout) = child.stdout.take() else {
+            return;
+        };
         let mut buf = vec![0u8; 64 * 1024];
         // Um clipboard maior que 64 KiB chega em mais de um `read()` — sem
         // isso, cada pedaço virava um `clipboard.set` próprio e corrompia o
@@ -133,13 +139,24 @@ pub async fn watch(active: ActiveConn, guard: LastLocalSet, hud: Arc<Mutex<HudSt
 /// `clipboard.set` de IMAGEM recebido do telemóvel: escreve PNG cru no
 /// clipboard do Wayland oferecendo `image/png`. O hash fica no guard pra o
 /// poll não devolver a mesma imagem ao remetente.
-pub async fn set_image_from_remote(bytes: Vec<u8>, guard: &LastLocalImage, hud: &Arc<Mutex<HudState>>) {
+pub async fn set_image_from_remote(
+    bytes: Vec<u8>,
+    guard: &LastLocalImage,
+    hud: &Arc<Mutex<HudState>>,
+) {
     if bytes.is_empty() || bytes.len() > MAX_IMAGE_BYTES {
-        push_log(hud, format!("[!] clipboard: imagem recusada ({} bytes)", bytes.len()));
+        push_log(
+            hud,
+            format!("[!] clipboard: imagem recusada ({} bytes)", bytes.len()),
+        );
         return;
     }
     *guard.lock().unwrap() = Some(sha256_hex(&bytes));
-    let mut child = match Command::new("wl-copy").args(["--type", "image/png"]).stdin(std::process::Stdio::piped()).spawn() {
+    let mut child = match Command::new("wl-copy")
+        .args(["--type", "image/png"])
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+    {
         Ok(c) => c,
         Err(e) => {
             push_log(hud, format!("[!] clipboard: wl-copy falhou: {e}"));
@@ -154,13 +171,27 @@ pub async fn set_image_from_remote(bytes: Vec<u8>, guard: &LastLocalImage, hud: 
         }
     }
     let _ = child.wait().await;
-    state::push_clip_entry(hud, "telemóvel → PC", format!("🖼️ PNG ({} KB)", bytes.len() / 1024));
-    push_log(hud, format!("[i] clipboard.set · telemóvel → PC · imagem {} KB", bytes.len() / 1024));
+    state::push_clip_entry(
+        hud,
+        "telemóvel → PC",
+        format!("🖼️ PNG ({} KB)", bytes.len() / 1024),
+    );
+    push_log(
+        hud,
+        format!(
+            "[i] clipboard.set · telemóvel → PC · imagem {} KB",
+            bytes.len() / 1024
+        ),
+    );
 }
 
 /// Uni-stream de imagem anunciada por `clipboard.set` (has_payload=true):
 /// lê os bytes até EOF e entrega ao `wl-copy`.
-pub async fn receive_image_stream(mut recv: quinn::RecvStream, guard: LastLocalImage, hud: Arc<Mutex<HudState>>) {
+pub async fn receive_image_stream(
+    mut recv: quinn::RecvStream,
+    guard: LastLocalImage,
+    hud: Arc<Mutex<HudState>>,
+) {
     let mut bytes: Vec<u8> = Vec::with_capacity(256 * 1024);
     let mut buf = vec![0u8; 64 * 1024];
     loop {
@@ -169,7 +200,10 @@ pub async fn receive_image_stream(mut recv: quinn::RecvStream, guard: LastLocalI
             Ok(None) | Err(_) => break,
         };
         if bytes.len() + n > MAX_IMAGE_BYTES {
-            push_log(&hud, "[!] clipboard: imagem do telemóvel excede 32 MiB, descartada".to_string());
+            push_log(
+                &hud,
+                "[!] clipboard: imagem do telemóvel excede 32 MiB, descartada".to_string(),
+            );
             let _ = recv.stop(0u32.into());
             return;
         }
@@ -183,14 +217,21 @@ pub async fn receive_image_stream(mut recv: quinn::RecvStream, guard: LastLocalI
 async fn send_image_to_phone(active: &ActiveConn, hud: &Arc<Mutex<HudState>>, bytes: Vec<u8>) {
     let body = Value::Map(vec![
         (Value::Text("mime".into()), Value::Text("image/png".into())),
-        (Value::Text("size".into()), Value::Integer((bytes.len() as i64).into())),
+        (
+            Value::Text("size".into()),
+            Value::Integer((bytes.len() as i64).into()),
+        ),
     ]);
     let Some(id) = announce(active, "clipboard.set", Some(body)).await else {
         return; // sem conexão — o poll tenta de novo quando houver? Não: o hash
-                // já foi marcado como visto; a próxima imagem nova é que sai.
+        // já foi marcado como visto; a próxima imagem nova é que sai.
     };
-    let Some(connection) = active.lock().unwrap().clone() else { return };
-    let Ok(mut send) = connection.open_uni().await else { return };
+    let Some(connection) = active.lock().unwrap().clone() else {
+        return;
+    };
+    let Ok(mut send) = connection.open_uni().await else {
+        return;
+    };
     if send.write_all(&id.to_be_bytes()).await.is_err() {
         return;
     }
@@ -198,8 +239,18 @@ async fn send_image_to_phone(active: &ActiveConn, hud: &Arc<Mutex<HudState>>, by
         return;
     }
     let _ = send.finish();
-    state::push_clip_entry(hud, "PC → telemóvel", format!("🖼️ PNG ({} KB)", bytes.len() / 1024));
-    push_log(hud, format!("[i] clipboard.set · PC → telemóvel · imagem {} KB", bytes.len() / 1024));
+    state::push_clip_entry(
+        hud,
+        "PC → telemóvel",
+        format!("🖼️ PNG ({} KB)", bytes.len() / 1024),
+    );
+    push_log(
+        hud,
+        format!(
+            "[i] clipboard.set · PC → telemóvel · imagem {} KB",
+            bytes.len() / 1024
+        ),
+    );
 }
 
 /// Poll de imagens do clipboard local → telemóvel. Por que poll e não
@@ -216,7 +267,11 @@ pub async fn watch_images(active: ActiveConn, guard: LastLocalImage, hud: Arc<Mu
     loop {
         interval.tick().await;
 
-        let types = match Command::new("wl-paste").args(["--list-types"]).output().await {
+        let types = match Command::new("wl-paste")
+            .args(["--list-types"])
+            .output()
+            .await
+        {
             Ok(o) => String::from_utf8_lossy(&o.stdout).to_string(),
             Err(_) => continue,
         };
@@ -224,7 +279,11 @@ pub async fn watch_images(active: ActiveConn, guard: LastLocalImage, hud: Arc<Mu
             continue;
         }
 
-        let bytes = match Command::new("wl-paste").args(["--type", "image/png"]).output().await {
+        let bytes = match Command::new("wl-paste")
+            .args(["--type", "image/png"])
+            .output()
+            .await
+        {
             Ok(o) => o.stdout,
             Err(_) => continue,
         };
