@@ -395,7 +395,7 @@ impl Transport for Simulator {
                 if d.id == 1 {
                     d.latency_ms = Some(lat);
                     d.rssi = Some(rssi);
-                    if (t as u32) % 45 == 0 {
+                    if (t as u32).is_multiple_of(45) {
                         d.battery = d.battery.map(|b| b.saturating_sub(1).max(5));
                     }
                 }

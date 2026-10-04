@@ -223,6 +223,11 @@ pub enum ErrorKind {
 }
 
 /// Things the daemon tells the GUI.
+///
+/// `Phone` is the big variant (~280 B). Events are decoded one at a time and
+/// handed to the UI, never stored in bulk, so boxing it would only change the
+/// Rust API (the wire is identical) for no gain.
+#[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Event {
     Devices(Vec<Device>),

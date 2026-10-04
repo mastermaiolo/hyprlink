@@ -376,7 +376,7 @@ mod tests {
             let t0 = std::time::Instant::now();
             let sample = appsink
                 .pull_sample()
-                .expect(&format!("pull #{i} deveria funcionar"));
+                .unwrap_or_else(|_| panic!("pull #{i} deveria funcionar"));
             let buffer = sample.buffer().expect("amostra deveria ter buffer");
             let map = buffer.map_readable().expect("buffer deveria ser legível");
             println!(

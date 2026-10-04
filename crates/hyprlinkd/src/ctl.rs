@@ -271,7 +271,7 @@ async fn handle(line: &str, ctl: &Ctl) -> String {
         // Notificação no telemóvel — notification.send já existe no
         // protocolo (PROTOCOL.md §notification), era só ninguém mandar
         // de fora da GUI.
-        "notif" if rest.len() >= 1 => {
+        "notif" if !rest.is_empty() => {
             let title = rest[0];
             let body = rest[1..].join(" ");
             let packet_body = Some(ciborium::Value::Map(vec![
@@ -281,7 +281,7 @@ async fn handle(line: &str, ctl: &Ctl) -> String {
                 ),
                 (
                     ciborium::Value::Text("body".into()),
-                    ciborium::Value::Text(body.into()),
+                    ciborium::Value::Text(body),
                 ),
                 (
                     ciborium::Value::Text("app_name".into()),

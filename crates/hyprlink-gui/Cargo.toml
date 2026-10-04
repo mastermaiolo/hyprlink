@@ -18,3 +18,12 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 ksni = "0.3.6"
 serde_json.workspace = true
 serde.workspace = true
+
+# Os ficheiros de design (theme.rs, app.rs, views.rs…) mantêm-se iguais aos
+# do repositório de origem; estes lints corrigem-se lá, não aqui.
+#   - collapsible_if: app.rs, atalhos de teclado em ifs aninhados;
+#   - if_same_then_else: theme.rs `card()`, ramos selected/hovered com a
+#     mesma cor de propósito (theme.rs não se toca — regra 1).
+[lints.clippy]
+collapsible_if = "allow"
+if_same_then_else = "allow"

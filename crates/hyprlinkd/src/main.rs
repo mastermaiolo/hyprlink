@@ -105,6 +105,9 @@ fn main() -> anyhow::Result<()> {
     .map_err(|e| anyhow::anyhow!("erro na GUI: {e}"))
 }
 
+// Os handles partilhados com a GUI antiga passam a estado interno do daemon
+// quando o IPC substituir a partilha de memória (Fase 2).
+#[allow(clippy::too_many_arguments)]
 async fn run_daemon(
     identity: identity::ServerIdentity,
     pairing: Arc<Mutex<pairing::PairingStore>>,

@@ -25,12 +25,9 @@ pub fn fetch_cursor_pos() -> Task<Message> {
                 .iter()
                 .find(|m| m.get("focused").and_then(|v| v.as_bool()) == Some(true))
                 .or_else(|| monitors.first());
-            let size = match focused
+            let size = focused
                 .and_then(|m| Some((m.get("width")?.as_i64()?, m.get("height")?.as_i64()?)))
-            {
-                Some(s) => s,
-                None => (1920, 1080),
-            };
+                .unwrap_or((1920, 1080));
             (cursor, size)
         },
         |(cursor, size)| Message::CursorPosLoaded(cursor, size),

@@ -98,10 +98,10 @@ pub fn dispatch(cmd: &str) -> String {
     // por avaliação de `hl.dispatch(...)` — cobre os 3 dispatchers que o
     // Mission Control do app realmente usa (workspace/focuswindow/closewindow).
     // Ver PROTOCOL.md §6.
-    if let Some(lua_expr) = lua_fallback(disp, arg) {
-        if let Some(out) = run_hyprctl_checked(&["dispatch", &lua_expr]) {
-            return finish(out);
-        }
+    if let Some(lua_expr) = lua_fallback(disp, arg)
+        && let Some(out) = run_hyprctl_checked(&["dispatch", &lua_expr])
+    {
+        return finish(out);
     }
     "erro: dispatch falhou (Hyprland recusou a sintaxe clássica e o fallback Lua)".to_string()
 }
@@ -209,18 +209,13 @@ pub async fn watch_events(active: ActiveConn, hud: Arc<Mutex<HudState>>) {
         match UnixStream::connect(&path).await {
             Ok(stream) => {
                 let mut lines = tokio::io::BufReader::new(stream).lines();
-                loop {
-                    match lines.next_line().await {
-                        Ok(Some(line)) => {
-                            if let Some(ws) = line.strip_prefix("workspace>>") {
-                                state::set_workspace(&hud, ws.to_string());
-                            }
-                            let body =
-                                Value::Map(vec![(Value::Text("event".into()), Value::Text(line))]);
-                            push(&active, "hypr.event", Some(body)).await;
-                        }
-                        _ => break, // socket fechou, reconecta
+                // Sai quando o socket fecha (ou dá erro) e reconecta.
+                while let Ok(Some(line)) = lines.next_line().await {
+                    if let Some(ws) = line.strip_prefix("workspace>>") {
+                        state::set_workspace(&hud, ws.to_string());
                     }
+                    let body = Value::Map(vec![(Value::Text("event".into()), Value::Text(line))]);
+                    push(&active, "hypr.event", Some(body)).await;
                 }
             }
             Err(_) => {

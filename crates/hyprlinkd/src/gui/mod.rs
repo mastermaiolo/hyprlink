@@ -254,6 +254,8 @@ enum Message {
 }
 
 impl Hud {
+    // GUI antiga: sai com a separação daemon/GUI (Fase 2–4).
+    #[allow(clippy::too_many_arguments)]
     fn new(
         shared: Arc<Mutex<HudState>>,
         config: SharedConfig,
@@ -355,20 +357,20 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
                     |_| Message::Tick,
                 );
             }
-            if let WebcamTest::Running { started } = hud.webcam_test {
-                if started.elapsed() >= WEBCAM_TEST_DURATION {
-                    let mbps = hud.snapshot.modules.webcam_mbps.unwrap_or(0.0);
-                    hud.webcam_test = WebcamTest::Done {
-                        mbps,
-                        suggested: suggest_webcam_config(mbps),
-                    };
-                    *hud.pending_webcam.lock().unwrap() = None;
-                    let active = hud.active.clone();
-                    return Task::perform(
-                        async move { crate::active::push(&active, "webcam.stop", None).await },
-                        |_| Message::Tick,
-                    );
-                }
+            if let WebcamTest::Running { started } = hud.webcam_test
+                && started.elapsed() >= WEBCAM_TEST_DURATION
+            {
+                let mbps = hud.snapshot.modules.webcam_mbps.unwrap_or(0.0);
+                hud.webcam_test = WebcamTest::Done {
+                    mbps,
+                    suggested: suggest_webcam_config(mbps),
+                };
+                *hud.pending_webcam.lock().unwrap() = None;
+                let active = hud.active.clone();
+                return Task::perform(
+                    async move { crate::active::push(&active, "webcam.stop", None).await },
+                    |_| Message::Tick,
+                );
             }
             Task::none()
         }
@@ -440,10 +442,8 @@ fn update(hud: &mut Hud, message: Message) -> Task<Message> {
                 &hud.shared.lock().unwrap().conn,
                 ConnState::Connected { fingerprint_hex, .. } if fingerprint_hex == &fp
             );
-            if is_current {
-                if let Some(connection) = hud.active.lock().unwrap().take() {
-                    connection.close(0u32.into(), b"HyprLink: dispositivo revogado");
-                }
+            if is_current && let Some(connection) = hud.active.lock().unwrap().take() {
+                connection.close(0u32.into(), b"HyprLink: dispositivo revogado");
             }
             Task::none()
         }
@@ -1201,6 +1201,8 @@ fn style(_hud: &Hud, theme: &Theme) -> iced::theme::Style {
     }
 }
 
+// GUI antiga: sai com a separação daemon/GUI (Fase 2–4).
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     shared: Arc<Mutex<HudState>>,
     config: SharedConfig,

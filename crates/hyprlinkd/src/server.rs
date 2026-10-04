@@ -400,8 +400,7 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
             // NÃO fazer return aqui: o finish() no fim do handler é o que
             // destrava o app (ele bloqueia lendo a bidi até EOF —
             // PROTOCOL.md §4).
-            if body.and_then(|b| body_get_str(b, "mime")).as_deref() == Some("image/png")
-                && packet.has_payload
+            if body.and_then(|b| body_get_str(b, "mime")) == Some("image/png") && packet.has_payload
             {
                 *ctx.pending_clip.lock().unwrap() = Some(packet.id);
                 state::push_log(
@@ -672,17 +671,17 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
             ctx.input.click(button);
         }
         "input.type" => {
-            if let Some(text) = body.and_then(|b| body_get_str(b, "text")) {
-                if config::track_settings(&ctx.config).virtual_keyboard {
-                    ctx.input.type_text(text);
-                }
+            if let Some(text) = body.and_then(|b| body_get_str(b, "text"))
+                && config::track_settings(&ctx.config).virtual_keyboard
+            {
+                ctx.input.type_text(text);
             }
         }
         "input.key" => {
-            if let Some(key) = body.and_then(|b| body_get_str(b, "key")) {
-                if config::track_settings(&ctx.config).virtual_keyboard {
-                    ctx.input.key(key);
-                }
+            if let Some(key) = body.and_then(|b| body_get_str(b, "key"))
+                && config::track_settings(&ctx.config).virtual_keyboard
+            {
+                ctx.input.key(key);
             }
         }
 

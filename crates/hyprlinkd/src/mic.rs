@@ -16,6 +16,7 @@
 //!    existe porta de entrada nenhuma pra alimentar com os bytes do
 //!    telemóvel. Também instável: crasha (segfault confirmado) se
 //!    `media.class=Audio/Sink` for passado no lado de playback.
+//!
 //! A solução de verdade (`pipewiresink` com `media.class=Audio/Source`
 //! direto no `stream-properties`) dispensa qualquer processo externo.
 //!

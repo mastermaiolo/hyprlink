@@ -95,8 +95,14 @@ const MIRROR: MirrorConfig = MirrorConfig {
 /// Without the `mock` feature there is no JSON backend yet (the real socket
 /// lands in Fase 3): every snapshot says `"daemon": "down"`.
 #[cfg(not(feature = "mock"))]
-#[derive(Default)]
 struct Simulator;
+
+#[cfg(not(feature = "mock"))]
+impl Simulator {
+    fn new() -> Self {
+        Simulator
+    }
+}
 
 #[cfg(not(feature = "mock"))]
 impl Transport for Simulator {
@@ -123,7 +129,7 @@ struct Backend {
 impl Backend {
     fn new() -> Self {
         let mut b = Self {
-            sim: Simulator::default(),
+            sim: Simulator::new(),
             applied: Toggles::default(),
             snap: Snapshot::new(DAEMON),
             probe: Probe::default(),
@@ -259,10 +265,10 @@ fn main() -> ExitCode {
         .iter()
         .find(|a| !a.starts_with("--"))
         .map(String::as_str);
-    if let Some(cmd) = first {
-        if legacy::ONLY_HERE.contains(&cmd) || (!json && legacy::SHARED.contains(&cmd)) {
-            legacy::run(args);
-        }
+    if let Some(cmd) = first
+        && (legacy::ONLY_HERE.contains(&cmd) || (!json && legacy::SHARED.contains(&cmd)))
+    {
+        legacy::run(args);
     }
     let pos: Vec<&str> = args
         .iter()
