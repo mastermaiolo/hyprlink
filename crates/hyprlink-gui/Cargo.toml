@@ -1,0 +1,20 @@
+[package]
+name = "hyprlink-gui"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "HYPRLINK — a GUI iced do HyprLink (iced::daemon + tray StatusNotifierItem)"
+
+[features]
+# Enquanto não houver transporte real (Fase 3), o simulador vem ligado por
+# omissão. Sem ele a GUI arranca vazia, como com o daemon parado.
+default = ["mock"]
+mock = ["hyprlink-proto/mock"]
+
+[dependencies]
+hyprlink-proto = { workspace = true, features = ["fmt"] }
+iced = { version = "0.14.0", features = ["canvas", "tokio", "qr_code"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+ksni = "0.3.6"
+serde_json.workspace = true
+serde.workspace = true

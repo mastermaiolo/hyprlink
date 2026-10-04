@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/hyprlink-proto",
     "crates/hyprlinkd",
+    "crates/hyprlink-gui",
 ]
 [workspace.package]
 edition = "2024"
