@@ -9,8 +9,10 @@
 #   src/bin/hyprlinkctl.rs                         → (manual: crates/hyprlinkctl/src/main.rs)
 #   assets/, docs/screenshots/, README.md          → crates/hyprlink-gui/
 #
-# Diferenças locais que o script repõe depois de copiar:
-#   - app.rs: o transporte vem de hyprlink_gui::transport() (feature mock);
+# Diferenças locais que o script repõe depois de copiar (local_patches.py):
+#   - app.rs: o transporte vem de hyprlink_gui::transport() (socket real;
+#     HYPRLINK_MOCK=1 = simulador) e a subscrição da instância única;
+#   - main.rs: instância única (um segundo arranque só foca a janela);
 #   - link/mod.rs: `pub mod mock` e `pub mod mock_more` atrás de
 #     cfg(any(test, feature = "mock")).
 set -euo pipefail
@@ -26,8 +28,7 @@ for f in fmt host snapshot; do pairs+=("src/$f.rs:$PROTO/src/$f.rs"); done
 for f in mod mock mock_more packets; do pairs+=("src/link/$f.rs:$PROTO/src/link/$f.rs"); done
 
 patch_local() {
-    sed -i 's|            link: Box::new(link::mock::Simulator::new()),|            link: hyprlink_gui::transport(),|' "$GUI/src/app.rs"
-    sed -i -E 's|^pub mod (mock\|mock_more);|#[cfg(any(test, feature = "mock"))]\npub mod \1;|' "$PROTO/src/link/mod.rs"
+    python3 "$ROOT/scripts/local_patches.py" "$GUI/src/app.rs" "$GUI/src/main.rs" "$PROTO/src/link/mod.rs"
 }
 
 if [[ "${1:-}" == "--check" ]]; then
@@ -36,8 +37,7 @@ if [[ "${1:-}" == "--check" ]]; then
         from="$SRC/${p%%:*}"; to="${p#*:}"
         cp "$from" "$tmp/x.rs"
         case "$to" in
-            */app.rs) sed -i 's|            link: Box::new(link::mock::Simulator::new()),|            link: hyprlink_gui::transport(),|' "$tmp/x.rs" ;;
-            */link/mod.rs) sed -i -E 's|^pub mod (mock\|mock_more);|#[cfg(any(test, feature = "mock"))]\npub mod \1;|' "$tmp/x.rs" ;;
+            */app.rs|*/main.rs|*/link/mod.rs) python3 "$ROOT/scripts/local_patches.py" --as "$(basename "$to")" "$tmp/x.rs" ;;
         esac
         cmp -s "$tmp/x.rs" "$to" || echo "difere: ${p%%:*}"
     done

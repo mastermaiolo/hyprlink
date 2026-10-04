@@ -23,7 +23,7 @@ shoot() { # nome secção altura demo
     Xvfb "$DISP" -screen 0 "1480x${h}x24" -nolisten tcp >/dev/null 2>&1 &
     local xp=$!; sleep 0.8
     env -u WAYLAND_DISPLAY DISPLAY="$DISP" ICED_BACKEND=tiny-skia \
-        HYPRLINK_SECTION="$sec" HYPRLINK_WINDOW_H="$h" ${demo:+HYPRLINK_DEMO=$demo} \
+        HYPRLINK_MOCK=1 HYPRLINK_SECTION="$sec" HYPRLINK_WINDOW_H="$h" ${demo:+HYPRLINK_DEMO=$demo} \
         XDG_RUNTIME_DIR="$(mktemp -d)" "$BIN" >/dev/null 2>&1 &
     local gp=$!; sleep "${SETTLE:-4}"
     DISPLAY="$DISP" import -window root "$OUT/$name.png"

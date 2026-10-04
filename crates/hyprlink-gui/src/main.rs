@@ -15,6 +15,9 @@ use app::App;
 use hyprlink_gui::{host, link};
 
 fn main() -> iced::Result {
+    if hyprlink_gui::instance::forward_to_running(!std::env::args().any(|a| a == "--hidden")) {
+        return Ok(());
+    }
     let mut daemon = iced::daemon(App::boot, App::update, App::view)
         .title(App::title)
         .subscription(App::subscription)

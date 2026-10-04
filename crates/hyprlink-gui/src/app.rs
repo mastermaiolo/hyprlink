@@ -962,6 +962,7 @@ impl App {
                 _ => None,
             }),
             tray::subscription(),
+            hyprlink_gui::instance::subscription().map(|_| Message::Tray(tray::Action::Open)),
         ])
     }
 

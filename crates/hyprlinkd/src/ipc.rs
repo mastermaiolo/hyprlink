@@ -115,13 +115,7 @@ async fn client(stream: UnixStream, hub: Hub, commands: mpsc::UnboundedSender<Co
     // Subscrever antes de copiar o estado: nada se perde entre os dois
     // (um evento repetido é inofensivo — estado é idempotente).
     let mut rx = hub.subscribe();
-    {
-        let mut p = pending.lock().unwrap();
-        for e in hub.snapshot() {
-            p.push(e);
-        }
-    }
-    wake.notify_one();
+    let initial = hub.snapshot();
 
     let feeder = {
         let (pending, wake, hub) = (pending.clone(), wake.clone(), hub.clone());
@@ -146,11 +140,26 @@ async fn client(stream: UnixStream, hub: Hub, commands: mpsc::UnboundedSender<Co
     let writer = {
         let (pending, wake) = (pending.clone(), wake.clone());
         tokio::spawn(async move {
+            let initial = initial;
             let hello = ServerMsg::Hello {
                 proto_version: PROTO_VERSION,
                 daemon_version: env!("CARGO_PKG_VERSION").to_string(),
             };
             if wr.write_all(&ipc::encode(&hello)).await.is_err() {
+                return;
+            }
+            // Estado completo e `Ready`. O que entretanto chegou ao `pending`
+            // vai a seguir (repetido é inofensivo: é estado).
+            for e in initial {
+                if wr
+                    .write_all(&ipc::encode(&ServerMsg::Event(e)))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+            }
+            if wr.write_all(&ipc::encode(&ServerMsg::Ready)).await.is_err() {
                 return;
             }
             loop {
@@ -229,9 +238,12 @@ mod tests {
     }
 
     async fn read_event(s: &mut UnixStream) -> Event {
-        match read_msg(s).await {
-            ServerMsg::Event(e) => e,
-            other => panic!("esperava Event, veio {other:?}"),
+        loop {
+            match read_msg(s).await {
+                ServerMsg::Event(e) => return e,
+                ServerMsg::Ready => {}
+                other => panic!("esperava Event, veio {other:?}"),
+            }
         }
     }
 
@@ -255,9 +267,10 @@ mod tests {
                 ServerMsg::Hello { proto_version, .. } => assert_eq!(proto_version, PROTO_VERSION),
                 other => panic!("primeira mensagem devia ser Hello: {other:?}"),
             }
-            // Estado completo, por ordem de chave.
+            // Estado completo, por ordem de chave, e Ready.
             assert!(matches!(read_event(s).await, Event::SpeakerMode(true)));
             assert!(matches!(read_event(s).await, Event::Rssi(-60)));
+            assert!(matches!(read_msg(s).await, ServerMsg::Ready));
         }
 
         // Evento ao vivo chega aos dois.
@@ -346,6 +359,7 @@ mod tests {
         let _stuck = UnixStream::connect(&path).await.unwrap();
         let mut ok = UnixStream::connect(&path).await.unwrap();
         assert!(matches!(read_msg(&mut ok).await, ServerMsg::Hello { .. }));
+        assert!(matches!(read_msg(&mut ok).await, ServerMsg::Ready));
         for i in 0..20_000 {
             hub.publish(Event::Levels {
                 mic: Some(0.5),

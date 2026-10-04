@@ -3,33 +3,27 @@
 //! (`crate::link`, `crate::host`, `hyprlink_gui::fmt`…), so the design files
 //! stay identical to the ones in the design repository.
 
+pub mod instance;
+
 pub use hyprlink_proto::{fmt, host, link, snapshot};
 
 use link::Transport;
 
-/// The transport the GUI talks through.
-///
-/// - feature `mock` (default until the real socket lands in Fase 3): the
-///   simulated daemon. `HYPRLINK_MOCK=1` will force it once a real transport
-///   exists.
-/// - without `mock`: [`Offline`] — no events, as if the daemon were stopped.
-pub fn transport() -> Box<dyn Transport> {
-    #[cfg(feature = "mock")]
-    {
-        Box::new(link::mock::Simulator::new())
-    }
-    #[cfg(not(feature = "mock"))]
-    {
-        Box::new(Offline)
-    }
+/// `HYPRLINK_MOCK=1`: the simulated daemon (design work, captures).
+pub fn mock_requested() -> bool {
+    std::env::var("HYPRLINK_MOCK").is_ok_and(|v| v == "1")
 }
 
-/// A transport with no daemon behind it.
-pub struct Offline;
-
-impl Transport for Offline {
-    fn send(&mut self, _command: link::Command) {}
-    fn poll(&mut self, _dt: std::time::Duration) -> Vec<link::Event> {
-        Vec::new()
+/// The transport the GUI talks through.
+///
+/// - default: the real `hyprlinkd`, over `$XDG_RUNTIME_DIR/hyprlink.sock`,
+///   reconnecting in the background ([`hyprlink_proto::client::Socket`]);
+/// - `HYPRLINK_MOCK=1` (needs the `mock` feature, on by default): the
+///   simulator.
+pub fn transport() -> Box<dyn Transport> {
+    #[cfg(feature = "mock")]
+    if mock_requested() {
+        return Box::new(link::mock::Simulator::new());
     }
+    Box::new(hyprlink_proto::client::Socket::connect())
 }

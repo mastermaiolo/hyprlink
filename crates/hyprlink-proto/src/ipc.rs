@@ -3,8 +3,8 @@
 //! - Caminho: `$XDG_RUNTIME_DIR/hyprlink.sock`, permissões 0600.
 //! - Frame: comprimento `u32` big-endian + corpo CBOR. Máximo [`MAX_FRAME`].
 //! - Ao ligar, o daemon envia [`ServerMsg::Hello`], depois o estado completo
-//!   (um `Event` por cada tipo de estado conhecido) e a seguir os `Event`s à
-//!   medida que acontecem. O cliente só envia [`ClientMsg::Command`].
+//!   (um `Event` por cada tipo de estado conhecido), [`ServerMsg::Ready`] e a
+//!   seguir os `Event`s à medida que acontecem. O cliente só envia [`ClientMsg::Command`].
 //! - Eventos de estado de alta frequência (níveis, sensores, telemetria) são
 //!   coalescidos por cliente: um cliente lento recebe o valor mais recente,
 //!   nunca uma fila atrasada.
@@ -38,6 +38,8 @@ pub enum ServerMsg {
         daemon_version: String,
     },
     Event(Event),
+    /// Fim do estado completo inicial: daqui em diante só há novidades.
+    Ready,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
