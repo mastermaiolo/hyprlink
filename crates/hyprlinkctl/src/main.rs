@@ -169,16 +169,23 @@ impl Backend {
             self.sim.send(Command::BeginPairing);
         }
         self.applied = want.clone();
-        self.snap.mic.on = want.mic;
-        self.snap.tap.on = want.tap;
+        self.fold_toggles();
+    }
+
+    /// The persisted toggles are the mock's state; with no daemon behind the
+    /// JSON half they mean nothing and the snapshot stays at its defaults.
+    fn fold_toggles(&mut self) {
+        if cfg!(feature = "mock") {
+            self.snap.mic.on = self.applied.mic;
+            self.snap.tap.on = self.applied.tap;
+        }
     }
 
     fn step(&mut self, dt: Duration) {
         for e in self.sim.poll(dt) {
             self.snap.apply(&e);
         }
-        self.snap.mic.on = self.applied.mic;
-        self.snap.tap.on = self.applied.tap;
+        self.fold_toggles();
     }
 }
 
