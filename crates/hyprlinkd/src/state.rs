@@ -30,6 +30,9 @@ pub struct ClipEntry {
 #[derive(Debug, Clone)]
 pub struct TransferProgress {
     pub id: u64,
+    /// Id do pacote `share.file` no QUIC (só nos envios PC → telemóvel):
+    /// é o que o telemóvel cita no `share.done`.
+    pub wire_id: Option<u64>,
     pub at_unix: u64,
     pub name: String,
     pub direction: &'static str, // "recebendo" · "enviando"
@@ -41,6 +44,7 @@ pub struct TransferProgress {
 #[derive(Debug, Clone)]
 pub struct TransferRecord {
     pub id: u64,
+    pub wire_id: Option<u64>,
     pub at_unix: u64,
     pub total: u64,
     pub cancelled: bool,
@@ -343,6 +347,7 @@ pub fn start_file_transfer(
     let id = s.modules.transfer_next_id;
     s.modules.file_transfer = Some(TransferProgress {
         id,
+        wire_id: None,
         at_unix: now_unix(),
         name,
         direction,
@@ -357,6 +362,36 @@ pub fn start_file_transfer(
 pub fn update_file_transfer_progress(state: &Arc<Mutex<HudState>>, bytes: u64) {
     if let Some(t) = state.lock().unwrap().modules.file_transfer.as_mut() {
         t.bytes = bytes;
+    }
+}
+
+pub fn set_file_transfer_wire_id(state: &Arc<Mutex<HudState>>, wire_id: u64) {
+    if let Some(t) = state.lock().unwrap().modules.file_transfer.as_mut() {
+        t.wire_id = Some(wire_id);
+    }
+}
+
+/// O recetor (telemóvel) rejeitou um envio que do nosso lado acabou bem
+/// (`share.done` com `ok: false`, ex. SHA-256 diferente). `true` se o
+/// encontrou no histórico.
+pub fn mark_transfer_rejected(
+    state: &Arc<Mutex<HudState>>,
+    wire_id: u64,
+    error: Option<String>,
+) -> bool {
+    let mut s = state.lock().unwrap();
+    match s
+        .modules
+        .file_history
+        .iter_mut()
+        .find(|r| r.wire_id == Some(wire_id))
+    {
+        Some(r) => {
+            r.ok = false;
+            r.error = error;
+            true
+        }
+        None => false,
     }
 }
 
@@ -394,6 +429,7 @@ pub fn finish_file_transfer(state: &Arc<Mutex<HudState>>, ok: bool, error: Optio
         let duration_secs = t.started_at.elapsed().as_secs();
         s.modules.file_history.push_front(TransferRecord {
             id: t.id,
+            wire_id: t.wire_id,
             at_unix: t.at_unix,
             total: t.total,
             cancelled,
@@ -530,4 +566,54 @@ pub fn set_mic_active(state: &Arc<Mutex<HudState>>, active: bool) {
 
 pub fn set_mic_level(state: &Arc<Mutex<HudState>>, peak: f32) {
     state.lock().unwrap().modules.mic_level = Some((peak, std::time::Instant::now()));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hud() -> Arc<Mutex<HudState>> {
+        HudState::new("127.0.0.1:7443".into(), "AA".into(), "00".into())
+    }
+
+    #[test]
+    fn phone_rejection_marks_the_sent_file_failed() {
+        let h = hud();
+        start_file_transfer(&h, "foto.jpg".into(), "enviando", 10);
+        set_file_transfer_wire_id(&h, 42);
+        update_file_transfer_progress(&h, 10);
+        finish_file_transfer(&h, true, None);
+        assert!(h.lock().unwrap().modules.file_history[0].ok);
+        assert!(mark_transfer_rejected(&h, 42, Some("sha256".into())));
+        let r = h.lock().unwrap().modules.file_history[0].clone();
+        assert!(!r.ok && r.error.as_deref() == Some("sha256"));
+        assert!(!mark_transfer_rejected(&h, 7, None), "id desconhecido");
+    }
+
+    #[test]
+    fn cancelled_transfer_is_recorded_as_cancelled() {
+        let h = hud();
+        start_file_transfer(&h, "a.bin".into(), "enviando", 10);
+        let id = h.lock().unwrap().modules.file_transfer.as_ref().unwrap().id;
+        assert!(!cancel_file_transfer_id(&h, id + 1));
+        assert!(cancel_file_transfer_id(&h, id));
+        finish_file_transfer(&h, false, Some("cancelado pelo usuário".into()));
+        let r = h.lock().unwrap().modules.file_history[0].clone();
+        assert!(r.cancelled && !r.ok && r.id == id);
+    }
+
+    #[test]
+    fn active_notifications_follow_the_phone() {
+        let h = hud();
+        push_notif_entry(&h, "k1".into(), "app".into(), "a".into(), "".into());
+        push_notif_entry(&h, "k2".into(), "app".into(), "b".into(), "".into());
+        // Atualização da mesma chave substitui, não duplica.
+        push_notif_entry(&h, "k1".into(), "app".into(), "a2".into(), "".into());
+        assert_eq!(active_notif_keys(&h), vec!["k1", "k2"]);
+        assert!(remove_active_notif(&h, "k2"));
+        assert!(!remove_active_notif(&h, "k2"));
+        assert_eq!(active_notif_keys(&h), vec!["k1"]);
+        // O histórico (GUI antiga) guarda tudo.
+        assert_eq!(h.lock().unwrap().modules.notif_history.len(), 3);
+    }
 }

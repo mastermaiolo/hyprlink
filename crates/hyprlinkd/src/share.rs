@@ -273,6 +273,7 @@ pub async fn send_file(active: &ActiveConn, hud: &Arc<Mutex<HudState>>, path: &s
     let mut total: u64 = 0;
     let mut last_progress = 0u64;
     let cancel = crate::state::start_file_transfer(hud, name.clone(), "enviando", size);
+    crate::state::set_file_transfer_wire_id(hud, id);
     loop {
         if cancel.load(std::sync::atomic::Ordering::Relaxed) {
             let _ = send.reset(0u32.into());

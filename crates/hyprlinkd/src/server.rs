@@ -739,6 +739,37 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
             }
         }
 
+        // Respostas do telemóvel a um envio PC → telemóvel (ele é o
+        // recetor). O progresso local do envio já chega para a UI; o
+        // `share.done` é a verificação final do outro lado.
+        "share.progress" => {}
+        "share.done" => {
+            let id = body.and_then(|b| crate::protocol::body_get_i64(b, "id"));
+            let ok = body
+                .and_then(|b| crate::protocol::body_get_bool(b, "ok"))
+                .unwrap_or(false);
+            let error = body
+                .and_then(|b| body_get_str(b, "error"))
+                .map(str::to_string);
+            match (id.and_then(|i| u64::try_from(i).ok()), ok) {
+                (Some(_), true) => {
+                    state::push_log(hud, "[+] share.done · o telemóvel confirmou o ficheiro");
+                }
+                (Some(id), false) => {
+                    let known = state::mark_transfer_rejected(hud, id, error.clone());
+                    state::push_log(
+                        hud,
+                        format!(
+                            "[!] share.done · o telemóvel rejeitou o envio #{id}{}: {}",
+                            if known { "" } else { " (desconhecido)" },
+                            error.as_deref().unwrap_or("sem motivo")
+                        ),
+                    );
+                }
+                (None, _) => {}
+            }
+        }
+
         "share.url" => {
             if let Some(url) = body.and_then(|b| body_get_str(b, "url")) {
                 state::push_log(hud, format!("[i] share.url {url}"));
