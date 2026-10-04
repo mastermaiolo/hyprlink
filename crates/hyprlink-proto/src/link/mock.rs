@@ -48,6 +48,7 @@ pub struct Simulator {
     booted: bool,
     notifications: u32,
     ram: f32,
+    more: super::mock_more::More,
 }
 
 impl Default for Simulator {
@@ -147,6 +148,7 @@ impl Simulator {
             booted: false,
             notifications: 3,
             ram: 5.1,
+            more: super::mock_more::More::new(),
         }
     }
 
@@ -168,6 +170,10 @@ impl Simulator {
 impl Transport for Simulator {
     fn send(&mut self, command: Command) {
         match command {
+            Command::More(c) => {
+                let t = self.t;
+                self.more.send(c, &mut self.outbox, t);
+            }
             Command::Ping(id) => {
                 let rtt = self.latency * 2.0;
                 self.packet(Dir::Tx, packets::CORE_PING, 24, format!("device {id}"));
@@ -193,6 +199,7 @@ impl Transport for Simulator {
                     list: self.workspaces.clone(),
                     active: n,
                 });
+                self.more.on_workspace(n, &mut self.outbox);
             }
             Command::SetMic(on) => {
                 self.mic = on;
@@ -395,7 +402,7 @@ impl Transport for Simulator {
                 if d.id == 1 {
                     d.latency_ms = Some(lat);
                     d.rssi = Some(rssi);
-                    if (t as u32).is_multiple_of(45) {
+                    if (t as u32) % 45 == 0 {
                         d.battery = d.battery.map(|b| b.saturating_sub(1).max(5));
                     }
                 }
@@ -593,6 +600,10 @@ impl Transport for Simulator {
                 self.outbox.push(Event::Pairing(Some(ticket.clone())));
             }
         }
+
+        let battery = self.devices.first().and_then(|d| d.battery).unwrap_or(78);
+        self.more.boot(&mut self.outbox, battery);
+        self.more.poll(dt, t, &mut self.outbox);
 
         std::mem::take(&mut self.outbox)
     }

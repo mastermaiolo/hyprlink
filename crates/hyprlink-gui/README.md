@@ -3,22 +3,26 @@
 Interface em [iced 0.14](https://iced.rs) para o HyprLink: a ponte Android ⇄ Hyprland
 (QUIC + mTLS em `:7443`, extensão do protocolo KDE Connect com pacotes `hyprland.*`).
 
-Preto, editorial, cyberpunk contido. Oito secções, como uma revista:
+Preto, editorial, cyberpunk contido. Dez secções numeradas, como uma revista, e a ficha técnica:
 
-| §  | Secção        | O que faz |
-|----|---------------|-----------|
-| 01 | Capa          | Dispositivo em destaque, diagrama do link TX/RX, latência, débito, bateria, ações rápidas, "o fio" |
-| 02 | Dispositivos  | Lista + ficha (certificado SHA-256, capacidades), ping, clipboard, revogar, emparelhamento com QR |
-| 03 | Secretária    | 10 workspaces do Hyprland clicáveis, gestos do telemóvel → `hyprctl dispatch`, estado do IPC |
-| 04 | Espelho       | Pré-visualização do ecrã, codec / fps / escala / débito, `windowrulev2` gerado em direto |
-| 05 | Áudio         | Microfone (`webcam.mic_*`) e retorno (`audio.tap_*`) com medidores LED em dBFS e ganho |
-| 06 | Sensores      | 6 sensores com sparklines e ponte on/off para dispositivos virtuais |
-| 07 | Presença      | Escala RSSI com limiares de bloqueio/desbloqueio e regras (hyprlock, playerctl, DND…) |
-| 08 | Diário        | Registo de pacotes TX/RX com filtro, pesquisa, pausa |
+| §  | Secção              | O que faz (telemóvel primeiro, PC depois) |
+|----|---------------------|-------------------------------------------|
+| 01 | Capa                | Telemóvel em destaque, índice da edição, link TX/RX, bateria/rede/armazenamento/latência, o que toca, ações rápidas, o fio, Este PC |
+| 02 | Dispositivos        | Lista e ficha: estado do telemóvel, bateria 12 h + alertas, identidade (SHA-256), capacidades; emparelhamento com QR |
+| 03 | Secretária          | 10 workspaces, gestos, compositor e janela ativa, atalhos `hyprctl dispatch` + campo livre, trackpad |
+| 04 | Câmara & Ecrã       | Câmara do telemóvel → `/dev/video42` (resolução, fps, codec, teste de rede); Ecrã (espelho) marcado como proposto |
+| 05 | Áudio               | Volumes, modo de toque e não-incomodar do telemóvel; microfone e retorno/modo coluna; misturador do PC |
+| 06 | Notificações        | As do telemóvel: índice por app, pesquisa, a mais recente como manchete, dispensar |
+| 07 | Partilha            | Clipboard (histórico, pesquisa, fixar, enviar) e ficheiros (largar na janela, progresso, cancelar, histórico, pasta) |
+| 08 | Multimédia          | O que toca no telemóvel (controlo proposto) e leitores MPRIS do PC |
+| 09 | Sensores & Presença | Escala RSSI, limiares, regras; seis sensores em ponte — proposto, com dados simulados |
+| 10 | Diário              | Pacotes TX/RX com filtro, pesquisa, pausa |
+| 00 | Definições          | Pasta de destino, daemon (reiniciar), arranque, idioma, sobre — no rodapé do rail |
 
-![Contact sheet](docs/screenshots/contact-sheet.png)
+![Índice](docs/screenshots/indice.png)
 
-Teclas `1`–`8` navegam entre secções; `Esc` fecha o emparelhamento.
+Teclas `1`–`9` e `0` navegam entre secções; `Esc` fecha o emparelhamento. Largar um ficheiro na janela
+envia-o para o telemóvel.
 
 ## Princípio: primeiro o outro lado
 
@@ -82,8 +86,12 @@ Serviço com `runStream(hyprlinkctl watch --json)`, widget nativo (papéis da pa
 Variáveis úteis para desenvolvimento/capturas:
 
 ```sh
-HYPRLINK_SECTION=4 HYPRLINK_DEMO=mirror cargo run   # abre no Espelho, já em direto
-HYPRLINK_SECTION=2 HYPRLINK_DEMO=pair   cargo run   # abre o diálogo de emparelhamento
+HYPRLINK_SECTION=4  HYPRLINK_DEMO=webcam   cargo run   # Câmara ligada, rede testada
+HYPRLINK_SECTION=4  HYPRLINK_DEMO=screen   cargo run   # modo Ecrã, espelho em direto (desenho)
+HYPRLINK_SECTION=7  HYPRLINK_DEMO=transfer cargo run   # um envio a decorrer
+HYPRLINK_SECTION=2  HYPRLINK_DEMO=pair     cargo run   # diálogo de emparelhamento
+HYPRLINK_SECTION=11 cargo run                          # Definições
+HYPRLINK_WINDOW_H=1800 cargo run                       # janela alta, para capturas da página inteira
 ```
 
 No Hyprland, a janela tem `app_id = dev.hyprlink.gui`:
@@ -106,10 +114,14 @@ src/
   theme.rs       design system: cores, tipografia, escala, estilos de widgets
   ui.rs          blocos editoriais (kicker, headline, deck, stat, kv, setting…)
   graphics.rs    canvas: sparkline, medidor LED, diagrama do link, telemóvel, escala RSSI, ticker
-  views.rs       as oito páginas + modal de emparelhamento
+  views.rs       Capa, Dispositivos, Secretária, Áudio, Sensores & Presença, Diário + emparelhamento
+  pages.rs       Câmara & Ecrã, Notificações, Partilha, Multimédia, Definições + blocos novos
+                 (bateria, atalhos, trackpad, volumes do telemóvel, misturador)
   app.rs         estado, mensagens, update, subscrições, moldura (rail, masthead, ticker, toasts)
   link/mod.rs    o contrato com o daemon: Command, Event, trait Transport
   link/mock.rs   daemon simulado (valores que derivam, picos, respostas a comandos)
+  link/mock_more.rs  dados simulados das páginas novas
+  link/packets.rs    nomes de pacotes: reais, a confirmar, propostos
 ```
 
 ### Ligar ao daemon real

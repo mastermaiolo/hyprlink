@@ -23,6 +23,16 @@ pub const WEBCAM_START: &str = "webcam.start";
 pub const SHARE_PROGRESS: &str = "share.progress";
 pub const PAIR_REVOKE: &str = "pair.revoke";
 
+// ── exist in the daemon, wire name to confirm against PROTOCOL.md ──
+pub const WEBCAM_STOP: &str = "webcam.stop";
+pub const WEBCAM_NETTEST: &str = "webcam.nettest";
+pub const PHONE_VOLUME: &str = "phone.volume_set";
+pub const PHONE_RINGER: &str = "phone.ringer_set";
+pub const PHONE_DND: &str = "phone.dnd_set";
+pub const INPUT_CONFIG: &str = "input.config";
+pub const SHARE_OFFER: &str = "share.offer";
+pub const NOTIF_DISMISS: &str = "notif.dismiss";
+
 // ── proposed (not in the protocol yet) ──
 pub const PHONE_STATUS: &str = "phone.status";
 pub const MIRROR_START: &str = "mirror.start";

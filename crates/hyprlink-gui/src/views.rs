@@ -16,7 +16,7 @@ use iced::widget::{
 };
 use iced::{Alignment, Color, Length, Padding};
 
-fn fill_portion(n: u16) -> Length {
+pub fn fill_portion(n: u16) -> Length {
     Length::FillPortion(n)
 }
 
@@ -28,7 +28,7 @@ fn state_color(s: LinkState) -> Color {
     }
 }
 
-fn number_word(n: usize) -> &'static str {
+pub fn number_word(n: usize) -> &'static str {
     [
         "NENHUM", "UM", "DOIS", "TRÊS", "QUATRO", "CINCO", "SEIS", "SETE",
     ]
@@ -60,7 +60,7 @@ fn date_pt() -> String {
 }
 
 /// A thin proportional bar (battery, countdowns).
-fn bar<'a>(v: f32, c: Color, h: f32) -> El<'a> {
+pub fn bar<'a>(v: f32, c: Color, h: f32) -> El<'a> {
     let on = ((v.clamp(0.0, 1.0) * 1000.0) as u16).max(1);
     let off = (1000 - on.min(999)).max(1);
     row![
@@ -75,7 +75,7 @@ fn bar<'a>(v: f32, c: Color, h: f32) -> El<'a> {
     .into()
 }
 
-fn spark<'a>(data: Vec<f32>, c: Color, min: f32, max: f32, h: f32) -> El<'a> {
+pub fn spark<'a>(data: Vec<f32>, c: Color, min: f32, max: f32, h: f32) -> El<'a> {
     canvas(Spark {
         data,
         color: c,
@@ -192,15 +192,23 @@ pub fn cover(app: &App) -> El<'_> {
             )
         ),
         toc_entry(
-            Section::Secretaria,
-            format!("workspace {} de {}", app.active_ws, app.workspaces.len())
+            Section::Notificacoes,
+            match app.notifs.first() {
+                Some(n) => format!("{} por ler, a última de {}", app.notifs.len(), n.app),
+                None => "nada por ler".into(),
+            }
         ),
         toc_entry(
-            Section::Espelho,
-            if app.mirror.is_some() {
-                "em direto".into()
-            } else {
-                "em repouso".into()
+            Section::Partilha,
+            match app
+                .transfers
+                .iter()
+                .filter(|t| t.state == crate::link::TransferState::Active)
+                .count()
+            {
+                0 => format!("{} entradas no clipboard", app.clips.len()),
+                1 => "um ficheiro a caminho".into(),
+                n => format!("{n} ficheiros a caminho"),
             }
         ),
         toc_entry(
@@ -212,7 +220,7 @@ pub fn cover(app: &App) -> El<'_> {
                 _ => "em silêncio".into(),
             }
         ),
-        toc_entry(Section::Presenca, format!("{:.0} dBm, {near}", app.rssi)),
+        toc_entry(Section::Sensores, format!("{:.0} dBm, {near}", app.rssi)),
     ]
     .width(fill_portion(2));
 
@@ -632,7 +640,7 @@ fn ram_line(p: &PhoneStatus) -> String {
     }
 }
 
-fn small_stat<'a>(label: &'a str, value: String, unit: impl text::IntoFragment<'a>) -> El<'a> {
+pub fn small_stat<'a>(label: &'a str, value: String, unit: impl text::IntoFragment<'a>) -> El<'a> {
     column![
         kicker(label),
         gap(space::XS),
@@ -651,7 +659,7 @@ fn small_stat<'a>(label: &'a str, value: String, unit: impl text::IntoFragment<'
 }
 
 /// Four ascending bars, like the phone's own status bar.
-fn signal_bars<'a>(n: u8) -> El<'a> {
+pub fn signal_bars<'a>(n: u8) -> El<'a> {
     let mut r = row![].spacing(3).align_y(Alignment::End);
     for i in 0..4u8 {
         let h = 6.0 + i as f32 * 5.0;
@@ -882,8 +890,13 @@ fn device_detail<'a>(app: &'a App, d: &'a Device) -> El<'a> {
         ],
         gap(space::XXL),
         phone_state(app, d),
+        if has_phone_state(app, d) {
+            crate::pages::battery_block(app)
+        } else {
+            Space::new().into()
+        },
         subhead(
-            if has_phone_state(app, d) { "B" } else { "A" },
+            if has_phone_state(app, d) { "C" } else { "A" },
             "Identidade"
         ),
         kv_text("MODELO", fmt::model(d)),
@@ -895,7 +908,7 @@ fn device_detail<'a>(app: &'a App, d: &'a Device) -> El<'a> {
         kv_text("PROTOCOLO", "hyprlink/1 · QUIC · mTLS"),
         gap(space::XXL),
         subhead(
-            if has_phone_state(app, d) { "C" } else { "B" },
+            if has_phone_state(app, d) { "D" } else { "B" },
             "Capacidades"
         ),
         caps.wrap().vertical_spacing(space::S),
@@ -1129,6 +1142,13 @@ pub fn desk(app: &App) -> El<'_> {
             "ATIVO",
             format!("workspace {} — {}", app.active_ws, active_clients)
         ),
+        kv_text(
+            "JANELA ATIVA",
+            app.active_window
+                .as_ref()
+                .map(|w| format!("{} — {}", w.class, w.title))
+                .unwrap_or_else(|| fmt::DASH.into())
+        ),
         kv_text("IPC", ".socket2.sock"),
         kv_text("EVENTOS", "workspace>> activewindow>>"),
         gap(space::XL),
@@ -1153,13 +1173,20 @@ pub fn desk(app: &App) -> El<'_> {
             hgap(space::GUTTER),
             compositor.width(fill_portion(2))
         ],
+        gap(space::GUTTER),
+        row![
+            container(crate::pages::shortcuts(app)).width(fill_portion(3)),
+            hgap(space::GUTTER),
+            container(crate::pages::trackpad(app)).width(fill_portion(2)),
+        ],
     ]
     .into()
 }
 
 // ═════════════════════════════ 04 ESPELHO ═════════════════════════════
 
-pub fn mirror(app: &App) -> El<'_> {
+/// The screen-mirror body, shown inside §04 «Câmara & Ecrã» in Ecrã mode.
+pub fn mirror_body(app: &App) -> El<'_> {
     let live = app.mirror.is_some();
     let cfg = app.mirror_cfg;
     let phone = canvas(Phone {
@@ -1328,29 +1355,21 @@ pub fn mirror(app: &App) -> El<'_> {
     ]
     .width(Length::Fill);
 
-    column![
-        opener(
-            "04",
-            "ESPELHO",
-            "O ECRÃ, NUMA JANELA.",
-            "O telemóvel projetado numa janela flutuante do Hyprland — com as tuas regras."
-        ),
-        row![
-            column![
-                phone,
-                gap(space::S),
-                kicker(format!(
-                    "{} · {} FPS · {:.0} MB/S",
-                    fmt::codec(cfg.codec),
-                    cfg.max_fps,
-                    cfg.bitrate_mbps
-                ))
-            ]
-            .align_x(Alignment::Center),
-            hgap(space::GUTTER),
-            controls
-        ],
-    ]
+    column![row![
+        column![
+            phone,
+            gap(space::S),
+            kicker(format!(
+                "{} · {} FPS · {:.0} MB/S",
+                fmt::codec(cfg.codec),
+                cfg.max_fps,
+                cfg.bitrate_mbps
+            ))
+        ]
+        .align_x(Alignment::Center),
+        hgap(space::GUTTER),
+        controls
+    ],]
     .into()
 }
 
@@ -1559,14 +1578,18 @@ pub fn audio(app: &App) -> El<'_> {
             "DOIS SENTIDOS, UM FIO.",
             "A voz sobe; a música desce. PCM a 48 kHz, por cima do mesmo QUIC."
         ),
+        crate::pages::phone_audio(app),
+        gap(space::XXL),
         row![mic, hgap(space::XL), tap],
+        gap(space::GUTTER),
+        crate::pages::mixer(app),
     ]
     .into()
 }
 
 // ═════════════════════════════ 06 SENSORES ═════════════════════════════
 
-pub fn sensors(app: &App) -> El<'_> {
+pub fn sensors_grid(app: &App) -> El<'_> {
     let s = app.sensors;
     let card = |k: SensorKind| -> El<'_> {
         let (name, value, unit, detail, target, min, max) = match k {
@@ -1691,12 +1714,6 @@ pub fn sensors(app: &App) -> El<'_> {
     };
     let k = SensorKind::ALL;
     column![
-        opener(
-            "06",
-            "SENSORES",
-            "SEIS SENTIDOS EMPRESTADOS.",
-            "O que o telemóvel sente, exposto ao desktop como dispositivos virtuais."
-        ),
         row![card(k[0]), card(k[1]), card(k[2])].spacing(space::L),
         gap(space::L),
         row![card(k[3]), card(k[4]), card(k[5])].spacing(space::L),
@@ -1715,7 +1732,7 @@ pub fn sensors(app: &App) -> El<'_> {
 
 // ═════════════════════════════ 07 PRESENÇA ═════════════════════════════
 
-pub fn presence(app: &App) -> El<'_> {
+pub fn presence_body(app: &App) -> El<'_> {
     let (zone, zc) = if app.rssi > app.unlock_at {
         ("Perto — ao alcance da mão.", ACID)
     } else if app.rssi > app.lock_at {
@@ -1779,7 +1796,7 @@ pub fn presence(app: &App) -> El<'_> {
         .into()
     };
 
-    let mut rules = column![subhead("A", "Regras")];
+    let mut rules = column![subhead("·", "Regras")];
     for (i, r) in app.rules.iter().enumerate() {
         rules = rules.push(column![
             row![
@@ -1813,12 +1830,6 @@ pub fn presence(app: &App) -> El<'_> {
     }
 
     column![
-        opener(
-            "07",
-            "PRESENÇA",
-            "ESTÁS AQUI?",
-            "A sessão tranca-se quando te afastas — e abre-se quando voltas."
-        ),
         row![now, hgap(space::GUTTER), scale].align_y(Alignment::End),
         gap(space::XXL),
         row![
@@ -1844,7 +1855,30 @@ pub fn presence(app: &App) -> El<'_> {
     .into()
 }
 
-// ═════════════════════════════ 08 DIÁRIO ═════════════════════════════
+// ═════════════════════════ 09 SENSORES & PRESENÇA ═════════════════════════
+
+pub fn sensors(app: &App) -> El<'_> {
+    column![
+        opener(
+            "09",
+            "SENSORES & PRESENÇA",
+            "ESTÁS AQUI?",
+            "A sessão tranca-se quando te afastas; o que o telemóvel sente chega ao desktop."
+        ),
+        crate::pages::proposed_banner(
+            "Ainda sem pacotes no protocolo: presence.rssi e sensor.frame estão propostos. Esta página mostra o desenho com dados simulados."
+        ),
+        gap(space::XXL),
+        subhead("A", "Presença"),
+        presence_body(app),
+        gap(space::GUTTER),
+        subhead("B", "Sensores em ponte"),
+        sensors_grid(app),
+    ]
+    .into()
+}
+
+// ═════════════════════════════ 10 DIÁRIO ═════════════════════════════
 
 pub fn journal(app: &App) -> El<'_> {
     let q = app.query.to_lowercase();
@@ -1927,7 +1961,7 @@ pub fn journal(app: &App) -> El<'_> {
 
     column![
         opener(
-            "08",
+            "10",
             "DIÁRIO",
             "DIÁRIO DE BORDO.",
             "Cada pacote, pela ordem em que aconteceu."

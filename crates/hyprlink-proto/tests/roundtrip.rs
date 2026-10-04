@@ -112,6 +112,67 @@ fn all_commands() -> Vec<Command> {
         Command::CancelPairing,
         Command::Unpair(7),
     ]
+    .into_iter()
+    .chain(all_commands2().into_iter().map(Command::More))
+    .collect()
+}
+
+fn all_commands2() -> Vec<Command2> {
+    use Command2::*;
+    vec![
+        SetBatteryAlerts(BatteryAlerts {
+            low: Some(20),
+            full: true,
+        }),
+        SetBatteryAlerts(BatteryAlerts {
+            low: None,
+            full: false,
+        }),
+        RunDispatch("workspace 3".into()),
+        SetShortcuts(vec![Shortcut {
+            label: "Bloquear".into(),
+            dispatch: "exec hyprlock".into(),
+        }]),
+        SetTrackpad(TrackpadConfig {
+            sensitivity: 1.0,
+            scroll: 1.5,
+            acceleration: true,
+            natural_scroll: false,
+            keyboard: true,
+        }),
+        StartWebcam(WebcamConfig {
+            width: 1920,
+            height: 1080,
+            fps: 30,
+            codec: CamCodec::H264,
+        }),
+        StopWebcam,
+        TestNetwork,
+        SetPhoneVolume(PhoneStream::Media, 9),
+        SetRinger(Ringer::Vibrate),
+        SetDnd(true),
+        SetSinkVolume(42, 150),
+        SetSinkMute(42, true),
+        SetDefaultSink(42),
+        SetAppVolume(77, 80),
+        SetAppMute(77, false),
+        DismissNotification("0|com.whatsapp|1|null|10123".into()),
+        DismissAllNotifications,
+        CopyClip(3),
+        SendClipToPhone(3),
+        PinClip(3, true),
+        DeleteClip(3),
+        SendFile("~/Transferências/foto 1.jpg".into()),
+        CancelTransfer(9),
+        OpenDownloads,
+        Media {
+            player: "spotify".into(),
+            action: MediaAction::PlayPause,
+        },
+        PhoneMedia(MediaAction::Next),
+        SetDownloadsDir("~/Transferências/HyprLink".into()),
+        RestartDaemon,
+    ]
 }
 
 fn all_events() -> Vec<Event> {

@@ -1,8 +1,10 @@
 use crate::graphics::Ticker;
 use crate::host::{Host, Probe};
 use crate::link::{
-    self, Codec, Command, DeviceId, Dir, Event, MirrorConfig, MirrorStats, Packet, PairingTicket,
-    SensorKind, Sensors, Transport, Workspace,
+    self, ActiveWindow, AppStream, BatteryAlerts, BatteryPoint, CamCodec, ClipEntry, Codec,
+    Command, Command2, DeviceId, Dir, Event, Event2, MirrorConfig, MirrorStats, NetTest, Packet,
+    PairingTicket, PhoneAudio, PhoneNotification, Player, SensorKind, Sensors, Settings, Shortcut,
+    Sink, TrackpadConfig, Transfer, Transport, WebcamConfig, WebcamStats, Workspace,
 };
 use crate::theme::{self, *};
 use crate::tray;
@@ -22,22 +24,29 @@ pub enum Section {
     Capa,
     Dispositivos,
     Secretaria,
-    Espelho,
+    Camera,
     Audio,
+    Notificacoes,
+    Partilha,
+    Multimedia,
     Sensores,
-    Presenca,
     Diario,
+    /// Not numbered: lives at the foot of the rail.
+    Definicoes,
 }
 
 impl Section {
-    pub const ALL: [Section; 8] = [
+    /// The ten numbered sections, in reading order (keys 1–9, 0).
+    pub const ALL: [Section; 10] = [
         Section::Capa,
         Section::Dispositivos,
         Section::Secretaria,
-        Section::Espelho,
+        Section::Camera,
         Section::Audio,
+        Section::Notificacoes,
+        Section::Partilha,
+        Section::Multimedia,
         Section::Sensores,
-        Section::Presenca,
         Section::Diario,
     ];
 
@@ -46,11 +55,14 @@ impl Section {
             Section::Capa => "01",
             Section::Dispositivos => "02",
             Section::Secretaria => "03",
-            Section::Espelho => "04",
+            Section::Camera => "04",
             Section::Audio => "05",
-            Section::Sensores => "06",
-            Section::Presenca => "07",
-            Section::Diario => "08",
+            Section::Notificacoes => "06",
+            Section::Partilha => "07",
+            Section::Multimedia => "08",
+            Section::Sensores => "09",
+            Section::Diario => "10",
+            Section::Definicoes => "00",
         }
     }
 
@@ -59,13 +71,22 @@ impl Section {
             Section::Capa => "Capa",
             Section::Dispositivos => "Dispositivos",
             Section::Secretaria => "Secretária",
-            Section::Espelho => "Espelho",
+            Section::Camera => "Câmara & Ecrã",
             Section::Audio => "Áudio",
-            Section::Sensores => "Sensores",
-            Section::Presenca => "Presença",
+            Section::Notificacoes => "Notificações",
+            Section::Partilha => "Partilha",
+            Section::Multimedia => "Multimédia",
+            Section::Sensores => "Sensores & Presença",
             Section::Diario => "Diário",
+            Section::Definicoes => "Definições",
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CamMode {
+    Camera,
+    Screen,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -187,6 +208,32 @@ pub struct App {
     tray_failed: bool,
     tray_acc: f32,
     tray_snap: tray::Snapshot,
+
+    // ── pages added after Fase 0 ──
+    pub battery_hist: Vec<BatteryPoint>,
+    pub alerts: BatteryAlerts,
+    pub active_window: Option<ActiveWindow>,
+    pub shortcuts: Vec<Shortcut>,
+    pub trackpad: TrackpadConfig,
+    pub dispatch_input: String,
+    pub cam_mode: CamMode,
+    pub webcam_cfg: WebcamConfig,
+    pub webcam: Option<WebcamStats>,
+    pub webcam_on: bool,
+    pub nettest: Option<NetTest>,
+    pub phone_audio: Option<PhoneAudio>,
+    pub sinks: Vec<Sink>,
+    pub apps: Vec<AppStream>,
+    pub notifs: Vec<PhoneNotification>,
+    pub notif_app: Option<String>,
+    pub notif_query: String,
+    pub clips: Vec<ClipEntry>,
+    pub clip_query: String,
+    pub transfers: Vec<Transfer>,
+    pub send_path: String,
+    pub players: Vec<Player>,
+    pub settings: Option<Settings>,
+    pub downloads_input: String,
 }
 
 #[derive(Debug, Clone)]
@@ -226,6 +273,28 @@ pub enum Message {
     TrayFailed,
     Tray(tray::Action),
     WindowClosed(window::Id),
+    /// Anything that maps 1:1 to a daemon command on the new pages.
+    Do(Command2),
+    CamMode(CamMode),
+    CamRes(u32, u32),
+    CamFps(u32),
+    CamCodec(CamCodec),
+    WebcamStart,
+    WebcamStop,
+    DispatchInput(String),
+    DispatchRun,
+    LowAlert(bool),
+    LowLevel(f32),
+    FullAlert(bool),
+    Trackpad(TrackpadConfig),
+    NotifApp(Option<String>),
+    NotifQuery(String),
+    ClipQuery(String),
+    SendPath(String),
+    SendFile,
+    FileDropped(std::path::PathBuf),
+    DownloadsInput(String),
+    DownloadsSave,
 }
 
 impl App {
@@ -233,7 +302,13 @@ impl App {
         let start = std::env::var("HYPRLINK_SECTION")
             .ok()
             .and_then(|s| s.parse::<usize>().ok())
-            .and_then(|n| Section::ALL.get(n.saturating_sub(1)).copied())
+            .and_then(|n| {
+                if n == 11 {
+                    Some(Section::Definicoes)
+                } else {
+                    Section::ALL.get(n.saturating_sub(1)).copied()
+                }
+            })
             .unwrap_or(Section::Capa);
 
         let mut app = Self {
@@ -358,6 +433,44 @@ impl App {
             tray_failed: false,
             tray_acc: 0.0,
             tray_snap: tray::Snapshot::default(),
+            battery_hist: Vec::new(),
+            alerts: BatteryAlerts {
+                low: Some(20),
+                full: true,
+            },
+            active_window: None,
+            shortcuts: Vec::new(),
+            trackpad: TrackpadConfig {
+                sensitivity: 1.0,
+                scroll: 1.0,
+                acceleration: true,
+                natural_scroll: false,
+                keyboard: true,
+            },
+            dispatch_input: String::new(),
+            cam_mode: CamMode::Camera,
+            webcam_cfg: WebcamConfig {
+                width: 1280,
+                height: 720,
+                fps: 30,
+                codec: CamCodec::Mjpeg,
+            },
+            webcam: None,
+            webcam_on: false,
+            nettest: None,
+            phone_audio: None,
+            sinks: Vec::new(),
+            apps: Vec::new(),
+            notifs: Vec::new(),
+            notif_app: None,
+            notif_query: String::new(),
+            clips: Vec::new(),
+            clip_query: String::new(),
+            transfers: Vec::new(),
+            send_path: String::new(),
+            players: Vec::new(),
+            settings: None,
+            downloads_input: String::new(),
         };
 
         // Warm the simulation so graphs open full rather than empty.
@@ -377,6 +490,32 @@ impl App {
         if std::env::var("HYPRLINK_DEMO").as_deref() == Ok("pair") {
             app.link.send(Command::BeginPairing);
         }
+        match std::env::var("HYPRLINK_DEMO").as_deref() {
+            Ok("webcam") => {
+                app.webcam_on = true;
+                app.link
+                    .send(Command::More(Command2::StartWebcam(app.webcam_cfg)));
+                app.link.send(Command::More(Command2::TestNetwork));
+            }
+            Ok("screen") => {
+                app.cam_mode = CamMode::Screen;
+                app.mirror_on = true;
+                app.link.send(Command::StartMirror(app.mirror_cfg));
+            }
+            Ok("transfer") => {
+                app.link.send(Command::More(Command2::SendFile(
+                    "~/Música/OMNIS_v3_stems.zip".into(),
+                )));
+            }
+            _ => {}
+        }
+        // Let demo commands land before the first frame.
+        for _ in 0..10 {
+            for e in app.link.poll(Duration::from_millis(33)) {
+                app.apply(e);
+            }
+        }
+        app.toasts.clear();
         app.host = app.probe.sample();
 
         // `--hidden` starts straight into the tray.
@@ -538,6 +677,7 @@ impl App {
                 self.pairing = p;
             }
             Event::Phone(p) => self.phone = Some(p),
+            Event::More(e) => self.apply_more(e),
             Event::Notice(n) => {
                 let s = fmt::notice(&n, |id| {
                     self.devices.iter().find(|d| d.id == id).map(fmt::name)
@@ -548,6 +688,37 @@ impl App {
                 }
             }
         }
+    }
+
+    fn apply_more(&mut self, e: Event2) {
+        match e {
+            Event2::BatteryHistory(h) => self.battery_hist = h,
+            Event2::BatteryAlerts(a) => self.alerts = a,
+            Event2::ActiveWindow(w) => self.active_window = w,
+            Event2::Shortcuts(s) => self.shortcuts = s,
+            Event2::Trackpad(c) => self.trackpad = c,
+            Event2::Webcam(w) => self.webcam = w,
+            Event2::NetTest(n) => self.nettest = Some(n),
+            Event2::PhoneAudio(a) => self.phone_audio = Some(a),
+            Event2::Mixer { sinks, apps } => {
+                self.sinks = sinks;
+                self.apps = apps;
+            }
+            Event2::Notifications(n) => self.notifs = n,
+            Event2::Clipboard(c) => self.clips = c,
+            Event2::Transfers(t) => self.transfers = t,
+            Event2::Players(p) => self.players = p,
+            Event2::Settings(s) => {
+                if self.downloads_input.is_empty() {
+                    self.downloads_input = s.downloads_dir.clone();
+                }
+                self.settings = Some(s);
+            }
+        }
+    }
+
+    fn more(&mut self, c: Command2) {
+        self.link.send(Command::More(c));
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -629,8 +800,10 @@ impl App {
                 if let Key::Character(c) = key.as_ref() {
                     if !modifiers.control() && !modifiers.alt() {
                         if let Ok(n) = c.parse::<usize>() {
-                            if (1..=8).contains(&n) {
-                                self.section = Section::ALL[n - 1];
+                            // 1–9 → §01–§09, 0 → §10.
+                            let i = if n == 0 { 9 } else { n - 1 };
+                            if let Some(s) = Section::ALL.get(i) {
+                                self.section = *s;
                             }
                         }
                     }
@@ -701,6 +874,80 @@ impl App {
             Message::Query(q) => self.query = q,
             Message::Pause(p) => self.paused = p,
             Message::ClearJournal => self.packets.clear(),
+            Message::Do(c) => self.more(c),
+            Message::CamMode(m) => self.cam_mode = m,
+            Message::CamRes(w, h) => {
+                self.webcam_cfg.width = w;
+                self.webcam_cfg.height = h;
+            }
+            Message::CamFps(f) => self.webcam_cfg.fps = f,
+            Message::CamCodec(c) => self.webcam_cfg.codec = c,
+            Message::WebcamStart => {
+                self.webcam_on = true;
+                self.more(Command2::StartWebcam(self.webcam_cfg));
+            }
+            Message::WebcamStop => {
+                self.webcam_on = false;
+                self.more(Command2::StopWebcam);
+            }
+            Message::DispatchInput(s) => self.dispatch_input = s,
+            Message::DispatchRun => {
+                let d = self.dispatch_input.trim().to_string();
+                if !d.is_empty() {
+                    self.more(Command2::RunDispatch(d));
+                    self.dispatch_input.clear();
+                }
+            }
+            Message::LowAlert(b) => {
+                let a = BatteryAlerts {
+                    low: b.then_some(self.alerts.low.unwrap_or(20)),
+                    ..self.alerts
+                };
+                self.alerts = a;
+                self.more(Command2::SetBatteryAlerts(a));
+            }
+            Message::LowLevel(v) => {
+                let a = BatteryAlerts {
+                    low: Some(v as u8),
+                    ..self.alerts
+                };
+                self.alerts = a;
+                self.more(Command2::SetBatteryAlerts(a));
+            }
+            Message::FullAlert(b) => {
+                let a = BatteryAlerts {
+                    full: b,
+                    ..self.alerts
+                };
+                self.alerts = a;
+                self.more(Command2::SetBatteryAlerts(a));
+            }
+            Message::Trackpad(c) => {
+                self.trackpad = c;
+                self.more(Command2::SetTrackpad(c));
+            }
+            Message::NotifApp(a) => self.notif_app = a,
+            Message::NotifQuery(q) => self.notif_query = q,
+            Message::ClipQuery(q) => self.clip_query = q,
+            Message::SendPath(p) => self.send_path = p,
+            Message::SendFile => {
+                let p = self.send_path.trim().to_string();
+                if !p.is_empty() {
+                    self.more(Command2::SendFile(p));
+                    self.send_path.clear();
+                }
+            }
+            Message::FileDropped(path) => {
+                self.more(Command2::SendFile(path.display().to_string()));
+                self.section = Section::Partilha;
+            }
+            Message::DownloadsInput(s) => self.downloads_input = s,
+            Message::DownloadsSave => {
+                let d = self.downloads_input.trim().to_string();
+                if !d.is_empty() {
+                    self.more(Command2::SetDownloadsDir(d));
+                }
+            }
         }
         Task::none()
     }
@@ -710,6 +957,10 @@ impl App {
             iced::time::every(Duration::from_millis(33)).map(Message::Tick),
             keyboard::listen().map(Message::Key),
             window::close_events().map(Message::WindowClosed),
+            iced::event::listen_with(|e, _, _| match e {
+                iced::Event::Window(window::Event::FileDropped(p)) => Some(Message::FileDropped(p)),
+                _ => None,
+            }),
             tray::subscription(),
         ])
     }
@@ -721,11 +972,14 @@ impl App {
             Section::Capa => views::cover(self),
             Section::Dispositivos => views::devices(self),
             Section::Secretaria => views::desk(self),
-            Section::Espelho => views::mirror(self),
+            Section::Camera => crate::pages::camera(self),
             Section::Audio => views::audio(self),
+            Section::Notificacoes => crate::pages::notifications(self),
+            Section::Partilha => crate::pages::share(self),
+            Section::Multimedia => crate::pages::media(self),
             Section::Sensores => views::sensors(self),
-            Section::Presenca => views::presence(self),
             Section::Diario => views::journal(self),
+            Section::Definicoes => crate::pages::settings(self),
         };
 
         let content = column![
@@ -776,7 +1030,23 @@ impl App {
             let hint: El = match s {
                 Section::Dispositivos => kicker(format!("{}", self.devices.len())).into(),
                 Section::Secretaria => kicker(format!("W{}", self.active_ws)).into(),
-                Section::Espelho if self.mirror.is_some() => kicker_c("LIVE", HOT).into(),
+                Section::Camera if self.webcam.is_some() || self.mirror.is_some() => {
+                    kicker_c("LIVE", HOT).into()
+                }
+                Section::Notificacoes if !self.notifs.is_empty() => {
+                    kicker_c(format!("{}", self.notifs.len()), ACID).into()
+                }
+                Section::Partilha
+                    if self
+                        .transfers
+                        .iter()
+                        .any(|t| t.state == link::TransferState::Active) =>
+                {
+                    kicker_c("⇅", ACID).into()
+                }
+                Section::Multimedia if self.players.iter().any(|p| p.playing) => {
+                    kicker_c("▶", ACID).into()
+                }
                 Section::Audio if self.mic_on || self.tap_on => kicker_c(
                     if self.mic_on && self.tap_on {
                         "⇅"
@@ -788,7 +1058,7 @@ impl App {
                     ACID,
                 )
                 .into(),
-                Section::Presenca => kicker(format!("{:.0}", self.rssi)).into(),
+                Section::Sensores => kicker(format!("{:.0}", self.rssi)).into(),
                 Section::Diario => kicker(format!("{}", self.packets.len())).into(),
                 _ => kicker("").into(),
             };
@@ -817,15 +1087,55 @@ impl App {
                 button(entry)
                     .width(Length::Fill)
                     .padding(Padding {
-                        top: 9.0,
+                        top: 7.0,
                         right: space::L,
-                        bottom: 9.0,
+                        bottom: 7.0,
                         left: 0.0,
                     })
                     .style(theme::nav(active))
                     .on_press(Message::Nav(s)),
             );
         }
+        let settings_active = self.section == Section::Definicoes;
+        let settings = button(
+            row![
+                container(iced::widget::Space::new().width(2).height(18)).style(theme::fill(
+                    if settings_active {
+                        ACID
+                    } else {
+                        Color::TRANSPARENT
+                    }
+                )),
+                hgap(space::M),
+                ui::t(
+                    "00",
+                    MONO_MEDIUM,
+                    11.0,
+                    if settings_active { ACID } else { FAINT }
+                ),
+                hgap(space::M),
+                ui::t(
+                    "Definições",
+                    if settings_active {
+                        SANS_SEMI
+                    } else {
+                        SANS_MEDIUM
+                    },
+                    13.0,
+                    if settings_active { PAPER } else { MUTED }
+                ),
+            ]
+            .align_y(Alignment::Center),
+        )
+        .width(Length::Fill)
+        .padding(Padding {
+            top: 7.0,
+            right: space::L,
+            bottom: 7.0,
+            left: 0.0,
+        })
+        .style(theme::nav(settings_active))
+        .on_press(Message::Nav(Section::Definicoes));
 
         let up = self.t as u64 + 3 * 3600 + 17 * 60;
         let daemon = column![
@@ -870,6 +1180,8 @@ impl App {
                 gap(space::L),
                 nav,
                 iced::widget::space::vertical(),
+                settings,
+                gap(space::S),
                 daemon,
             ]
             .height(Length::Fill),
@@ -911,7 +1223,7 @@ impl App {
                 hgap(space::S),
                 ui::t(self.section.title(), SANS_SEMI, 13.0, PAPER),
                 hgap(space::L),
-                kicker("TECLAS 1–8 PARA NAVEGAR").color(FAINT),
+                kicker("TECLAS 1–9 · 0 PARA NAVEGAR").color(FAINT),
                 fill_x(),
                 dev,
                 hgap(space::XL),

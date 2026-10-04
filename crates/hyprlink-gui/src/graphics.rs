@@ -725,3 +725,175 @@ impl<M> canvas::Program<M> for Ticker {
 pub fn color(hex: u32) -> Color {
     Color::from_rgb8((hex >> 16) as u8, (hex >> 8) as u8, hex as u8)
 }
+
+// ───────────────────────────── camera viewfinder ─────────────────────────────
+
+/// The phone camera as a 16:9 viewfinder: thirds, corner brackets, crosshair,
+/// timecode. Abstract scene when live, static when not.
+pub struct CameraFrame {
+    pub t: f32,
+    pub live: bool,
+    pub label: String,
+    pub elapsed: f32,
+}
+
+impl<M> canvas::Program<M> for CameraFrame {
+    type State = ();
+
+    fn draw(
+        &self,
+        _: &(),
+        renderer: &Renderer,
+        _: &Theme,
+        b: Rectangle,
+        _: mouse::Cursor,
+    ) -> Vec<Geometry> {
+        let mut f = Frame::new(renderer, b.size());
+        let w = b.width.min(b.height * 16.0 / 9.0);
+        let h = w * 9.0 / 16.0;
+        let o = Point::new(
+            ((b.width - w) / 2.0).round() + 0.5,
+            ((b.height - h) / 2.0).round() + 0.5,
+        );
+
+        if self.live {
+            f.fill_rectangle(o, Size::new(w, h), color(0x0C0C0C));
+            // Abstract scene: a horizon, a lamp, a slow drifting light band.
+            let horizon = o.y + h * 0.62;
+            f.fill_rectangle(
+                Point::new(o.x, horizon),
+                Size::new(w, h * 0.38),
+                color(0x121212),
+            );
+            let lamp = Point::new(
+                o.x + w * (0.68 + (self.t * 0.07).sin() * 0.01),
+                o.y + h * 0.34,
+            );
+            for (r, a) in [(h * 0.20, 0.03), (h * 0.12, 0.05), (h * 0.06, 0.10)] {
+                f.fill(&Path::circle(lamp, r), alpha(PAPER, a));
+            }
+            f.fill(&Path::circle(lamp, h * 0.025), alpha(PAPER, 0.85));
+            f.stroke(
+                &Path::line(Point::new(o.x, horizon), Point::new(o.x + w, horizon)),
+                stroke(alpha(PAPER, 0.08), 1.0),
+            );
+            // Scanlines.
+            let mut y = o.y;
+            while y < o.y + h {
+                f.fill_rectangle(Point::new(o.x, y), Size::new(w, 1.0), alpha(VOID, 0.18));
+                y += 3.0;
+            }
+        } else {
+            f.fill_rectangle(o, Size::new(w, h), INK_0);
+            let cell = 6.0;
+            let frame_no = (self.t * 12.0) as u32;
+            for r in 0..(h / cell) as u32 {
+                for c in 0..(w / cell) as u32 {
+                    let v = hash(r * 977 + c * 131 + frame_no * 7919);
+                    if v > 0.6 {
+                        let g = 0.035 + (v - 0.6) * 0.15;
+                        f.fill_rectangle(
+                            Point::new(o.x + c as f32 * cell, o.y + r as f32 * cell),
+                            Size::new(cell - 1.0, cell - 1.0),
+                            Color::from_rgb(g, g, g),
+                        );
+                    }
+                }
+            }
+        }
+
+        // Rule of thirds.
+        for i in 1..3 {
+            let x = (o.x + w * i as f32 / 3.0).round() + 0.5;
+            let y = (o.y + h * i as f32 / 3.0).round() + 0.5;
+            let dash = Stroke {
+                line_dash: LineDash {
+                    segments: &[2.0, 6.0],
+                    offset: 0,
+                },
+                ..stroke(alpha(PAPER, 0.12), 1.0)
+            };
+            f.stroke(
+                &Path::line(Point::new(x, o.y), Point::new(x, o.y + h)),
+                dash.clone(),
+            );
+            f.stroke(
+                &Path::line(Point::new(o.x, y), Point::new(o.x + w, y)),
+                dash,
+            );
+        }
+        // Corner brackets.
+        let k = 22.0;
+        let c = if self.live { ACID } else { MUTED };
+        for (cx, cy, dx, dy) in [
+            (o.x + 12.0, o.y + 12.0, 1.0, 1.0),
+            (o.x + w - 12.0, o.y + 12.0, -1.0, 1.0),
+            (o.x + 12.0, o.y + h - 12.0, 1.0, -1.0),
+            (o.x + w - 12.0, o.y + h - 12.0, -1.0, -1.0),
+        ] {
+            f.stroke(
+                &Path::line(Point::new(cx, cy), Point::new(cx + dx * k, cy)),
+                stroke(c, 1.5),
+            );
+            f.stroke(
+                &Path::line(Point::new(cx, cy), Point::new(cx, cy + dy * k)),
+                stroke(c, 1.5),
+            );
+        }
+        // Crosshair.
+        let m = Point::new(o.x + w / 2.0, o.y + h / 2.0);
+        f.stroke(
+            &Path::line(Point::new(m.x - 8.0, m.y), Point::new(m.x + 8.0, m.y)),
+            stroke(alpha(PAPER, 0.5), 1.0),
+        );
+        f.stroke(
+            &Path::line(Point::new(m.x, m.y - 8.0), Point::new(m.x, m.y + 8.0)),
+            stroke(alpha(PAPER, 0.5), 1.0),
+        );
+
+        // Overlays.
+        if self.live {
+            let rec = (self.t * 1.5).fract() < 0.6;
+            f.fill(
+                &Path::circle(Point::new(o.x + 34.0, o.y + 40.0), 4.0),
+                if rec { HOT } else { INK_2 },
+            );
+            let s = self.elapsed as u32;
+            label(
+                &mut f,
+                format!("REC {:02}:{:02}:{:02}", s / 3600, (s / 60) % 60, s % 60),
+                Point::new(o.x + 44.0, o.y + 33.0),
+                11.0,
+                PAPER,
+                MONO_SEMI,
+                Alignment::Left,
+            );
+        } else {
+            f.fill_rectangle(
+                Point::new(m.x - 70.0, m.y - 22.0),
+                Size::new(140.0, 44.0),
+                VOID,
+            );
+            label(
+                &mut f,
+                "SEM SINAL",
+                Point::new(m.x, m.y - 14.0),
+                22.0,
+                PAPER,
+                DISPLAY,
+                Alignment::Center,
+            );
+        }
+        label(
+            &mut f,
+            &self.label,
+            Point::new(o.x + w - 34.0, o.y + 33.0),
+            11.0,
+            if self.live { PAPER } else { MUTED },
+            MONO_SEMI,
+            Alignment::Right,
+        );
+        f.stroke_rectangle(o, Size::new(w, h), stroke(LINE_STRONG, 1.0));
+        vec![f.into_geometry()]
+    }
+}

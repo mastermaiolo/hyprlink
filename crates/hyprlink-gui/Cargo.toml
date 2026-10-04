@@ -27,3 +27,5 @@ serde.workspace = true
 [lints.clippy]
 collapsible_if = "allow"
 if_same_then_else = "allow"
+unnecessary_sort_by = "allow"
+clone_on_copy = "allow"

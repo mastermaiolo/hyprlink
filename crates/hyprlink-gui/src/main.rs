@@ -5,6 +5,7 @@
 
 mod app;
 mod graphics;
+mod pages;
 mod theme;
 mod tray;
 mod ui;

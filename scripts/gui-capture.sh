@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Regressão visual da GUI em mock: captura cada secção em Xvfb (tiny-skia) e
-# compara com docs/screenshots/.
+# compara com docs/screenshots/ (nomes e alturas iguais às de referência).
 #
 #   scripts/gui-capture.sh [BIN] [OUT]
 #     BIN  binário da GUI   (por omissão target/release/hyprlink-gui)
@@ -37,8 +37,18 @@ shoot() { # nome secção altura demo
     fi
 }
 
-for s in 1 2 3 5 6 7 8; do shoot "$(printf %02d "$s")" "$s" 940; done
-shoot 04 4 940 mirror   # a referência está em direto
-shoot 09-pair 2 940 pair
-shoot 01-capa-completa 1 2060
+# nome                 secção altura demo — igual às capturas de referência
+shoot 00-definicoes        11 1200
+shoot 01-capa               1 2060
+shoot 02-dispositivos       2 1700
+shoot 02b-emparelhar        2  940 pair
+shoot 03-secretaria         3 1400
+shoot 04a-camara            4 1100 webcam
+shoot 04b-ecra              4 1100 screen
+shoot 05-audio              5 1800
+shoot 06-notificacoes       6  940
+shoot 07-partilha           7 1100 transfer
+shoot 08-multimedia         8 1000
+shoot 09-sensores-presenca  9 1750
+shoot 10-diario            10  940
 cat "$OUT/report.txt"

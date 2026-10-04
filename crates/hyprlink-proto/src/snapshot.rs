@@ -111,10 +111,10 @@ impl Snapshot {
                     battery: d.battery,
                     charging: d.charging,
                 });
-                if let Some(d) = Self::primary(list)
-                    && d.rssi.is_some()
-                {
-                    self.rssi = d.rssi;
+                if let Some(d) = Self::primary(list) {
+                    if d.rssi.is_some() {
+                        self.rssi = d.rssi;
+                    }
                 }
             }
             Event::Phone(p) => self.phone = Some(p.clone()),

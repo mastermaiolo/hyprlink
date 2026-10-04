@@ -4,14 +4,15 @@
 #   scripts/sync-gui.sh [--check]     (--check: só mostra o que difere)
 #
 # Mapa (o resto do repositório de design não entra):
-#   src/{app,graphics,main,theme,tray,ui,views}.rs → crates/hyprlink-gui/src/
+#   src/{app,graphics,main,pages,theme,tray,ui,views}.rs → crates/hyprlink-gui/src/
 #   src/{fmt,host,snapshot}.rs, src/link/*.rs      → crates/hyprlink-proto/src/
 #   src/bin/hyprlinkctl.rs                         → (manual: crates/hyprlinkctl/src/main.rs)
 #   assets/, docs/screenshots/, README.md          → crates/hyprlink-gui/
 #
 # Diferenças locais que o script repõe depois de copiar:
 #   - app.rs: o transporte vem de hyprlink_gui::transport() (feature mock);
-#   - link/mod.rs: `pub mod mock` atrás de cfg(any(test, feature = "mock")).
+#   - link/mod.rs: `pub mod mock` e `pub mod mock_more` atrás de
+#     cfg(any(test, feature = "mock")).
 set -euo pipefail
 
 SRC="${HYPRLINK_GUI_SRC:-$HOME/Projectos/iced/hyprlink-gui}"
@@ -20,13 +21,13 @@ GUI="$ROOT/crates/hyprlink-gui"
 PROTO="$ROOT/crates/hyprlink-proto"
 
 pairs=()
-for f in app graphics main theme tray ui views; do pairs+=("src/$f.rs:$GUI/src/$f.rs"); done
+for f in app graphics main pages theme tray ui views; do pairs+=("src/$f.rs:$GUI/src/$f.rs"); done
 for f in fmt host snapshot; do pairs+=("src/$f.rs:$PROTO/src/$f.rs"); done
-for f in mod mock packets; do pairs+=("src/link/$f.rs:$PROTO/src/link/$f.rs"); done
+for f in mod mock mock_more packets; do pairs+=("src/link/$f.rs:$PROTO/src/link/$f.rs"); done
 
 patch_local() {
     sed -i 's|            link: Box::new(link::mock::Simulator::new()),|            link: hyprlink_gui::transport(),|' "$GUI/src/app.rs"
-    sed -i 's|^pub mod mock;|#[cfg(any(test, feature = "mock"))]\npub mod mock;|' "$PROTO/src/link/mod.rs"
+    sed -i -E 's|^pub mod (mock\|mock_more);|#[cfg(any(test, feature = "mock"))]\npub mod \1;|' "$PROTO/src/link/mod.rs"
 }
 
 if [[ "${1:-}" == "--check" ]]; then
@@ -36,7 +37,7 @@ if [[ "${1:-}" == "--check" ]]; then
         cp "$from" "$tmp/x.rs"
         case "$to" in
             */app.rs) sed -i 's|            link: Box::new(link::mock::Simulator::new()),|            link: hyprlink_gui::transport(),|' "$tmp/x.rs" ;;
-            */link/mod.rs) sed -i 's|^pub mod mock;|#[cfg(any(test, feature = "mock"))]\npub mod mock;|' "$tmp/x.rs" ;;
+            */link/mod.rs) sed -i -E 's|^pub mod (mock\|mock_more);|#[cfg(any(test, feature = "mock"))]\npub mod \1;|' "$tmp/x.rs" ;;
         esac
         cmp -s "$tmp/x.rs" "$to" || echo "difere: ${p%%:*}"
     done

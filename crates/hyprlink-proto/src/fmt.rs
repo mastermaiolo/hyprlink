@@ -2,7 +2,8 @@
 //! wire. pt-PT. The daemon sends data; this module turns it into words.
 
 use crate::link::{
-    Cap, Codec, Device, ErrorKind, Kind, LinkState, Network, Notice, Op, PhoneStatus,
+    CamCodec, Cap, Codec, Device, ErrorKind, Kind, LinkState, Network, Notice, Op, Origin,
+    PhoneStatus, PhoneStream, Ringer, TransferState,
 };
 
 pub const DASH: &str = "—";
@@ -158,6 +159,11 @@ fn op(o: Op) -> &'static str {
         Op::Presence => "Presença",
         Op::Pairing => "Emparelhamento",
         Op::Workspace => "Workspace",
+        Op::Webcam => "Câmara",
+        Op::Files => "Ficheiros",
+        Op::Media => "Multimédia",
+        Op::Dispatch => "Dispatch",
+        Op::PhoneAudio => "Volume do telemóvel",
     }
 }
 
@@ -183,4 +189,99 @@ pub fn notice(n: &Notice, lookup: impl Fn(u32) -> Option<String>) -> String {
             }
         ),
     }
+}
+
+pub fn stream(s: PhoneStream) -> &'static str {
+    match s {
+        PhoneStream::Media => "Multimédia",
+        PhoneStream::Ring => "Toque",
+        PhoneStream::Notification => "Notificações",
+        PhoneStream::Alarm => "Alarme",
+    }
+}
+
+pub fn ringer(r: Ringer) -> &'static str {
+    match r {
+        Ringer::Normal => "SOM",
+        Ringer::Vibrate => "VIBRAR",
+        Ringer::Silent => "SILÊNCIO",
+    }
+}
+
+pub fn cam_codec(c: CamCodec) -> &'static str {
+    match c {
+        CamCodec::Mjpeg => "MJPEG",
+        CamCodec::H264 => "H.264",
+    }
+}
+
+pub fn origin(o: Origin) -> &'static str {
+    match o {
+        Origin::Phone => "TELEMÓVEL",
+        Origin::Pc => "PC",
+    }
+}
+
+pub fn transfer_state(s: TransferState) -> &'static str {
+    match s {
+        TransferState::Active => "A TRANSFERIR",
+        TransferState::Done => "CONCLUÍDO",
+        TransferState::Failed => "FALHOU",
+        TransferState::Cancelled => "CANCELADO",
+    }
+}
+
+/// 1 234 567 bytes → "1,2 MB" (pt-PT decimal comma).
+pub fn size(bytes: u64) -> String {
+    let b = bytes as f64;
+    let (v, u) = if b >= 1e9 {
+        (b / 1e9, "GB")
+    } else if b >= 1e6 {
+        (b / 1e6, "MB")
+    } else if b >= 1e3 {
+        (b / 1e3, "KB")
+    } else {
+        return format!("{bytes} B");
+    };
+    format!("{v:.1} {u}").replace('.', ",")
+}
+
+/// Unix seconds → "14:05" (today) or "3 out 14:05".
+pub fn time(unix: u64) -> String {
+    use chrono::{Datelike, Local, TimeZone};
+    let Some(t) = Local.timestamp_opt(unix as i64, 0).single() else {
+        return DASH.into();
+    };
+    let now = Local::now();
+    if t.date_naive() == now.date_naive() {
+        t.format("%H:%M").to_string()
+    } else {
+        const M: [&str; 12] = [
+            "jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez",
+        ];
+        format!(
+            "{} {} {}",
+            t.day(),
+            M[t.month0() as usize],
+            t.format("%H:%M")
+        )
+    }
+}
+
+/// "há 3 min" style, for lists.
+pub fn ago(unix: u64) -> String {
+    let now = chrono::Local::now().timestamp().max(0) as u64;
+    let d = now.saturating_sub(unix);
+    match d {
+        0..=59 => "agora".into(),
+        60..=3599 => format!("há {} min", d / 60),
+        3600..=86_399 => format!("há {} h", d / 3600),
+        _ => time(unix),
+    }
+}
+
+/// ms → "3:07".
+pub fn clock(ms: u64) -> String {
+    let s = ms / 1000;
+    format!("{}:{:02}", s / 60, s % 60)
 }

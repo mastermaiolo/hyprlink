@@ -14,6 +14,8 @@
 
 #[cfg(any(test, feature = "mock"))]
 pub mod mock;
+#[cfg(any(test, feature = "mock"))]
+pub mod mock_more;
 pub mod packets;
 
 use serde::{Deserialize, Serialize};
@@ -179,6 +181,8 @@ pub enum Command {
     StopMirror,
     SetSensorBridge(SensorKind, bool),
     SetRule(usize, bool),
+    /// Everything added for the new pages.
+    More(Command2),
     BeginPairing,
     CancelPairing,
     Unpair(DeviceId),
@@ -208,6 +212,11 @@ pub enum Op {
     Presence,
     Pairing,
     Workspace,
+    Webcam,
+    Files,
+    Media,
+    Dispatch,
+    PhoneAudio,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -223,11 +232,6 @@ pub enum ErrorKind {
 }
 
 /// Things the daemon tells the GUI.
-///
-/// `Phone` is the big variant (~280 B). Events are decoded one at a time and
-/// handed to the UI, never stored in bulk, so boxing it would only change the
-/// Rust API (the wire is identical) for no gain.
-#[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Event {
     Devices(Vec<Device>),
@@ -254,6 +258,7 @@ pub enum Event {
     Pairing(Option<PairingTicket>),
     Notice(Notice),
     Phone(PhoneStatus),
+    More(Event2),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -330,4 +335,276 @@ impl NowPlaying {
             _ => None,
         }
     }
+}
+
+// ═══════════════════ pages added after Fase 0 (see RESPOSTA-fase0.md) ═══════════════════
+
+/// One point of the phone's battery history (daemon-side, 12 h).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub struct BatteryPoint {
+    pub at: u64,
+    pub level: u8,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+pub struct BatteryAlerts {
+    /// Warn below this level; `None` = off.
+    pub low: Option<u8>,
+    pub full: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ActiveWindow {
+    pub class: String,
+    pub title: String,
+    pub workspace: u8,
+}
+
+/// A user-defined `hyprctl dispatch`, also offered on the phone.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct Shortcut {
+    pub label: String,
+    pub dispatch: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+pub struct TrackpadConfig {
+    /// 0.25–3.0
+    pub sensitivity: f32,
+    /// 0.25–3.0
+    pub scroll: f32,
+    pub acceleration: bool,
+    pub natural_scroll: bool,
+    pub keyboard: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CamCodec {
+    Mjpeg,
+    H264,
+}
+
+impl CamCodec {
+    pub const ALL: [CamCodec; 2] = [CamCodec::Mjpeg, CamCodec::H264];
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+pub struct WebcamConfig {
+    pub width: u32,
+    pub height: u32,
+    pub fps: u32,
+    pub codec: CamCodec,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
+pub struct WebcamStats {
+    pub mbps: f32,
+    /// The daemon does not know this yet.
+    pub fps: Option<f32>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub struct NetTest {
+    pub mbps: f32,
+    pub rtt_ms: f32,
+    pub loss_pct: f32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum PhoneStream {
+    Media,
+    Ring,
+    Notification,
+    Alarm,
+}
+
+impl PhoneStream {
+    pub const ALL: [PhoneStream; 4] = [
+        PhoneStream::Media,
+        PhoneStream::Ring,
+        PhoneStream::Notification,
+        PhoneStream::Alarm,
+    ];
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Ringer {
+    Normal,
+    Vibrate,
+    Silent,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StreamLevel {
+    pub stream: PhoneStream,
+    pub level: u8,
+    pub max: u8,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct PhoneAudio {
+    pub streams: Vec<StreamLevel>,
+    pub ringer: Ringer,
+    pub dnd: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct Sink {
+    pub id: u32,
+    /// PipeWire node name, e.g. "alsa_output.pci-0000_04_00.6.analog-stereo".
+    pub name: String,
+    /// Human description from PipeWire (data, not our wording).
+    pub description: String,
+    /// 0–150 %.
+    pub volume: u8,
+    pub muted: bool,
+    pub default: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct AppStream {
+    pub id: u32,
+    pub app: String,
+    pub volume: u8,
+    pub muted: bool,
+    pub sink: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PhoneNotification {
+    pub key: String,
+    pub app: String,
+    pub title: String,
+    pub text: Option<String>,
+    /// Unix seconds.
+    pub at: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Origin {
+    Phone,
+    Pc,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ClipEntry {
+    pub id: u64,
+    pub origin: Origin,
+    pub mime: String,
+    /// Text content, when the entry is text.
+    pub text: Option<String>,
+    pub bytes: u64,
+    pub at: u64,
+    pub pinned: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TransferState {
+    Active,
+    Done,
+    Failed,
+    Cancelled,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Transfer {
+    pub id: u64,
+    pub name: String,
+    /// Tx = PC → phone, Rx = phone → PC.
+    pub dir: Dir,
+    pub bytes: u64,
+    pub done: u64,
+    pub state: TransferState,
+    pub at: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Player {
+    /// MPRIS bus name suffix, e.g. "spotify".
+    pub id: String,
+    pub identity: String,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub playing: bool,
+    pub position_ms: Option<u64>,
+    pub duration_ms: Option<u64>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MediaAction {
+    Previous,
+    PlayPause,
+    Next,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct Settings {
+    pub downloads_dir: String,
+    pub daemon_version: String,
+    pub socket: String,
+}
+
+/// Commands for the new pages. Kept apart so the original enum stays readable.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Command2 {
+    SetBatteryAlerts(BatteryAlerts),
+    RunDispatch(String),
+    SetShortcuts(Vec<Shortcut>),
+    SetTrackpad(TrackpadConfig),
+    StartWebcam(WebcamConfig),
+    StopWebcam,
+    TestNetwork,
+    SetPhoneVolume(PhoneStream, u8),
+    SetRinger(Ringer),
+    SetDnd(bool),
+    SetSinkVolume(u32, u8),
+    SetSinkMute(u32, bool),
+    SetDefaultSink(u32),
+    SetAppVolume(u32, u8),
+    SetAppMute(u32, bool),
+    DismissNotification(String),
+    DismissAllNotifications,
+    CopyClip(u64),
+    SendClipToPhone(u64),
+    PinClip(u64, bool),
+    DeleteClip(u64),
+    SendFile(String),
+    CancelTransfer(u64),
+    OpenDownloads,
+    Media {
+        player: String,
+        action: MediaAction,
+    },
+    /// Proposed: needs a media-session channel on Android.
+    PhoneMedia(MediaAction),
+    SetDownloadsDir(String),
+    RestartDaemon,
+}
+
+/// Events for the new pages.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Event2 {
+    BatteryHistory(Vec<BatteryPoint>),
+    BatteryAlerts(BatteryAlerts),
+    ActiveWindow(Option<ActiveWindow>),
+    Shortcuts(Vec<Shortcut>),
+    Trackpad(TrackpadConfig),
+    Webcam(Option<WebcamStats>),
+    NetTest(NetTest),
+    PhoneAudio(PhoneAudio),
+    Mixer {
+        sinks: Vec<Sink>,
+        apps: Vec<AppStream>,
+    },
+    Notifications(Vec<PhoneNotification>),
+    Clipboard(Vec<ClipEntry>),
+    Transfers(Vec<Transfer>),
+    Players(Vec<Player>),
+    Settings(Settings),
 }
