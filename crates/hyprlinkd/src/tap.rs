@@ -1,0 +1,319 @@
+//! Audio tap: ouvir o áudio do PC no telemóvel. Pipeline GStreamer
+//! (`pipewiresrc` no monitor do sink padrão) — sem bindings C do
+//! libpipewire, o GStreamer já faz esse trabalho.
+//!
+//! ponytail: pipeline reconstruído do zero a cada `audio.tap_start` (não
+//! acompanha troca de sink padrão em tempo real); trocar de saída durante um
+//! tap ativo exige parar e começar de novo. Suficiente pro uso normal
+//! (ligar o tap, ouvir, desligar).
+
+use std::sync::{Arc, Mutex};
+
+use bytes::Bytes;
+use gstreamer as gst;
+use gstreamer::prelude::*;
+use gstreamer_app::AppSink;
+
+use crate::state::{self, push_audio_vu, push_log, HudState};
+
+pub type TapHandle = Arc<Mutex<Option<gst::Pipeline>>>;
+
+pub fn new_handle() -> TapHandle {
+    Arc::new(Mutex::new(None))
+}
+
+/// Pico de amplitude num bloco S16LE — mesmo cálculo que o Android já faz em
+/// `AudioStreamPlayer.kt` do lado da reprodução, aqui do lado da captura, pro
+/// VU meter do AUDIO na GUI.
+fn peak_percent(bytes: &[u8]) -> u8 {
+    let mut peak: i16 = 0;
+    let mut i = 0;
+    while i + 1 < bytes.len() {
+        let sample = i16::from_le_bytes([bytes[i], bytes[i + 1]]);
+        peak = peak.max(sample.saturating_abs());
+        i += 2;
+    }
+    ((peak as u32 * 100) / 32767) as u8
+}
+
+fn default_sink_name() -> Option<String> {
+    std::process::Command::new("pactl")
+        .args(["get-default-sink"])
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+}
+
+/// Para o tap em andamento, se houver (chamado por `audio.tap_stop` e
+/// também antes de iniciar um novo tap, pra nunca ter dois ao mesmo tempo).
+pub fn stop(handle: &TapHandle, hud: &Arc<Mutex<HudState>>) {
+    if let Some(pipeline) = handle.lock().unwrap().take() {
+        let _ = pipeline.set_state(gst::State::Null);
+        state::set_audio_tap_active(hud, false);
+    }
+}
+
+/// Como `stop()`, mas só mata o pipeline se ele ainda for exatamente o
+/// mesmo `pipeline` desta chamada de `start()` — usado na limpeza de fim de
+/// task (falha de escrita/EOF). Sem isso, um restart rápido (tap_stop
+/// seguido de tap_start) corre risco de a limpeza atrasada da sessão antiga
+/// matar o pipeline novo que já está tocando.
+fn stop_if_current(handle: &TapHandle, pipeline: &gst::Pipeline, hud: &Arc<Mutex<HudState>>) {
+    let mut guard = handle.lock().unwrap();
+    if guard.as_ref() == Some(pipeline) {
+        let old = guard.take().unwrap();
+        drop(guard);
+        let _ = old.set_state(gst::State::Null);
+        state::set_audio_tap_active(hud, false);
+    }
+}
+
+/// Inicia o tap: envia PCM cru (16-bit LE, 48kHz, estéreo) via QUIC DATAGRAM
+/// (RFC 9221, sem stream) até `stop()` ser chamado. Fase 1 do plano de
+/// migração pro transporte não-confiável — datagram evita o head-of-line
+/// blocking e o esgotamento de flow-control de stream que já causou o bug
+/// documentado do buffer do Kwik. Cada datagrama carrega um contador de
+/// sequência de 2 bytes (BE) na frente — o suficiente pra detectar
+/// perda/desordem sem o overhead de um cabeçalho RTP completo (12 bytes),
+/// já que só existe um tap ativo por conexão, sem precisar de SSRC.
+/// ponytail: reordenação/jitter buffer de verdade ainda não existe do lado
+/// do telemóvel — perda vira só silêncio momentâneo por ora, não pânico.
+///
+/// `sink`: qual saída capturar. `None` = espelho do sink padrão (o tap
+/// "normal": o som continua nas colunas do PC e o telemóvel ouve uma cópia
+/// paralela). `Some(name)` = modo coluna (`speaker.rs`), apontando pro sink
+/// virtual `hyprlink-speaker` — nome explícito (em vez de depender do
+/// default, que o modo coluna também muda) torna a intenção determinística
+/// mesmo que o default mude a meio da sessão.
+pub async fn start(connection: quinn::Connection, sink: Option<String>, handle: TapHandle, hud: Arc<Mutex<HudState>>) {
+    stop(&handle, &hud);
+
+    if let Err(e) = gst::init() {
+        push_log(&hud, format!("[!] audio tap: GStreamer não inicializou: {e}"));
+        return;
+    }
+
+    let Some(sink) = sink.or_else(default_sink_name) else {
+        push_log(&hud, "[!] audio tap: sem sink padrão detetado".to_string());
+        return;
+    };
+
+    // ponytail: "target-object=<sink>.monitor" NÃO existe como nó nativo do
+    // PipeWire (é convenção do PulseAudio) — sem correspondência, o
+    // WirePlumber liga a captura à fonte padrão (o MICROFONE físico), não ao
+    // monitor do sink. A forma certa de "escutar" um sink no PipeWire nativo:
+    // apontar target-object pro próprio nó do sink e marcar a stream com
+    // `stream.capture.sink=true`, que instrui o session manager a ligar nas
+    // portas de monitor dele em vez das portas de entrada normais.
+    let pipeline_str = format!(
+        "pipewiresrc target-object=\"{sink}\" stream-properties=\"props,stream.capture.sink=true\" \
+         ! audioconvert ! audioresample \
+         ! audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved \
+         ! appsink name=hyprlink_tap sync=false max-buffers=8 drop=true"
+    );
+
+    let pipeline = match gst::parse::launch(&pipeline_str) {
+        Ok(el) => match el.downcast::<gst::Pipeline>() {
+            Ok(p) => p,
+            Err(_) => {
+                push_log(&hud, "[!] audio tap: pipeline inesperado".to_string());
+                return;
+            }
+        },
+        Err(e) => {
+            push_log(&hud, format!("[!] audio tap: falha ao montar o pipeline: {e}"));
+            return;
+        }
+    };
+
+    let Some(sink_el) = pipeline.by_name("hyprlink_tap") else {
+        push_log(&hud, "[!] audio tap: appsink não encontrado no pipeline".to_string());
+        return;
+    };
+    let appsink = match sink_el.downcast::<AppSink>() {
+        Ok(s) => s,
+        Err(_) => {
+            push_log(&hud, "[!] audio tap: appsink com tipo inesperado".to_string());
+            return;
+        }
+    };
+
+    // Mesmo fix que o mic.rs já precisou (GstSystemClock é singleton do
+    // processo — calibração de uma pipeline anterior podia vazar pra esta).
+    pipeline.use_clock(None::<&gst::Clock>);
+
+    if pipeline.set_state(gst::State::Playing).is_err() {
+        push_log(&hud, "[!] audio tap: não foi possível iniciar o pipeline".to_string());
+        return;
+    }
+    *handle.lock().unwrap() = Some(pipeline.clone());
+    state::set_audio_tap_active(&hud, true);
+    push_log(&hud, format!("[+] audio tap iniciado · monitor de {sink}"));
+
+    // ponytail: set_state(Playing) só reporta falha síncrona — se o
+    // pipewiresrc falhar ao linkar (ex: sink sumiu, PipeWire reiniciou), o
+    // erro chega de forma assíncrona pelo bus. `timed_pop` + `Weak` em vez de
+    // `iter_timed(NONE)`: um stop limpo não posta Eos/Error, então a versão
+    // antiga bloqueava a thread pra sempre; aqui ela sai sozinha ~1s depois
+    // do pipeline morrer, e um erro real agora derruba o pipeline de verdade
+    // em vez de só logar e deixar tudo em estado zumbi.
+    if let Some(bus) = pipeline.bus() {
+        let pipeline_weak = pipeline.downgrade();
+        let handle_bus = handle.clone();
+        let hud_bus = hud.clone();
+        std::thread::spawn(move || loop {
+            let Some(msg) = bus.timed_pop(gst::ClockTime::from_seconds(1)) else {
+                if pipeline_weak.upgrade().is_none() {
+                    break;
+                }
+                continue;
+            };
+            match msg.view() {
+                gst::MessageView::Error(err) => {
+                    push_log(
+                        &hud_bus,
+                        format!("[!] audio tap: erro no pipeline GStreamer: {} ({:?})", err.error(), err.debug()),
+                    );
+                    if let Some(p) = pipeline_weak.upgrade() {
+                        stop_if_current(&handle_bus, &p, &hud_bus);
+                    }
+                    break;
+                }
+                gst::MessageView::Eos(_) => break,
+                _ => {}
+            }
+        });
+    }
+
+    let Some(max_dgram) = connection.max_datagram_size() else {
+        push_log(&hud, "[!] audio tap: telemóvel não suporta QUIC DATAGRAM (RFC 9221) — precisa da atualização do app".to_string());
+        stop(&handle, &hud);
+        return;
+    };
+    let chunk_size = max_dgram.saturating_sub(2); // 2 bytes de seq na frente de cada datagrama
+    if chunk_size == 0 {
+        push_log(&hud, "[!] audio tap: tamanho de datagrama insuficiente pra qualquer payload".to_string());
+        stop(&handle, &hud);
+        return;
+    }
+    push_log(&hud, format!("[i] audio tap: enviando via datagram (payload até {chunk_size} bytes)"));
+
+    // pull_sample() bloqueia — roda numa thread própria. `send_datagram` do
+    // quinn é síncrono (só enfileira, sem handshake de stream), então a
+    // própria thread de captura manda direto — sem canal nem task separada.
+    let hud_thread = hud.clone();
+    let handle_cleanup = handle.clone();
+    let pipeline_cleanup = pipeline.clone();
+    std::thread::spawn(move || {
+        let mut seq: u16 = 0;
+        let mut total: u64 = 0;
+        let mut last_logged: u64 = 0;
+        'capture: loop {
+            match appsink.pull_sample() {
+                Ok(sample) => {
+                    let Some(buffer) = sample.buffer() else { continue };
+                    let Ok(map) = buffer.map_readable() else { continue };
+                    let data = map.as_slice();
+                    push_audio_vu(&hud_thread, peak_percent(data));
+
+                    for chunk in data.chunks(chunk_size) {
+                        let mut datagram = Vec::with_capacity(2 + chunk.len());
+                        datagram.extend_from_slice(&seq.to_be_bytes());
+                        datagram.extend_from_slice(chunk);
+                        seq = seq.wrapping_add(1);
+
+                        if let Err(e) = connection.send_datagram(Bytes::from(datagram)) {
+                            push_log(&hud_thread, format!("[!] audio tap: envio de datagram falhou: {e}"));
+                            break 'capture;
+                        }
+                        total += chunk.len() as u64;
+                    }
+                    state::set_audio_tap_bytes(&hud_thread, total);
+                    if total.saturating_sub(last_logged) >= 1_000_000 {
+                        last_logged = total;
+                        push_log(&hud_thread, format!("[i] audio tap: {} KB enviados", total / 1024));
+                    }
+                }
+                Err(e) => {
+                    push_log(&hud_thread, format!("[!] audio tap: pull_sample parou: {e}"));
+                    break;
+                }
+            }
+        }
+        push_log(&hud_thread, format!("[i] audio tap: encerrado ({} KB no total)", total / 1024));
+        // ponytail: sem isso o pipeline GStreamer fica "zumbi" — rodando em
+        // Playing mesmo depois do envio falhar (peer desconectou). Só mata
+        // se ainda for ESTE pipeline — um restart rápido (tap_stop +
+        // tap_start) já pode ter posto um pipeline novo no handle.
+        stop_if_current(&handle_cleanup, &pipeline_cleanup, &hud_thread);
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Não roda em CI — precisa de PipeWire real com um sink padrão.
+    /// `cargo test -- --ignored manual_pipeline`: monta o pipeline sozinho
+    /// (sem QUIC) e confirma que pelo menos um buffer de áudio real sai do
+    /// monitor do sink padrão.
+    #[test]
+    #[ignore]
+    fn manual_pipeline() {
+        gst::init().expect("GStreamer deveria inicializar");
+        let sink = default_sink_name().expect("deveria haver um sink padrão");
+        println!("sink: {sink}");
+
+        let pipeline_str = format!(
+            "pipewiresrc target-object=\"{sink}\" stream-properties=\"props,stream.capture.sink=true\" \
+             ! audioconvert ! audioresample \
+             ! audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved \
+             ! appsink name=hyprlink_tap sync=false max-buffers=8 drop=true"
+        );
+        let pipeline =
+            gst::parse::launch(&pipeline_str).unwrap().downcast::<gst::Pipeline>().unwrap();
+        let appsink = pipeline.by_name("hyprlink_tap").unwrap().downcast::<AppSink>().unwrap();
+        pipeline.set_state(gst::State::Playing).expect("pipeline deveria iniciar");
+
+        let sample = appsink.pull_sample().expect("deveria sair pelo menos uma amostra");
+        let buffer = sample.buffer().expect("amostra deveria ter buffer");
+        let map = buffer.map_readable().expect("buffer deveria ser legível");
+        println!("recebido: {} bytes", map.len());
+        assert!(!map.is_empty(), "esperava bytes de PCM reais");
+
+        pipeline.set_state(gst::State::Null).ok();
+    }
+
+    /// Diagnóstico: pula em loop 30x seguidas (não só uma) pra ver se
+    /// `pull_sample()` continua entregando amostras ou trava depois da
+    /// primeira quando chamado repetidamente do Rust puro (sem QUIC/tokio).
+    #[test]
+    #[ignore]
+    fn manual_pipeline_loop() {
+        gst::init().expect("GStreamer deveria inicializar");
+        let sink = default_sink_name().expect("deveria haver um sink padrão");
+        println!("sink: {sink}");
+
+        let pipeline_str = format!(
+            "pipewiresrc target-object=\"{sink}\" stream-properties=\"props,stream.capture.sink=true\" \
+             ! audioconvert ! audioresample \
+             ! audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved \
+             ! appsink name=hyprlink_tap sync=false max-buffers=8 drop=true"
+        );
+        let pipeline =
+            gst::parse::launch(&pipeline_str).unwrap().downcast::<gst::Pipeline>().unwrap();
+        let appsink = pipeline.by_name("hyprlink_tap").unwrap().downcast::<AppSink>().unwrap();
+        pipeline.set_state(gst::State::Playing).expect("pipeline deveria iniciar");
+
+        let start = std::time::Instant::now();
+        for i in 0..30 {
+            let t0 = std::time::Instant::now();
+            let sample = appsink.pull_sample().expect(&format!("pull #{i} deveria funcionar"));
+            let buffer = sample.buffer().expect("amostra deveria ter buffer");
+            let map = buffer.map_readable().expect("buffer deveria ser legível");
+            println!("pull #{i}: {} bytes em {:?} (total decorrido: {:?})", map.len(), t0.elapsed(), start.elapsed());
+        }
+
+        pipeline.set_state(gst::State::Null).ok();
+    }
+}

@@ -1,0 +1,145 @@
+mod active;
+mod audio;
+mod battery;
+mod clip;
+mod config;
+mod ctl;
+mod gui;
+mod hypr;
+mod identity;
+mod input;
+mod media;
+mod mic;
+mod notif;
+mod pairing;
+mod phone_audio;
+mod protocol;
+mod server;
+mod share;
+mod speaker;
+mod state;
+mod tap;
+mod theme;
+mod tray;
+mod tls_verifier;
+mod webcam;
+
+use std::sync::{Arc, Mutex};
+
+use qrcode::render::unicode;
+use qrcode::QrCode;
+
+const PORT: u16 = 7443;
+
+fn main() -> anyhow::Result<()> {
+    let identity = identity::load_or_generate()?;
+    let pairing = Arc::new(Mutex::new(pairing::PairingStore::load()?));
+    let local_ip = local_ip_guess();
+
+    let token_hex = pairing.lock().unwrap().current_token_hex.clone();
+    let hud = state::HudState::new(format!("{local_ip}:{PORT}"), identity.fingerprint_hex.clone(), token_hex.clone());
+    let config = config::load();
+    // Sessão anterior morreu com o modo coluna ativo? Devolve o som do PC
+    // ao sink original antes de qualquer outra coisa — sem isto, o PC
+    // ficaria mudo (apps a tocar no sink virtual que já ninguém consome).
+    speaker::cleanup_orphans(&config);
+    // Compartilhado com a GUI só pra permitir um `close()` educado da conexão
+    // QUIC (frame CONNECTION_CLOSE de verdade) no botão de fechar — sem isso
+    // o telemóvel fica "conectado" até o idle timeout expirar sozinho.
+    let active = active::new_registry();
+    // Compartilhado com a GUI pra ela poder pedir "iniciar/parar stream" no
+    // ecrã da webcam sem precisar de todo o `Ctx` do servidor.
+    let pending_webcam = webcam::new_pending();
+    // Tap e modo coluna partilhados entre daemon e GUI (o toggle da coluna
+    // vive na GUI, o telemóvel dispara o tap pelo servidor — mesmo slot).
+    let tap_handle = tap::new_handle();
+    let speaker_handle = speaker::new_handle();
+    // Compartilhado com a GUI: o ícone da bandeja roda numa thread/executor
+    // próprio (ksni) — sinaliza aqui quando o usuário clica nele, a GUI
+    // consome no `Tick` (polling, não dá pra mandar `Message` direto de fora).
+    let tray_show = tray::new_show_flag();
+
+    print_terminal_qr(&identity.fingerprint_hex, local_ip, &token_hex)?;
+
+    let pairing_for_gui = pairing.clone();
+
+    {
+        let hud = hud.clone();
+        let config = config.clone();
+        let active = active.clone();
+        let pending_webcam = pending_webcam.clone();
+        let tap_handle = tap_handle.clone();
+        let speaker_handle = speaker_handle.clone();
+        let tray_show = tray_show.clone();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("falha ao criar runtime tokio");
+            rt.block_on(run_daemon(
+                identity, pairing, hud, config, active, pending_webcam, tray_show, tap_handle, speaker_handle, local_ip,
+            ));
+        });
+    }
+
+    gui::run(hud, config, active, pending_webcam, tray_show, pairing_for_gui, tap_handle, speaker_handle)
+        .map_err(|e| anyhow::anyhow!("erro na GUI: {e}"))
+}
+
+async fn run_daemon(
+    identity: identity::ServerIdentity,
+    pairing: Arc<Mutex<pairing::PairingStore>>,
+    hud: Arc<Mutex<state::HudState>>,
+    config: config::SharedConfig,
+    active: active::ActiveConn,
+    pending_webcam: webcam::PendingWebcam,
+    tray_show: tray::ShowRequested,
+    tap_handle: tap::TapHandle,
+    speaker_handle: speaker::SpeakerHandle,
+    local_ip: std::net::IpAddr,
+) {
+    let addr: std::net::SocketAddr = format!("0.0.0.0:{PORT}").parse().expect("porta fixa válida");
+    let _ = local_ip;
+    let endpoint = match server::build_endpoint(&identity, addr) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("[fatal] não foi possível subir o servidor QUIC: {e}");
+            return;
+        }
+    };
+    // Uma sessão D-Bus só, reusada por notif.rs/media.rs (ver `Ctx::dbus`) —
+    // criada aqui (não em Ctx::new, que é síncrona) porque conectar é async.
+    let dbus = zbus::Connection::session().await.ok();
+    let ctx = server::Ctx::new(hud, config, active, pending_webcam, dbus, tap_handle, speaker_handle);
+    server::spawn_background_tasks(ctx.clone());
+    tokio::spawn(tray::spawn(tray_show));
+    server::run(endpoint, pairing, ctx).await;
+}
+
+fn print_terminal_qr(fingerprint_hex: &str, local_ip: std::net::IpAddr, token_hex: &str) -> anyhow::Result<()> {
+    let qr_payload = format!("{fingerprint_hex}|{local_ip}:{PORT}|{token_hex}");
+
+    println!("{}", "=".repeat(60));
+    println!("           HYPRLINK DESKTOP DAEMON (Rust)");
+    println!("{}", "=".repeat(60));
+    println!("IP Local:     {local_ip}:{PORT}");
+    println!("Fingerprint:  {fingerprint_hex}");
+    println!("Token:        {token_hex}");
+    println!("{}", "=".repeat(60));
+
+    let code = QrCode::new(qr_payload.as_bytes())?;
+    let qr_ascii = code.render::<unicode::Dense1x2>().quiet_zone(true).build();
+    println!("{qr_ascii}");
+    println!("\n[+] Aponte a câmara do app HyprLink para o QR Code acima, ou use a GUI que vai abrir.\n");
+    Ok(())
+}
+
+fn local_ip_guess() -> std::net::IpAddr {
+    // Mesma técnica do daemon Python: abre um socket UDP "fake" pra descobrir
+    // qual interface local o SO escolheria pra sair, sem enviar nada de fato.
+    use std::net::UdpSocket;
+    UdpSocket::bind("0.0.0.0:0")
+        .and_then(|s| {
+            s.connect("10.255.255.255:1")?;
+            s.local_addr()
+        })
+        .map(|addr| addr.ip())
+        .unwrap_or_else(|_| std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST))
+}
