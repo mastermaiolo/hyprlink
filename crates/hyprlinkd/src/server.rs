@@ -234,7 +234,13 @@ async fn handle_connection(
         if store.is_paired(&peer_fingerprint) {
             true
         } else if let Some(token_hex) = &token_hex {
-            store.try_pair_with_token(&peer_fingerprint, token_hex)?
+            let ok = store.try_pair_with_token(&peer_fingerprint, token_hex)?;
+            if ok {
+                // O token roda depois de um pareamento: o QR mostrado tem de
+                // passar a ter o novo, senão o próximo pareamento falha.
+                ctx.hud.lock().unwrap().pairing_token_hex = store.current_token_hex.clone();
+            }
+            ok
         } else {
             false
         }
