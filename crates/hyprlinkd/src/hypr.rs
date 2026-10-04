@@ -51,6 +51,16 @@ pub fn clients_json() -> String {
     }
 }
 
+/// O workspace focado (existe mesmo vazio, ao contrário de `activewindow`).
+pub fn active_workspace_json() -> String {
+    let data = run_hyprctl(&["activeworkspace", "-j"]);
+    if data.trim().is_empty() {
+        "{}".to_string()
+    } else {
+        data
+    }
+}
+
 /// A janela focada agora — usado só pra linha de contexto do CONTROL
 /// (`activewindow` do socket2 já cobre o resto em tempo real).
 pub fn active_window_json() -> String {

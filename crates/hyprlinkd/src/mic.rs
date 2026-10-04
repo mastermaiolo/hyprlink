@@ -82,6 +82,38 @@ pub fn stop(handle: &MicHandle, hud: &Arc<Mutex<HudState>>) {
     }
 }
 
+/// Pico linear (0–1) de PCM S16LE mono. Os blocos chegam da rede com
+/// qualquer tamanho; um byte ímpar que sobre fica para o bloco seguinte,
+/// para nunca ler uma amostra desalinhada.
+#[derive(Default)]
+struct PeakMeter {
+    carry: Option<u8>,
+}
+
+impl PeakMeter {
+    fn feed(&mut self, bytes: &[u8]) -> Option<f32> {
+        let mut peak: i32 = 0;
+        let mut seen = false;
+        let mut rest = bytes;
+        if let Some(lo) = self.carry.take() {
+            let Some((&hi, tail)) = rest.split_first() else {
+                self.carry = Some(lo);
+                return None;
+            };
+            peak = peak.max(i32::from(i16::from_le_bytes([lo, hi])).abs());
+            seen = true;
+            rest = tail;
+        }
+        let (pairs, remainder) = rest.as_chunks::<2>();
+        for &pair in pairs {
+            peak = peak.max(i32::from(i16::from_le_bytes(pair)).abs());
+            seen = true;
+        }
+        self.carry = remainder.first().copied();
+        seen.then(|| (peak as f32 / 32768.0).min(1.0))
+    }
+}
+
 /// Trata o uni-stream de PCM já reconhecido pelo roteador (id bateu com
 /// `PendingMic`): o loop de leitura da rede (aqui, tokio) só encaminha os
 /// bytes crus por um canal pra `run_gst_thread`, que faz tudo relacionado
@@ -97,6 +129,7 @@ pub async fn feed(mut recv: quinn::RecvStream, handle: MicHandle, hud: Arc<Mutex
     const STALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
     let mut buf = vec![0u8; 16 * 1024];
     let mut total: u64 = 0;
+    let mut meter = PeakMeter::default();
     loop {
         let n = match tokio::time::timeout(STALL_TIMEOUT, recv.read(&mut buf)).await {
             Ok(Ok(Some(n))) => n,
@@ -111,6 +144,9 @@ pub async fn feed(mut recv: quinn::RecvStream, handle: MicHandle, hud: Arc<Mutex
             }
         };
         total += n as u64;
+        if let Some(peak) = meter.feed(&buf[..n]) {
+            state::set_mic_level(&hud, peak);
+        }
         if tx.send(buf[..n].to_vec()).is_err() {
             break; // a thread do GStreamer já encerrou (erro no pipeline)
         }
@@ -266,4 +302,23 @@ fn run_gst_thread(rx: Receiver<Vec<u8>>, handle: MicHandle, hud: Arc<Mutex<HudSt
     }
     let _ = appsrc.end_of_stream();
     stop(&handle, &hud);
+}
+
+#[cfg(test)]
+mod meter_tests {
+    use super::PeakMeter;
+
+    #[test]
+    fn peak_is_linear_and_survives_odd_splits() {
+        let samples: [i16; 4] = [100, -16384, 32767, -5];
+        let bytes: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();
+        let mut m = PeakMeter::default();
+        assert_eq!(m.feed(&bytes[..3]), Some(100.0 / 32768.0));
+        // O 3.º byte ficou pendurado: junta-se ao seguinte (-16384).
+        let p = m.feed(&bytes[3..]).unwrap();
+        assert!((p - 32767.0 / 32768.0).abs() < 1e-6, "{p}");
+        assert_eq!(m.feed(&[]), None);
+        let mut m = PeakMeter::default();
+        assert_eq!(m.feed(&i16::MIN.to_le_bytes()), Some(1.0));
+    }
 }

@@ -74,12 +74,29 @@ fn default_lang() -> Lang {
     Lang::PtPt
 }
 
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct BatteryAlerts {
     #[serde(default)]
     pub low: bool,
     #[serde(default)]
     pub full: bool,
+    /// Limiar do aviso de bateria baixa (%).
+    #[serde(default = "default_low_pct")]
+    pub low_pct: u8,
+}
+
+fn default_low_pct() -> u8 {
+    20
+}
+
+impl Default for BatteryAlerts {
+    fn default() -> Self {
+        Self {
+            low: false,
+            full: false,
+            low_pct: default_low_pct(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -263,5 +280,23 @@ pub fn speaker_prev_sink(config: &SharedConfig) -> Option<String> {
 pub fn set_speaker_prev_sink(config: &SharedConfig, sink: Option<&str>) {
     let mut c = config.lock().unwrap();
     c.speaker_prev_sink = sink.map(Into::into);
+    c.save();
+}
+
+pub fn set_shortcuts(config: &SharedConfig, shortcuts: Vec<Shortcut>) {
+    let mut c = config.lock().unwrap();
+    c.shortcuts = shortcuts;
+    c.save();
+}
+
+pub fn set_battery_alerts(config: &SharedConfig, alerts: BatteryAlerts) {
+    let mut c = config.lock().unwrap();
+    c.battery_alerts = alerts;
+    c.save();
+}
+
+pub fn set_track_settings(config: &SharedConfig, track: TrackSettings) {
+    let mut c = config.lock().unwrap();
+    c.track = track;
     c.save();
 }

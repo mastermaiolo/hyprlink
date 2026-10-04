@@ -40,7 +40,9 @@ pub async fn push(active: &ActiveConn, kind: &str, body: Option<Value>) -> Optio
     let (mut send, _recv) = connection.open_bi().await.ok()?;
     let id = next_id();
     let packet = Packet::new(id, kind, body, false);
-    let _ = write_frame(&mut send, &packet.encode()).await;
+    let frame = packet.encode();
+    crate::bridge::log_packet_tx(kind, frame.len(), id);
+    let _ = write_frame(&mut send, &frame).await;
     let _ = send.finish();
     Some(id)
 }
@@ -56,7 +58,9 @@ pub async fn announce(active: &ActiveConn, kind: &str, body: Option<Value>) -> O
     let (mut send, _recv) = connection.open_bi().await.ok()?;
     let id = next_id();
     let packet = Packet::new(id, kind, body, true);
-    let _ = write_frame(&mut send, &packet.encode()).await;
+    let frame = packet.encode();
+    crate::bridge::log_packet_tx(kind, frame.len(), id);
+    let _ = write_frame(&mut send, &frame).await;
     let _ = send.finish();
     Some(id)
 }
@@ -71,7 +75,9 @@ pub async fn request(active: &ActiveConn, kind: &str, body: Option<Value>) -> Op
     let (mut send, mut recv) = connection.open_bi().await.ok()?;
     let id = next_id();
     let packet = Packet::new(id, kind, body, false);
-    write_frame(&mut send, &packet.encode()).await.ok()?;
+    let frame = packet.encode();
+    crate::bridge::log_packet_tx(kind, frame.len(), id);
+    write_frame(&mut send, &frame).await.ok()?;
     send.finish().ok()?;
     let raw = tokio::time::timeout(std::time::Duration::from_secs(5), read_frame(&mut recv))
         .await

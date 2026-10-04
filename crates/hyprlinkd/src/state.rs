@@ -17,11 +17,20 @@ pub struct ClipEntry {
     pub direction: &'static str,
     pub text: String,
     pub pinned: bool,
+    // ── dados para o socket local (a GUI antiga usa os de cima) ──
+    pub from_phone: bool,
+    pub mime: &'static str,
+    /// Conteúdo de texto; `None` para imagens (os bytes não ficam guardados).
+    pub content: Option<String>,
+    pub bytes: u64,
+    pub at_unix: u64,
 }
 
 /// Transferência em andamento — só uma por vez (o protocolo não faz fila).
 #[derive(Debug, Clone)]
 pub struct TransferProgress {
+    pub id: u64,
+    pub at_unix: u64,
     pub name: String,
     pub direction: &'static str, // "recebendo" · "enviando"
     pub bytes: u64,
@@ -31,6 +40,10 @@ pub struct TransferProgress {
 
 #[derive(Debug, Clone)]
 pub struct TransferRecord {
+    pub id: u64,
+    pub at_unix: u64,
+    pub total: u64,
+    pub cancelled: bool,
     pub at: String,
     pub name: String,
     pub direction: &'static str,
@@ -44,6 +57,7 @@ pub struct TransferRecord {
 /// amostras cobrem 12h, o bastante pro gráfico de barras do BATT.
 #[derive(Debug, Clone)]
 pub struct BatterySample {
+    pub at_unix: u64,
     pub pc: Option<i64>,
     pub phone: Option<i64>,
 }
@@ -51,6 +65,9 @@ const MAX_BATTERY_SAMPLES: usize = 144;
 
 #[derive(Debug, Clone)]
 pub struct NotifEntry {
+    /// Chave do Android (`StatusBarNotification.key`).
+    pub key: String,
+    pub at_unix: u64,
     pub at: String,
     pub app: String,
     pub title: String,
@@ -84,6 +101,9 @@ pub struct ModuleStatus {
     pub notif_count: u32,
     /// Mais recente primeiro.
     pub notif_history: std::collections::VecDeque<NotifEntry>,
+    /// As que ainda estão no telemóvel (sai com `notification.dismissed`
+    /// ou quando o PC as dispensa). Mais recente primeiro.
+    pub notif_active: Vec<NotifEntry>,
     pub media: Option<String>,
     pub phone_battery_pct: Option<i64>,
     pub phone_battery_charging: bool,
@@ -95,6 +115,7 @@ pub struct ModuleStatus {
     /// `None` = nenhuma transferência em andamento agora.
     pub file_transfer: Option<TransferProgress>,
     file_cancel: Option<Arc<AtomicBool>>,
+    transfer_next_id: u64,
     /// Mais recente primeiro.
     pub file_history: std::collections::VecDeque<TransferRecord>,
     /// Picos recentes (0-100%) do audio tap — vira o VU meter do AUDIO.
@@ -108,6 +129,8 @@ pub struct ModuleStatus {
     /// (hora, duração) do último stream que terminou nesta sessão do daemon.
     pub webcam_last_used: Option<(String, String)>,
     pub mic_active: bool,
+    /// Pico linear 0–1 do último bloco de PCM do microfone e quando chegou.
+    pub mic_level: Option<(f32, std::time::Instant)>,
     /// Modo coluna ativo (`speaker.rs`): o sink virtual `hyprlink-speaker`
     /// é o padrão e o tap aponta pra ele — o som do PC sai no telemóvel.
     pub speaker_active: bool,
@@ -143,6 +166,14 @@ impl HudState {
     }
 }
 
+/// Segundos Unix agora.
+pub fn now_unix() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 pub fn push_log(state: &Arc<Mutex<HudState>>, line: impl Into<String>) {
     let line = format!(
         "{} {}",
@@ -173,7 +204,35 @@ pub fn set_pairing(state: &Arc<Mutex<HudState>>) {
     state.lock().unwrap().conn = ConnState::Pairing;
 }
 
+pub const DIR_PHONE_TO_PC: &str = "telemóvel → PC";
+pub const DIR_PC_TO_PHONE: &str = "PC → telemóvel";
+
 pub fn push_clip_entry(state: &Arc<Mutex<HudState>>, direction: &'static str, text: String) {
+    let bytes = text.len() as u64;
+    push_clip(
+        state,
+        direction,
+        text.clone(),
+        "text/plain",
+        Some(text),
+        bytes,
+    );
+}
+
+/// Imagem PNG no clipboard: só o tamanho fica (os bytes não se guardam).
+pub fn push_clip_image(state: &Arc<Mutex<HudState>>, direction: &'static str, bytes: u64) {
+    let label = format!("🖼️ PNG ({} KB)", bytes / 1024);
+    push_clip(state, direction, label, "image/png", None, bytes);
+}
+
+fn push_clip(
+    state: &Arc<Mutex<HudState>>,
+    direction: &'static str,
+    text: String,
+    mime: &'static str,
+    content: Option<String>,
+    bytes: u64,
+) {
     let mut s = state.lock().unwrap();
     let at = chrono::Local::now().format("%H:%M:%S").to_string();
     let id = s.modules.clip_next_id;
@@ -184,8 +243,36 @@ pub fn push_clip_entry(state: &Arc<Mutex<HudState>>, direction: &'static str, te
         direction,
         text,
         pinned: false,
+        from_phone: direction == DIR_PHONE_TO_PC,
+        mime,
+        content,
+        bytes,
+        at_unix: now_unix(),
     });
     s.modules.clip_history.truncate(MAX_HISTORY);
+}
+
+pub fn set_clip_pin(state: &Arc<Mutex<HudState>>, id: u64, pinned: bool) -> bool {
+    let mut s = state.lock().unwrap();
+    match s.modules.clip_history.iter_mut().find(|e| e.id == id) {
+        Some(e) => {
+            e.pinned = pinned;
+            true
+        }
+        None => false,
+    }
+}
+
+pub fn delete_clip(state: &Arc<Mutex<HudState>>, id: u64) -> bool {
+    let mut s = state.lock().unwrap();
+    let before = s.modules.clip_history.len();
+    s.modules.clip_history.retain(|e| e.id != id);
+    s.modules.clip_history.len() != before
+}
+
+pub fn clip_entry(state: &Arc<Mutex<HudState>>, id: u64) -> Option<ClipEntry> {
+    let s = state.lock().unwrap();
+    s.modules.clip_history.iter().find(|e| e.id == id).cloned()
 }
 
 /// Fixados não escapam do teto de `MAX_HISTORY` (sem persistência em disco
@@ -198,17 +285,48 @@ pub fn toggle_clip_pin(state: &Arc<Mutex<HudState>>, id: u64) {
     }
 }
 
-pub fn push_notif_entry(state: &Arc<Mutex<HudState>>, app: String, title: String, text: String) {
+pub fn push_notif_entry(
+    state: &Arc<Mutex<HudState>>,
+    key: String,
+    app: String,
+    title: String,
+    text: String,
+) {
     let mut s = state.lock().unwrap();
     s.modules.notif_count += 1;
-    let at = chrono::Local::now().format("%H:%M:%S").to_string();
-    s.modules.notif_history.push_front(NotifEntry {
-        at,
+    let entry = NotifEntry {
+        key,
+        at_unix: now_unix(),
+        at: chrono::Local::now().format("%H:%M:%S").to_string(),
         app,
         title,
         text,
-    });
+    };
+    s.modules.notif_history.push_front(entry.clone());
     s.modules.notif_history.truncate(MAX_HISTORY);
+    // Uma atualização da mesma notificação substitui a anterior.
+    if !entry.key.is_empty() {
+        s.modules.notif_active.retain(|n| n.key != entry.key);
+    }
+    s.modules.notif_active.insert(0, entry);
+    s.modules.notif_active.truncate(MAX_HISTORY);
+}
+
+/// Saiu do telemóvel (ou o PC dispensou-a). `true` se estava na lista.
+pub fn remove_active_notif(state: &Arc<Mutex<HudState>>, key: &str) -> bool {
+    let mut s = state.lock().unwrap();
+    let before = s.modules.notif_active.len();
+    s.modules.notif_active.retain(|n| n.key != key);
+    s.modules.notif_active.len() != before
+}
+
+pub fn active_notif_keys(state: &Arc<Mutex<HudState>>) -> Vec<String> {
+    let s = state.lock().unwrap();
+    s.modules
+        .notif_active
+        .iter()
+        .map(|n| n.key.clone())
+        .collect()
 }
 
 /// Marca o início de uma transferência e devolve a flag de cancelamento —
@@ -221,7 +339,11 @@ pub fn start_file_transfer(
 ) -> Arc<AtomicBool> {
     let cancel = Arc::new(AtomicBool::new(false));
     let mut s = state.lock().unwrap();
+    s.modules.transfer_next_id += 1;
+    let id = s.modules.transfer_next_id;
     s.modules.file_transfer = Some(TransferProgress {
+        id,
+        at_unix: now_unix(),
         name,
         direction,
         bytes: 0,
@@ -238,6 +360,23 @@ pub fn update_file_transfer_progress(state: &Arc<Mutex<HudState>>, bytes: u64) {
     }
 }
 
+/// Cancela a transferência `id` se for a que está a decorrer.
+pub fn cancel_file_transfer_id(state: &Arc<Mutex<HudState>>, id: u64) -> bool {
+    let current = state
+        .lock()
+        .unwrap()
+        .modules
+        .file_transfer
+        .as_ref()
+        .map(|t| t.id);
+    if current == Some(id) {
+        cancel_file_transfer(state);
+        true
+    } else {
+        false
+    }
+}
+
 pub fn cancel_file_transfer(state: &Arc<Mutex<HudState>>) {
     if let Some(flag) = &state.lock().unwrap().modules.file_cancel {
         flag.store(true, Ordering::Relaxed);
@@ -246,9 +385,18 @@ pub fn cancel_file_transfer(state: &Arc<Mutex<HudState>>) {
 
 pub fn finish_file_transfer(state: &Arc<Mutex<HudState>>, ok: bool, error: Option<String>) {
     let mut s = state.lock().unwrap();
+    let cancelled = s
+        .modules
+        .file_cancel
+        .as_ref()
+        .is_some_and(|f| f.load(Ordering::Relaxed));
     if let Some(t) = s.modules.file_transfer.take() {
         let duration_secs = t.started_at.elapsed().as_secs();
         s.modules.file_history.push_front(TransferRecord {
+            id: t.id,
+            at_unix: t.at_unix,
+            total: t.total,
+            cancelled,
             at: chrono::Local::now().format("%H:%M").to_string(),
             name: t.name,
             direction: t.direction,
@@ -287,6 +435,7 @@ pub fn set_pc_battery(state: &Arc<Mutex<HudState>>, level: i64, charging: bool) 
 pub fn sample_battery_history(state: &Arc<Mutex<HudState>>) {
     let mut s = state.lock().unwrap();
     let sample = BatterySample {
+        at_unix: now_unix(),
         pc: s.modules.pc_battery_pct,
         phone: s.modules.phone_battery_pct,
     };
@@ -372,5 +521,13 @@ pub fn set_webcam_mbps(state: &Arc<Mutex<HudState>>, mbps: f64) {
 }
 
 pub fn set_mic_active(state: &Arc<Mutex<HudState>>, active: bool) {
-    state.lock().unwrap().modules.mic_active = active;
+    let mut s = state.lock().unwrap();
+    s.modules.mic_active = active;
+    if !active {
+        s.modules.mic_level = None;
+    }
+}
+
+pub fn set_mic_level(state: &Arc<Mutex<HudState>>, peak: f32) {
+    state.lock().unwrap().modules.mic_level = Some((peak, std::time::Instant::now()));
 }

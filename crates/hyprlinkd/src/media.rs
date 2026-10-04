@@ -86,6 +86,78 @@ pub async fn handle_command(cmd: &str) {
     let _: Result<(), _> = proxy.call(method, &()).await;
 }
 
+/// Um player MPRIS, em bruto, para o socket local.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlayerInfo {
+    /// Sufixo do nome no bus: `org.mpris.MediaPlayer2.<id>`.
+    pub id: String,
+    pub identity: String,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub playing: bool,
+    pub position_ms: Option<u64>,
+    pub duration_ms: Option<u64>,
+}
+
+/// Todos os players reais no bus (sem o playerctld).
+pub async fn players(conn: &Connection) -> Vec<PlayerInfo> {
+    let mut out = Vec::new();
+    for name in candidate_names(conn).await {
+        let Ok(player) = Proxy::new(conn, name.clone(), PLAYER_PATH, PLAYER_IFACE).await else {
+            continue;
+        };
+        let Ok(status) = player.get_property::<String>("PlaybackStatus").await else {
+            continue;
+        };
+        let meta: HashMap<String, OwnedValue> =
+            player.get_property("Metadata").await.unwrap_or_default();
+        let identity =
+            match Proxy::new(conn, name.clone(), PLAYER_PATH, "org.mpris.MediaPlayer2").await {
+                Ok(root) => root.get_property::<String>("Identity").await.ok(),
+                Err(_) => None,
+            };
+        let id = name
+            .trim_start_matches("org.mpris.MediaPlayer2.")
+            .to_string();
+        // MPRIS dá microssegundos.
+        let position_ms = player
+            .get_property::<i64>("Position")
+            .await
+            .ok()
+            .and_then(|us| u64::try_from(us).ok())
+            .map(|us| us / 1000);
+        let duration_ms = meta
+            .get("mpris:length")
+            .and_then(|v| {
+                i64::try_from(v.clone())
+                    .ok()
+                    .or_else(|| u64::try_from(v.clone()).ok().map(|u| u as i64))
+            })
+            .and_then(|us| u64::try_from(us).ok())
+            .map(|us| us / 1000);
+        out.push(PlayerInfo {
+            identity: identity.unwrap_or_else(|| id.clone()),
+            id,
+            title: metadata_str(&meta, "xesam:title"),
+            artist: metadata_first_str_in_array(&meta, "xesam:artist"),
+            playing: status == "Playing",
+            position_ms,
+            duration_ms,
+        });
+    }
+    out
+}
+
+/// Controla um player específico (`id` = sufixo do nome no bus).
+/// `method`: "Previous" | "PlayPause" | "Next".
+pub async fn control(conn: &Connection, id: &str, method: &str) -> bool {
+    let name = format!("org.mpris.MediaPlayer2.{id}");
+    let Ok(proxy) = Proxy::new(conn, name, PLAYER_PATH, PLAYER_IFACE).await else {
+        return false;
+    };
+    proxy.call::<_, _, ()>(method, &()).await.is_ok()
+}
+
 fn metadata_str(meta: &HashMap<String, OwnedValue>, key: &str) -> Option<String> {
     let value = meta.get(key)?;
     String::try_from(value.clone()).ok()

@@ -2,7 +2,7 @@
 //! cliente) e o token de pareamento de uso único gerado a cada boot do daemon.
 //! Fonte de verdade da autenticação: ver PROTOCOL.md §1/§4.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use rand::RngExt;
@@ -11,6 +11,33 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct PairedDevicesFile {
     fingerprints: HashSet<String>,
+    /// O que o telemóvel disse de si no `core.hello` (por fingerprint).
+    /// Ausente em ficheiros antigos — `serde(default)` mantém-nos válidos.
+    #[serde(default)]
+    meta: HashMap<String, DeviceMeta>,
+}
+
+/// Dados em bruto do `core.hello`, guardados para a lista de dispositivos
+/// funcionar com o telemóvel desligado.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct DeviceMeta {
+    pub name: String,
+    #[serde(default)]
+    pub manufacturer: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub android: Option<String>,
+    #[serde(default)]
+    pub app_version: Option<String>,
+    /// `capabilities` do hello, tal como vieram.
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+    /// Segundos Unix do primeiro hello autorizado.
+    #[serde(default)]
+    pub paired_since: Option<u64>,
+    #[serde(default)]
+    pub last_seen: Option<u64>,
 }
 
 pub struct PairingStore {
@@ -74,7 +101,24 @@ impl PairingStore {
 
     pub fn revoke(&mut self, fingerprint: &str) -> std::io::Result<()> {
         self.devices.fingerprints.remove(fingerprint);
+        self.devices.meta.remove(fingerprint);
         self.save()
+    }
+
+    /// Guarda o que veio no `core.hello` de um dispositivo autorizado. O
+    /// `paired_since` fica o do primeiro hello; o resto é sempre o último.
+    pub fn record_hello(&mut self, fingerprint: &str, mut meta: DeviceMeta, now: u64) {
+        let previous = self.devices.meta.get(fingerprint);
+        meta.paired_since = previous.and_then(|m| m.paired_since).or(Some(now));
+        meta.last_seen = Some(now);
+        self.devices.meta.insert(fingerprint.to_string(), meta);
+        if let Err(e) = self.save() {
+            eprintln!("[!] não foi possível guardar paired_devices.json: {e}");
+        }
+    }
+
+    pub fn meta(&self, fingerprint: &str) -> Option<&DeviceMeta> {
+        self.devices.meta.get(fingerprint)
     }
 
     /// Autoriza um novo dispositivo se o token bater com o desta sessão do daemon.

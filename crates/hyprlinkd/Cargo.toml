@@ -11,6 +11,7 @@ name = "hyprlink-daemon"
 path = "src/main.rs"
 
 [dependencies]
+hyprlink-proto.workspace = true
 anyhow = "1.0.104"
 bytes = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }

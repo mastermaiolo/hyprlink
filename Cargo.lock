@@ -1949,6 +1949,7 @@ dependencies = [
  "futures-util",
  "gstreamer",
  "gstreamer-app",
+ "hyprlink-proto",
  "iced",
  "image",
  "ksni",

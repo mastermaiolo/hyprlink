@@ -1,13 +1,16 @@
 mod active;
 mod audio;
 mod battery;
+mod bridge;
 mod clip;
 mod config;
 mod ctl;
 mod gui;
+mod hub;
 mod hypr;
 mod identity;
 mod input;
+mod ipc;
 mod media;
 mod mic;
 mod notif;
@@ -123,7 +126,6 @@ async fn run_daemon(
     let addr: std::net::SocketAddr = format!("0.0.0.0:{PORT}")
         .parse()
         .expect("porta fixa válida");
-    let _ = local_ip;
     let endpoint = match server::build_endpoint(&identity, addr) {
         Ok(e) => e,
         Err(e) => {
@@ -144,6 +146,14 @@ async fn run_daemon(
         speaker_handle,
     );
     server::spawn_background_tasks(ctx.clone());
+    // Socket local para a GUI nova e o hyprlinkctl (hyprlink-proto).
+    bridge::spawn(
+        ctx.clone(),
+        pairing.clone(),
+        identity.fingerprint_hex.clone(),
+        format!("{local_ip}:{PORT}"),
+    )
+    .await;
     tokio::spawn(tray::spawn(tray_show));
     server::run(endpoint, pairing, ctx).await;
 }

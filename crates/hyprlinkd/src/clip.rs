@@ -127,7 +127,7 @@ pub async fn watch(active: ActiveConn, guard: LastLocalSet, hud: Arc<Mutex<HudSt
                 *guard.lock().unwrap() = None;
                 continue;
             }
-            state::push_clip_entry(&hud, "PC → telemóvel", text.clone());
+            state::push_clip_entry(&hud, state::DIR_PC_TO_PHONE, text.clone());
             let body = Value::Map(vec![(Value::Text("text".into()), Value::Text(text))]);
             push(&active, "clipboard.set", Some(body)).await;
         }
@@ -171,11 +171,7 @@ pub async fn set_image_from_remote(
         }
     }
     let _ = child.wait().await;
-    state::push_clip_entry(
-        hud,
-        "telemóvel → PC",
-        format!("🖼️ PNG ({} KB)", bytes.len() / 1024),
-    );
+    state::push_clip_image(hud, state::DIR_PHONE_TO_PC, bytes.len() as u64);
     push_log(
         hud,
         format!(
@@ -239,11 +235,7 @@ async fn send_image_to_phone(active: &ActiveConn, hud: &Arc<Mutex<HudState>>, by
         return;
     }
     let _ = send.finish();
-    state::push_clip_entry(
-        hud,
-        "PC → telemóvel",
-        format!("🖼️ PNG ({} KB)", bytes.len() / 1024),
-    );
+    state::push_clip_image(hud, state::DIR_PC_TO_PHONE, bytes.len() as u64);
     push_log(
         hud,
         format!(

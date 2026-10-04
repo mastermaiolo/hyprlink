@@ -229,10 +229,10 @@ async fn handle_connection(
         .and_then(|b| body_get_bytes(b, "pairing_token"))
         .map(|bytes| bytes.iter().map(|b| format!("{b:02x}")).collect::<String>());
 
-    let authorized = {
+    let (authorized, newly_paired) = {
         let mut store = pairing.lock().unwrap();
         if store.is_paired(&peer_fingerprint) {
-            true
+            (true, false)
         } else if let Some(token_hex) = &token_hex {
             let ok = store.try_pair_with_token(&peer_fingerprint, token_hex)?;
             if ok {
@@ -240,14 +240,51 @@ async fn handle_connection(
                 // passar a ter o novo, senão o próximo pareamento falha.
                 ctx.hud.lock().unwrap().pairing_token_hex = store.current_token_hex.clone();
             }
-            ok
+            (ok, ok)
         } else {
-            false
+            (false, false)
         }
     };
 
     if !authorized {
         anyhow::bail!("dispositivo não pareado e sem pairing_token válido — conexão rejeitada");
+    }
+    {
+        let text = |k: &str| {
+            hello
+                .body
+                .as_ref()
+                .and_then(|b| body_get_str(b, k))
+                .map(str::to_string)
+        };
+        let capabilities = hello
+            .body
+            .as_ref()
+            .and_then(|b| crate::protocol::body_get(b, "capabilities"))
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_text().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let meta = crate::pairing::DeviceMeta {
+            name: device_name.clone(),
+            manufacturer: text("manufacturer"),
+            model: text("model"),
+            android: text("android"),
+            app_version: text("app_version"),
+            capabilities,
+            paired_since: None,
+            last_seen: None,
+        };
+        pairing
+            .lock()
+            .unwrap()
+            .record_hello(&peer_fingerprint, meta, state::now_unix());
+    }
+    if newly_paired {
+        crate::bridge::on_paired(&peer_fingerprint, &device_name);
     }
 
     println!("[+] core.hello de '{device_name}' — dispositivo autorizado");
@@ -391,6 +428,7 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
             return;
         }
     };
+    crate::bridge::log_packet_rx(&packet.kind, frame.len(), packet.id);
     let body = packet.body.as_ref();
     let hud = &ctx.hud;
 
@@ -415,7 +453,7 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                 );
             } else if let Some(text) = body.and_then(|b| body_get_str(b, "text")) {
                 clip::set_from_remote(text, &ctx.clip_guard).await;
-                state::push_clip_entry(hud, "telemóvel → PC", text.to_string());
+                state::push_clip_entry(hud, state::DIR_PHONE_TO_PC, text.to_string());
                 state::push_log(hud, "[i] clipboard.set · telemóvel → PC".to_string());
             }
         }
@@ -576,7 +614,8 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                 // Alertas do BATT (CONFIG do usuário) — dispara só na transição
                 // pro limiar, não a cada battery.state enquanto já está lá.
                 let alerts = config::battery_alerts(&ctx.config);
-                if alerts.low && level <= 20 && previous.is_none_or(|p| p > 20) {
+                let low = i64::from(alerts.low_pct);
+                if alerts.low && level <= low && previous.is_none_or(|p| p > low) {
                     notif::post(
                         "HyprLink",
                         "Bateria do telemóvel baixa",
@@ -633,13 +672,14 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                             .collect()
                     })
                     .unwrap_or_default();
-                state::push_notif_entry(hud, app.clone(), title.clone(), text.clone());
+                state::push_notif_entry(hud, key.clone(), app.clone(), title.clone(), text.clone());
                 state::push_log(hud, format!("[i] notification.post · {app}: {title}"));
                 notif::post(&app, &title, &text, &key, &actions, &ctx.notif, &ctx.dbus).await;
             }
         }
         "notification.dismissed" => {
             if let Some(key) = body.and_then(|b| body_get_str(b, "key")) {
+                state::remove_active_notif(hud, key);
                 notif::dismiss_local(key, &ctx.notif, &ctx.dbus).await;
             }
         }
@@ -721,7 +761,9 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
 
 async fn reply(send: &mut quinn::SendStream, id: u64, kind: &str, body: Option<Value>) {
     let packet = Packet::new(id, kind, body, false);
-    let _ = write_frame(send, &packet.encode()).await;
+    let frame = packet.encode();
+    crate::bridge::log_packet_tx(kind, frame.len(), id);
+    let _ = write_frame(send, &frame).await;
 }
 
 fn ok_data(data: String) -> Value {
