@@ -1,0 +1,21 @@
+[package]
+name = "hyprlink-proto"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Contrato entre o hyprlinkd, a GUI e o hyprlinkctl: Command/Event, JSON v1, nomes de pacotes"
+
+[features]
+default = []
+# Daemon simulado (trabalho de design, capturas, plugin sem telemóvel).
+mock = []
+# Textos pt-PT para humanos. Só a GUI e o hyprlinkctl; o daemon nunca.
+fmt = ["dep:chrono"]
+
+[dependencies]
+serde.workspace = true
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"], optional = true }
+
+[dev-dependencies]
+serde_json.workspace = true
+ciborium.workspace = true
