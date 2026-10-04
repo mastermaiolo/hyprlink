@@ -13,18 +13,29 @@
 //!   hyprlinkctl mic on|off                       # microfone do telemóvel
 //!   hyprlinkctl notif "Título" "corpo opcional"  # notificação no telemóvel
 //!   hyprlinkctl url https://exemplo.com         # abrir URL no PC
+//!   hyprlinkctl phone-url https://exemplo.com   # abrir URL no telemóvel
+//!   hyprlinkctl phone-app org.example.app       # lançar app no telemóvel
 //!   hyprlinkctl ping                            # o daemon responde?
 //!
 //! Exit codes: 0 = ok · 1 = erro reportado pelo daemon/socket · 2 = uso.
+//!
+//! É a metade "texto" do `hyprlinkctl` (sem `--json`): mantém as respostas
+//! `ok …` / `erro: …` de que o `contrib/` depende. `main.rs` decide quando
+//! encaminhar para aqui.
 
 use std::io::{Read, Write};
 use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 
-fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+/// Subcomandos que só existem no protocolo de texto do `cmd.sock`.
+pub const ONLY_HERE: &[&str] = &["send", "dispatch", "lock", "notif", "url", "phone-url", "phone-app"];
+
+/// Subcomandos que existem nas duas metades: sem `--json` vêm para aqui.
+pub const SHARED: &[&str] = &["status", "ping", "mic", "tap", "speaker"];
+
+pub fn run(args: Vec<String>) -> ! {
     if args.is_empty() {
-        eprintln!("uso: hyprlinkctl <status|send|dispatch|lock|tap|speaker|mic|notif|url|ping> [argumentos]");
+        eprintln!("uso: hyprlinkctl <status|send|dispatch|lock|tap|speaker|mic|notif|url|phone-url|phone-app|ping> [argumentos]");
         std::process::exit(2);
     }
 
@@ -38,7 +49,7 @@ fn main() {
         Ok(s) => s,
         Err(e) => {
             eprintln!("erro: não foi possível falar com o daemon em {}: {e}", socket.display());
-            eprintln!("       (o daemon está a correr? `cargo run` na pasta hyprlink-daemon)");
+            eprintln!("       (o daemon está a correr? `cargo run -p hyprlinkd`)");
             std::process::exit(1);
         }
     };
@@ -62,4 +73,5 @@ fn main() {
     if reply.starts_with("erro") {
         std::process::exit(1);
     }
+    std::process::exit(0);
 }

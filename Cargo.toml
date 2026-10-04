@@ -4,6 +4,7 @@ members = [
     "crates/hyprlink-proto",
     "crates/hyprlinkd",
     "crates/hyprlink-gui",
+    "crates/hyprlinkctl",
 ]
 [workspace.package]
 edition = "2024"

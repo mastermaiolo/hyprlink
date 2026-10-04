@@ -12,10 +12,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT/hyprlink-daemon"
+cd "$ROOT"
 
 echo "[1/3] a compilar (release)…"
-cargo build --release --bin hyprlink-daemon --bin hyprlinkctl
+cargo build --release -p hyprlinkd -p hyprlinkctl
 
 BIN_DIR="${HOME}/.local/bin"
 mkdir -p "$BIN_DIR"
