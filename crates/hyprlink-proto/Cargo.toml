@@ -14,13 +14,13 @@ fmt = ["dep:chrono"]
 
 [dependencies]
 serde.workspace = true
+ciborium.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"], optional = true }
 
 [dev-dependencies]
 # Os testes de integração usam o simulador como fonte de eventos reais.
 hyprlink-proto = { path = ".", features = ["mock"] }
 serde_json.workspace = true
-ciborium.workspace = true
 
 # Os ficheiros vêm do repositório de design e mantêm-se iguais aos de lá
 # (scripts/sync-gui.sh); estes lints corrigem-se na origem.
