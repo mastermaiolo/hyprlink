@@ -134,7 +134,7 @@ Direção: **P→D** telemóvel→daemon, **D→P** daemon→telemóvel.
 ### core
 | type | dir | body |
 |---|---|---|
-| `core.hello` | P→D req / D→P resp | P→D: `{device_name, capabilities:[...], pairing_token?}` (token só no 1º pareamento); D→P: `{device_name}` (único campo lido) |
+| `core.hello` | P→D req / D→P resp | P→D: `{device_name, capabilities:[...], pairing_token?}` (token só no 1º pareamento); D→P: `{device_name}` (único campo lido) + `pc_mac?` (MAC da interface de saída, formato `aa:bb:cc:dd:ee:ff` — best-effort; a app grava no pareamento pra poder acordar o PC por Wake-on-LAN quando o daemon nem está a correr) |
 | `core.ping` | P→D req (10s) | `null` |
 | `core.pong` | D→P resp | não parseado |
 
@@ -143,6 +143,12 @@ app realmente faz): `["core","clipboard","notification","media","battery","share
 
 ### clipboard
 | `clipboard.set` | bidi (mesmo tipo nas duas direções) | `{text: String}` |
+| `clipboard.set` (imagem) | bidi, `has_payload=true` | `{mime: "image/png", size}` — uni-stream (8 bytes id + PNG cru até EOF) carrega os bytes. Receptor escreve como imagem no clipboard local (PC: `wl-copy -t image/png`; Android: bytes em cache + `FileProvider` + `ClipData.newUri`). Teto de 32 MiB; só `image/png` por ora — outros mimes seguem este mesmo caminho. |
+
+O daemon detecta imagens por um poll de 1,5s (`wl-paste --list-types` → hash
+SHA-256; só envia em mudança de hash e nunca ecoa o que ele mesmo escreveu,
+mesma lógica do guard de texto). Do lado P→D, o uni-stream é roteado pelo
+`pending_clip` (mesmo padrão do `pending_mic`).
 
 ### input (P→D, fire-and-forget)
 `input.move {dx,dy}` · `input.scroll {dx,dy}` · `input.click {button}` (left/right/middle)
@@ -247,6 +253,18 @@ não nos steps reais do `AudioManager` — o telemóvel converte.
 | `phone_audio.set_volume` | D→P push | `{stream:"ring"\|"media"\|"alarm", percent(0-100)}` — sem resposta |
 | `phone_audio.set_ringer_mode` | D→P push | `{mode:"normal"\|"vibrate"\|"silent"}` — sem resposta; sem `dnd_access` (acesso a "Não Perturbe"), vibrar/silencioso não têm efeito |
 | `phone_audio.set_dnd` | D→P push | `{enabled:Bool}` — sem resposta; liga/desliga o filtro de interrupção (`NotificationManager.setInterruptionFilter`, `PRIORITY` quando ligado, `ALL` quando desligado) — diferente do `ringer_mode`; também depende de `dnd_access` |
+
+### phone (PC → telemóvel, abertura remota)
+
+O daemon pede pra abrir coisas no telemóvel (integração com
+`hyprlinkctl phone-url`/`phone-app`). A app abre direto quando o Android
+permite (ex: com atividade visível); senão mostra uma notificação tappable
+(restrição de background activity start do Android 10+).
+
+| type | dir | body |
+|---|---|---|
+| `phone.open_url` | D→P push | `{url}` — ACTION_VIEW |
+| `phone.run_app` | D→P push | `{package}` — launch intent do package (ex: `com.whatsapp`) |
 
 ### webcam
 | type | dir | body |

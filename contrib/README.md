@@ -17,6 +17,8 @@ socket Unix `$XDG_RUNTIME_DIR/hyprlink/cmd.sock` (ver `src/ctl.rs`).
 | `hyprlinkctl mic on\|off` | microfone do telemóvel como entrada do PC |
 | `hyprlinkctl notif "Título" "corpo"` | notificação no telemóvel |
 | `hyprlinkctl url <url>` | abre URL no PC |
+| `hyprlinkctl phone-url <url>` | abre URL no telemóvel |
+| `hyprlinkctl phone-app <package>` | abre app no telemóvel (ex: `com.whatsapp`) |
 | `hyprlinkctl ping` | o daemon está vivo? |
 
 Exit codes: `0` ok, `1` erro, `2` uso — pronto pra scripts e Makefiles.
