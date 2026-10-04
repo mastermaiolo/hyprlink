@@ -210,6 +210,20 @@ telemóvel espera 15s à toa e marca "não verificado".
 Sink virtual do telemóvel convencionado: nome técnico `"hyprlink-speaker"`,
 descrição `"HyprLink-Phone"`, `is_phone:true`.
 
+**Modo coluna (daemon-side, sem mudanças de wire)**: a GUI do daemon pode
+ligar o "telemóvel como coluna do PC" (`speaker.rs`) — cria o sink
+`hyprlink-speaker` (`pactl load-module module-null-sink`), promove-o a
+default via `set-default-sink` (movendo os sink-inputs em curso, como
+qualquer `audio.set_default_sink`) e aponta o tap pro monitor dele com
+sink explícito (em vez do default). O som do PC deixa de sair nas colunas
+físicas. O sink anterior é persistido em `config.json` (`speaker_prev_sink`)
+antes da mudança e restaurado no OFF, na desconexão do telemóvel e no
+arranque seguinte (`speaker::cleanup_orphans`) — um crash com o modo ativo
+nunca deixa o PC mudo além do próximo arranque. O telemóvel não precisa de
+saber nada: vê apenas um sink novo com `is_phone:true` (o `audio.state_reply`
+já o reporta) e o `audio.tap_start` dele continua a funcionar — o daemon
+aponta a captura pro sink virtual enquanto o modo estiver ativo.
+
 **Tap (D→P) via QUIC DATAGRAM** (RFC 9221, não mais uni-stream — migrado
 2026-09-05, ver journal/decisão de arquitetura): cada datagrama é `[seq u16
 BE][PCM cru]`, PCM **16-bit LE, 48000Hz, estéreo intercalado**, fatiado em
