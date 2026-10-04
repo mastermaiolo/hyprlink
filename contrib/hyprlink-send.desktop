@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Enviar via HyprLink
+Name[en_GB]=Send via HyprLink
+Name[es_ES]=Enviar vía HyprLink
+Name[zh_CN]=通过 HyprLink 发送
+Icon=phone
+Exec=@BIN@ send %f
+MimeType=application/octet-stream;image/png;image/jpeg;image/webp;image/gif;video/mp4;audio/mpeg;audio/ogg;audio/flac;application/pdf;text/plain;application/zip;application/x-tar;
+Terminal=false
+NoDisplay=true
