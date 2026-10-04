@@ -198,13 +198,14 @@ async fn handle(line: &str, ctl: &Ctl) -> String {
             format!("ok {out}")
         }
 
-        // Tap = espelho do sink padrão (None), igual ao botão do telemóvel.
+        // Tap = espelho do sink padrão, igual ao botão do telemóvel; no
+        // modo coluna, do sink virtual (mesma regra do server.rs).
         "tap" => match rest.first().copied() {
             Some("on") => {
                 if let Some(connection) = ctl.active.lock().unwrap().clone() {
                     tokio::spawn(crate::tap::start(
                         connection,
-                        None,
+                        crate::bridge::tap_sink(&ctl.speaker),
                         ctl.tap.clone(),
                         ctl.hud.clone(),
                     ));

@@ -543,11 +543,7 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                 // a capturar o sink virtual (o default mudou pra ele quando
                 // o modo ligou — mas se o usuário mexer no default a meio, o
                 // modo coluna não desanda por causa disso).
-                let sink = if crate::speaker::is_active(&ctx.speaker) {
-                    Some(crate::audio::PHONE_SINK_NAME.to_string())
-                } else {
-                    None
-                };
+                let sink = crate::bridge::tap_sink(&ctx.speaker);
                 tokio::spawn(crate::tap::start(
                     connection,
                     sink,
