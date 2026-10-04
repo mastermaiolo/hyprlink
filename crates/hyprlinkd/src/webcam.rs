@@ -205,10 +205,20 @@ pub async fn feed(
         format!("[+] webcam: stream iniciado ({label}) · {V4L2_DEVICE_PATH}"),
     );
 
+    // timed_pop + Weak, como em mic.rs/tap.rs: um stop limpo não posta
+    // Eos/Error, e iter_timed(NONE) deixava esta thread presa para sempre
+    // (uma por cada stream de câmara já terminado).
     if let Some(bus) = pipeline.bus() {
         let hud_bus = hud.clone();
+        let pipeline_weak = pipeline.downgrade();
         std::thread::spawn(move || {
-            for msg in bus.iter_timed(gst::ClockTime::NONE) {
+            loop {
+                let Some(msg) = bus.timed_pop(gst::ClockTime::from_seconds(1)) else {
+                    if pipeline_weak.upgrade().is_none() {
+                        break;
+                    }
+                    continue;
+                };
                 match msg.view() {
                     gst::MessageView::Error(err) => {
                         push_log(
