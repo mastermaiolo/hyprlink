@@ -124,7 +124,13 @@ pub fn alert_toggle(
 pub fn batt_screen(hud: &Hud) -> Element<'_, Message> {
     let modules = &hud.snapshot.modules;
     let cards = row![
-        battery_card("TELEMÓVEL", modules.phone_battery_pct, None),
+        battery_card(
+            "TELEMÓVEL",
+            modules.phone_battery_pct,
+            modules
+                .phone_battery_pct
+                .map(|_| modules.phone_battery_charging),
+        ),
         battery_card(
             "PC",
             modules.pc_battery_pct,

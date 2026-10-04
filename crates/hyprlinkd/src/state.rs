@@ -86,6 +86,7 @@ pub struct ModuleStatus {
     pub notif_history: std::collections::VecDeque<NotifEntry>,
     pub media: Option<String>,
     pub phone_battery_pct: Option<i64>,
+    pub phone_battery_charging: bool,
     pub pc_battery_pct: Option<i64>,
     pub pc_battery_charging: bool,
     /// Mais antiga primeiro (ordem de gráfico).
@@ -265,8 +266,10 @@ pub fn set_media_status(state: &Arc<Mutex<HudState>>, status: Option<String>) {
     state.lock().unwrap().modules.media = status;
 }
 
-pub fn set_phone_battery(state: &Arc<Mutex<HudState>>, pct: i64) {
-    state.lock().unwrap().modules.phone_battery_pct = Some(pct);
+pub fn set_phone_battery(state: &Arc<Mutex<HudState>>, pct: i64, charging: bool) {
+    let mut s = state.lock().unwrap();
+    s.modules.phone_battery_pct = Some(pct);
+    s.modules.phone_battery_charging = charging;
 }
 
 pub fn phone_battery_pct(state: &Arc<Mutex<HudState>>) -> Option<i64> {

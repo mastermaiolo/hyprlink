@@ -567,7 +567,7 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                     .and_then(|v| v.as_bool()),
             ) {
                 let previous = state::phone_battery_pct(hud);
-                state::set_phone_battery(hud, level);
+                state::set_phone_battery(hud, level, charging);
                 state::push_log(
                     hud,
                     format!("[i] bateria do telemóvel: {level}% · carregando={charging}"),
