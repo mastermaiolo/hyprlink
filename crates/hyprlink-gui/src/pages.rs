@@ -8,7 +8,7 @@
 use crate::app::{App, CamMode, Message, Section};
 use crate::graphics::CameraFrame;
 use crate::link::{
-    CamCodec, Command2, Dir, MediaAction, Origin, PhoneStream, Ringer, TrackpadConfig,
+    CamCodec, Cap, Command2, Dir, MediaAction, Origin, PhoneStream, Ringer, TrackpadConfig,
     TransferState,
 };
 use crate::theme::{self, *};
@@ -1073,6 +1073,13 @@ fn progress<'a>(pos: Option<u64>, dur: Option<u64>) -> El<'a> {
 }
 
 pub fn media(app: &App) -> El<'_> {
+    // Gating pelo contrato: os botões só controlam de verdade quando o
+    // telemóvel declarou `media_session` no core.hello (Cap::MediaSession —
+    // o daemon mapeia a capability, ver bridge::caps). Sem ela, os botões
+    // ficam inertes e a página continua honesta ("proposto").
+    let media_cap = app
+        .primary()
+        .is_some_and(|d| d.caps.contains(&Cap::MediaSession));
     let phone: El = match app.phone.as_ref().and_then(|p| p.now_playing.as_ref()) {
         Some(np) => column![
             row![
@@ -1088,7 +1095,11 @@ pub fn media(app: &App) -> El<'_> {
                     ACID
                 ),
                 fill_x(),
-                tag_outline("CONTROLO PROPOSTO", MUTED),
+                if media_cap {
+                    tag_outline("MEDIA SESSION", ACID)
+                } else {
+                    tag_outline("CONTROLO PROPOSTO", MUTED)
+                },
             ]
             .align_y(Alignment::Center),
             gap(space::L),
@@ -1106,9 +1117,15 @@ pub fn media(app: &App) -> El<'_> {
             progress(np.position_ms, np.duration_ms),
             gap(space::L),
             row![
-                transport(np.playing, |_| None),
+                transport(np.playing, |a| {
+                    media_cap.then(|| Message::Do(Command2::PhoneMedia(a)))
+                }),
                 fill_x(),
-                mono("precisa de media-session no Android", FAINT),
+                if media_cap {
+                    mono("", FAINT)
+                } else {
+                    mono("precisa de media-session no Android", FAINT)
+                },
             ]
             .align_y(Alignment::Center),
         ]
