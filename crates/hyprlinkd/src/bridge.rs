@@ -350,6 +350,14 @@ impl Bridge {
         })
     }
 
+    /// Último `phone.status` do telemóvel — polia a cada 1 s no
+    /// `project_slow` e o hub deduplica (só difunde em mudança). Vazio
+    /// (tudo `None`) quando não há telemóvel ligado.
+    fn phone_status(&self) -> PhoneStatus {
+        let hud = self.ctx.hud.lock().unwrap();
+        hud.modules.phone_status.clone()
+    }
+
     fn pairing_ticket(&self) -> Option<PairingTicket> {
         if !self.pairing_open.load(Ordering::Relaxed) {
             return None;
@@ -409,6 +417,17 @@ fn caps(declared: &[String]) -> Vec<Cap> {
             "mirror" => push(Cap::Mirror),
             "sensors" => push(Cap::Sensors),
             "presence" => push(Cap::Presence),
+            // Capabilities que a app passa a declarar no core.hello
+            // (prompts de 2026-10-04): o estado do telemóvel e a sessão de
+            // mídia dele. A GUI/ctl só ativam as ações quando as veem.
+            "phone_status" => {
+                extended = true;
+                push(Cap::PhoneStatus);
+            }
+            "media_session" => {
+                extended = true;
+                push(Cap::MediaSession);
+            }
             _ => {}
         }
     }
@@ -569,6 +588,7 @@ async fn project_slow(b: Arc<Bridge>, hub: Hub) {
         }
 
         hub.publish(Event::More(Event2::Webcam(b.webcam())));
+        hub.publish(Event::Phone(b.phone_status()));
         hub.publish(Event::More(Event2::Clipboard(b.clipboard())));
         hub.publish(Event::More(Event2::Notifications(b.notifications())));
         hub.publish(Event::More(Event2::BatteryHistory(b.battery_history())));
@@ -1019,7 +1039,25 @@ async fn execute_more(b: &Arc<Bridge>, c: Command2) {
                 b.fail(Op::Media, ErrorKind::Refused);
             }
         }
-        Command2::PhoneMedia(_) => b.fail(Op::Media, ErrorKind::NotImplemented),
+        // `phone.media` (PROTOCOL.md §phone): controla o que toca NO
+        // telemóvel (MediaSession dele) — o inverso do `Command2::Media`
+        // acima, que controla o MPRIS do PC. Sem resposta esperada; o
+        // telemóvel atualiza sozinho via `phone.status`/`now_playing`
+        // depois de agir.
+        Command2::PhoneMedia(action) => {
+            let action_str = match action {
+                MediaAction::Previous => "previous",
+                MediaAction::PlayPause => "play_pause",
+                MediaAction::Next => "next",
+            };
+            let body = Some(ciborium::Value::Map(vec![(
+                ciborium::Value::Text("action".into()),
+                ciborium::Value::Text(action_str.into()),
+            )]));
+            if crate::active::push(&ctx.active, "phone.media", body).await.is_none() {
+                b.fail(Op::Media, ErrorKind::Offline);
+            }
+        }
         Command2::SetDownloadsDir(dir) => {
             config::set_download_dir(&ctx.config, std::path::Path::new(&dir));
             hub.publish(Event::More(Event2::Settings(b.settings())));

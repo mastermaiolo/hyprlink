@@ -54,6 +54,11 @@ pub enum Cap {
     Files,
     Notifications,
     Input,
+    /// The phone sends `phone.status` (network, storage, RAM, screen,
+    /// notifications, now-playing).
+    PhoneStatus,
+    /// The phone exposes its media session (`phone.media` control).
+    MediaSession,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

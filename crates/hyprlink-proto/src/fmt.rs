@@ -38,6 +38,8 @@ pub fn cap(c: Cap) -> &'static str {
         Cap::Files => "ficheiros",
         Cap::Notifications => "notificações",
         Cap::Input => "trackpad",
+        Cap::PhoneStatus => "estado do telemóvel",
+        Cap::MediaSession => "mídia do telemóvel",
     }
 }
 

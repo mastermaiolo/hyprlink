@@ -15,6 +15,7 @@
 //!   hyprlinkctl url https://exemplo.com         # abrir URL no PC
 //!   hyprlinkctl phone-url https://exemplo.com   # abrir URL no telemóvel
 //!   hyprlinkctl phone-app org.example.app       # lançar app no telemóvel
+//!   hyprlinkctl phone-media prev|pause|next     # controlar o que toca no telemóvel
 //!   hyprlinkctl ping                            # o daemon responde?
 //!
 //! Exit codes: 0 = ok · 1 = erro reportado pelo daemon/socket · 2 = uso.
@@ -36,6 +37,7 @@ pub const ONLY_HERE: &[&str] = &[
     "url",
     "phone-url",
     "phone-app",
+    "phone-media",
 ];
 
 /// Subcomandos que existem nas duas metades: sem `--json` vêm para aqui.
@@ -44,7 +46,7 @@ pub const SHARED: &[&str] = &["status", "ping", "mic", "tap", "speaker"];
 pub fn run(args: Vec<String>) -> ! {
     if args.is_empty() {
         eprintln!(
-            "uso: hyprlinkctl <status|send|dispatch|lock|tap|speaker|mic|notif|url|phone-url|phone-app|ping> [argumentos]"
+            "uso: hyprlinkctl <status|send|dispatch|lock|tap|speaker|mic|notif|url|phone-url|phone-app|phone-media|ping> [argumentos]"
         );
         std::process::exit(2);
     }

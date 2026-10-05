@@ -265,6 +265,52 @@ permite (ex: com atividade visível); senão mostra uma notificação tappable
 |---|---|---|
 | `phone.open_url` | D→P push | `{url}` — ACTION_VIEW |
 | `phone.run_app` | D→P push | `{package}` — launch intent do package (ex: `com.whatsapp`) |
+| `phone.media` | D→P push | `{action:"previous"\|"play_pause"\|"next"}` — controla a MediaSession ativa do telemóvel (o inverso do `media.command`, que controla o MPRIS do PC); sem resposta — o telemóvel reenvia `phone.status` com o `now_playing` atualizado depois de agir |
+
+### phone.status (P→D, o telemóvel reporta o estado dele)
+
+Contrato 2026-10-04: **só dados, nunca texto formatado** (unidades fixas:
+bytes, dBm, °C, ms) e **campo desconhecido = omitido** — nunca `0`, `""` ou
+`"N/A"` a fingir. Chega a seguir ao `battery.state` inicial, em cada mudança
+(debounce 2s no telemóvel) e a cada 30s.
+
+| chave | tipo | notas |
+|---|---|---|
+| `network` | text `"wifi"\|"cellular"\|"ethernet"\|"none"` | transporte da rede ativa |
+| `cell_gen` | text `"5G"\|"4G"\|"3G"\|"2G"` | só rede móvel; omitido sem permissão |
+| `carrier` | text | operadora; omitido se vazio |
+| `signal_bars` | uint 0–4 | só rede móvel |
+| `wifi` | map `{ssid?: text, rssi_dbm?: int}` | só com Wi-Fi ativo; SSID exige localização (a app pede só se o utilizador ligar o toggle) |
+| `storage_used_b` / `storage_total_b` | uint | StatFs da data dir |
+| `ram_used_b` / `ram_total_b` | uint | ActivityManager.MemoryInfo |
+| `battery_temp_c` | **float** (ex. `31.7`) | EXTRA_TEMPERATURE/10 |
+| `screen_on` | bool | PowerManager.isInteractive |
+| `dnd` | bool | interruptionFilter != ALL |
+| `notifications` | uint | ativas limpáveis de outras apps |
+| `now_playing` | map | omitir se não houver sessão: `{title (obrigatório), artist?, app?, playing, position_ms?, duration_ms?}` — enviado em mudança de faixa/estado (MediaController callback), não a cada segundo; o PC calcula o progresso |
+
+### pc.status (D→P, telemetria do PC para o dashboard do telemóvel)
+
+Enviado a cada 2s enquanto ligado; tudo opcional — o que faltar mostra-se «—».
+
+| chave | tipo | origem no daemon |
+|---|---|---|
+| `hostname` | text | /etc/hostname |
+| `cpu_pct` | float 0–100 | delta de /proc/stat entre ciclos |
+| `ram_used_b` / `ram_total_b` | uint | /proc/meminfo (MemTotal − MemAvailable) |
+| `cpu_temp_c` | float | primeiro thermal zone plausível; omitido sem sensor |
+| `uptime_s` | uint | /proc/uptime |
+| `rtt_ms` | float | RTT do QUIC medido pela própria conexão |
+
+### capabilities e hello enriquecidos
+
+A app passa a declarar no `core.hello` (P→D): `"phone_status"` (envia
+`phone.status`) e `"media_session"` (aceita `phone.media`) — o PC só ativa
+as ações correspondentes quando as vê. O hello também ganha campos
+opcionais de identificação: `manufacturer` (Build.MANUFACTURER), `model`
+(Build.MODEL), `android` (Build.VERSION.RELEASE, só o número) e
+`app_version` (BuildConfig.VERSION_NAME) — o daemon guarda-os nos
+dispositivos pareados.
 
 ### webcam
 | type | dir | body |

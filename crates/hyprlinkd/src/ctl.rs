@@ -329,9 +329,28 @@ async fn handle(line: &str, ctl: &Ctl) -> String {
             }
         }
 
+        // `phone.media` (PROTOCOL.md §phone): prev/pause/next no que toca
+        // NO telemóvel — o inverso do `media.command` (MPRIS do PC).
+        "phone-media" if rest.len() == 1 => {
+            let action = match rest[0] {
+                "prev" | "previous" => "previous",
+                "pause" | "pp" | "play_pause" | "toggle" => "play_pause",
+                "next" => "next",
+                other => return format!("erro: ação desconhecida: {other} (prev|pause|next)"),
+            };
+            let body = Some(ciborium::Value::Map(vec![(
+                ciborium::Value::Text("action".into()),
+                ciborium::Value::Text(action.into()),
+            )]));
+            match crate::active::push(&ctl.active, "phone.media", body).await {
+                Some(_) => format!("ok {action} no telemóvel"),
+                None => "erro: sem telemóvel conectado".to_string(),
+            }
+        }
+
         "" => "erro: comando vazio".to_string(),
         _ => format!(
-            "erro: comando desconhecido: {cmd} (ping, status, send, dispatch, lock, tap, speaker, mic, notif, url, phone-url, phone-app)"
+            "erro: comando desconhecido: {cmd} (ping, status, send, dispatch, lock, tap, speaker, mic, notif, url, phone-url, phone-app, phone-media)"
         ),
     }
 }

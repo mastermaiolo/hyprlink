@@ -20,6 +20,7 @@ use crate::pairing::PairingStore;
 use crate::protocol::{Packet, body_get_bytes, body_get_str, read_frame, write_frame};
 use crate::share;
 use crate::state::{self, HudState};
+use crate::telemetry;
 use crate::tls_verifier::AcceptAnyClientCert;
 use crate::webcam;
 use crate::{audio, battery, hypr, media};
@@ -161,6 +162,12 @@ pub fn spawn_background_tasks(ctx: Ctx) {
         ctx.notif.clone(),
         ctx.hud.clone(),
     ));
+    // `pc.status` pro telemóvel a cada 2s (CPU/RAM/temp/uptime/RTT) — o
+    // dashboard da app deixa de mostrar valores inventados.
+    tokio::spawn(telemetry::poll_and_push(
+        ctx.active.clone(),
+        ctx.hud.clone(),
+    ));
     // Camada de ecossistema (hyprlinkctl/Waybar): socket de comandos +
     // status.json no $XDG_RUNTIME_DIR (ver ctl.rs).
     tokio::spawn(ctl::serve(ctl::Ctl {
@@ -186,6 +193,9 @@ pub async fn run(endpoint: quinn::Endpoint, pairing: Arc<Mutex<PairingStore>>, c
                 crate::tap::stop(&ctx.tap, &ctx.hud);
                 webcam::stop(&ctx.webcam, &ctx.hud);
                 crate::mic::stop(&ctx.mic, &ctx.hud);
+                // O estado que o telemóvel reportou de si mesmo morre com a
+                // conexão — não fica a informação velha na GUI/ctl.
+                state::set_phone_status(&ctx.hud, Default::default());
                 // Modo coluna sem telemóvel = PC mudo: devolve o som às
                 // colunas na hora (não espera pelo próximo arranque).
                 crate::speaker::disable(&ctx.tap, &ctx.hud, &ctx.config, &ctx.speaker).await;
@@ -342,6 +352,9 @@ async fn handle_connection(
     crate::tap::stop(&ctx.tap, &ctx.hud);
     webcam::stop(&ctx.webcam, &ctx.hud);
     crate::mic::stop(&ctx.mic, &ctx.hud);
+    // O estado que o telemóvel reportou de si mesmo morre com a conexão —
+    // não fica a informação velha na GUI/ctl.
+    state::set_phone_status(&ctx.hud, Default::default());
     // Modo coluna sem telemóvel = PC mudo: devolve o som às colunas na
     // hora (não espera pelo próximo arranque).
     crate::speaker::disable(&ctx.tap, &ctx.hud, &ctx.config, &ctx.speaker).await;
@@ -635,6 +648,17 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                     )
                     .await;
                 }
+            }
+        }
+
+        // Estado que o telemóvel reporta de si mesmo (rede, armazenamento,
+        // RAM, ecrã, notificações, now-playing) — chega a cada 30 s e em
+        // cada mudança; aqui é "o mais recente ganha", sem log (senão eram
+        // duas linhas por minuto para sempre). A bridge polia e publica
+        // `Event::Phone` pro hub (GUI/hyprlinkctl).
+        "phone.status" => {
+            if let Some(body) = body {
+                state::set_phone_status(hud, crate::phone::parse(body));
             }
         }
 

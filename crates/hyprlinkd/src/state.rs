@@ -111,6 +111,11 @@ pub struct ModuleStatus {
     pub media: Option<String>,
     pub phone_battery_pct: Option<i64>,
     pub phone_battery_charging: bool,
+    /// Último `phone.status` do telemóvel (rede, armazenamento, RAM, ecrã,
+    /// notificações, now-playing) — a bridge polia e publica como
+    /// `Event::Phone` pro hub (GUI/hyprlinkctl). Default = tudo `None`.
+    /// Fica vazio (default) ao desconectar, via `set_pairing`.
+    pub phone_status: hyprlink_proto::link::PhoneStatus,
     pub pc_battery_pct: Option<i64>,
     pub pc_battery_charging: bool,
     /// Mais antiga primeiro (ordem de gráfico).
@@ -458,6 +463,13 @@ pub fn set_phone_battery(state: &Arc<Mutex<HudState>>, pct: i64, charging: bool)
 
 pub fn phone_battery_pct(state: &Arc<Mutex<HudState>>) -> Option<i64> {
     state.lock().unwrap().modules.phone_battery_pct
+}
+
+/// Guarda o último `phone.status` (chega a cada 30 s e em cada mudança —
+/// a app faz o debounce; aqui é só "o mais recente ganha"). A bridge lê
+/// `modules.phone_status` diretamente (mesmo padrão dos outros campos).
+pub fn set_phone_status(state: &Arc<Mutex<HudState>>, status: hyprlink_proto::link::PhoneStatus) {
+    state.lock().unwrap().modules.phone_status = status;
 }
 
 pub fn set_pc_battery(state: &Arc<Mutex<HudState>>, level: i64, charging: bool) {
