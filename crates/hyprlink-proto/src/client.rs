@@ -146,6 +146,7 @@ pub fn op_of(c: &Command) -> Option<Op> {
             | C2::SetAppVolume(..)
             | C2::SetAppMute(..)
             | C2::SetDownloadsDir(_)
+            | C2::RenameDevice(..)
             | C2::RestartDaemon => return None,
         },
     })

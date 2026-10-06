@@ -213,7 +213,7 @@ impl Bridge {
                 let live = connection.as_ref().filter(|_| linked);
                 Device {
                     id: device_id(fp),
-                    name: meta.name.clone(),
+                    name: meta.display_name(),
                     manufacturer: meta.manufacturer.clone(),
                     model: meta.model.clone(),
                     android: meta.android.clone(),
@@ -1096,6 +1096,18 @@ async fn execute_more(b: &Arc<Bridge>, c: Command2) {
         Command2::SetDownloadsDir(dir) => {
             config::set_download_dir(&ctx.config, std::path::Path::new(&dir));
             hub.publish(Event::More(Event2::Settings(b.settings())));
+        }
+        Command2::RenameDevice(id, alias) => {
+            let Some(fp) = b.fingerprint_of(id) else {
+                b.fail(Op::Pairing, ErrorKind::Refused);
+                return;
+            };
+            if !b.pairing.lock().unwrap().set_alias(&fp, &alias) {
+                b.fail(Op::Pairing, ErrorKind::Refused);
+                return;
+            }
+            state::push_log(&ctx.hud, format!("[i] dispositivo renomeado · {fp}"));
+            hub.publish(Event::Devices(b.devices()));
         }
         Command2::RestartDaemon => restart(b),
     }

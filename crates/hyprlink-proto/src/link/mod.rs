@@ -613,6 +613,9 @@ pub enum Command2 {
     /// já existe no daemon.
     SetHeadset(bool),
     SetDownloadsDir(String),
+    /// Nome escolhido no PC para um dispositivo (vazio = voltar ao nome que o
+    /// telemóvel envia). Guardado no daemon, por certificado.
+    RenameDevice(DeviceId, String),
     RestartDaemon,
 }
 

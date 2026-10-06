@@ -621,6 +621,7 @@ impl More {
                 self.settings.downloads_dir = d;
                 Self::more(out, Event2::Settings(self.settings.clone()));
             }
+            Command2::RenameDevice(..) => {}
             Command2::RestartDaemon => {
                 Self::packet(out, t, Dir::Tx, p::CORE_HELLO, 88, "restart");
             }

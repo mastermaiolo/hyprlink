@@ -287,6 +287,7 @@ async fn handle_connection(
             capabilities,
             paired_since: None,
             last_seen: None,
+            alias: None,
         };
         pairing
             .lock()

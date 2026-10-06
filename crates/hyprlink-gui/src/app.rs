@@ -243,6 +243,9 @@ pub struct App {
     pub players: Vec<Player>,
     pub settings: Option<Settings>,
     pub downloads_input: String,
+    /// Texto do campo «NOME» da página Dispositivos (por dispositivo em edição).
+    pub rename_input: String,
+    pub rename_for: Option<DeviceId>,
 
     /// The phone link as a whole: drives the LINK wordmark.
     pub phase: link::LinkPhase,
@@ -306,6 +309,8 @@ pub enum Message {
     SendFile,
     FileDropped(std::path::PathBuf),
     DownloadsInput(String),
+    RenameInput(DeviceId, String),
+    RenameSave(DeviceId),
     DownloadsSave,
 }
 
@@ -485,6 +490,8 @@ impl App {
             players: Vec::new(),
             settings: None,
             downloads_input: String::new(),
+            rename_input: String::new(),
+            rename_for: None,
             // Until the daemon says otherwise, we are trying.
             phase: link::LinkPhase::Connecting,
         };
@@ -981,6 +988,16 @@ impl App {
             Message::FileDropped(path) => {
                 self.more(Command2::SendFile(path.display().to_string()));
                 self.section = Section::Partilha;
+            }
+            Message::RenameInput(id, s) => {
+                self.rename_for = Some(id);
+                self.rename_input = s;
+            }
+            Message::RenameSave(id) => {
+                let n = self.rename_input.trim().to_string();
+                self.more(Command2::RenameDevice(id, n));
+                self.rename_for = None;
+                self.rename_input.clear();
             }
             Message::DownloadsInput(s) => self.downloads_input = s,
             Message::DownloadsSave => {

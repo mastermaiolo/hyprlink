@@ -899,6 +899,7 @@ fn device_detail<'a>(app: &'a App, d: &'a Device) -> El<'a> {
             if has_phone_state(app, d) { "C" } else { "A" },
             "Identidade"
         ),
+        rename_row(app, d),
         kv_text("MODELO", fmt::model(d)),
         kv_text("SISTEMA", fmt::os(d)),
         kv_text("APP HYPRLINK", fmt::opt(d.app_version.clone())),
@@ -1971,6 +1972,35 @@ pub fn journal(app: &App) -> El<'_> {
         header,
         rule_c(PAPER, 1.0),
         list,
+    ]
+    .into()
+}
+
+
+/// Campo «NOME»: o nome que o PC mostra para este telemóvel (vazio = o do telemóvel).
+fn rename_row<'a>(app: &'a App, d: &'a Device) -> El<'a> {
+    let editing = app.rename_for == Some(d.id);
+    let value: &str = if editing { &app.rename_input } else { &d.name };
+    let changed = editing && app.rename_input.trim() != d.name;
+    column![
+        kicker("NOME NO PC"),
+        gap(space::XS),
+        row![
+            iced::widget::text_input("nome deste telemóvel", value)
+                .on_input(move |s| Message::RenameInput(d.id, s))
+                .on_submit(Message::RenameSave(d.id))
+                .size(14)
+                .padding(Padding::from([9, 12]))
+                .style(theme::input),
+            hgap(space::S),
+            btn(
+                "GUARDAR",
+                theme::primary,
+                changed.then_some(Message::RenameSave(d.id))
+            ),
+        ]
+        .align_y(Alignment::Center),
+        gap(space::M),
     ]
     .into()
 }

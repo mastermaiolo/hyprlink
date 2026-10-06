@@ -171,6 +171,7 @@ fn all_commands2() -> Vec<Command2> {
         },
         PhoneMedia(MediaAction::Next),
         SetDownloadsDir("~/Transferências/HyprLink".into()),
+        RenameDevice(7, "Poco F4".into()),
         RestartDaemon,
     ]
 }

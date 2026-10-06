@@ -38,6 +38,35 @@ pub struct DeviceMeta {
     pub paired_since: Option<u64>,
     #[serde(default)]
     pub last_seen: Option<u64>,
+    /// Nome escolhido no PC. Sobrepõe-se ao do telemóvel e sobrevive a novos hellos.
+    #[serde(default)]
+    pub alias: Option<String>,
+}
+
+/// Nomes que a app põe quando ninguém lhe deu um (valor por omissão antigo).
+fn is_generic_name(n: &str) -> bool {
+    let n = n.trim();
+    n.is_empty() || n == "Android-Phone-Client" || n == "Desconhecido"
+}
+
+impl DeviceMeta {
+    /// O que se mostra: alias do PC > nome do telemóvel > «fabricante modelo».
+    pub fn display_name(&self) -> String {
+        if let Some(a) = self.alias.as_deref().map(str::trim).filter(|a| !a.is_empty()) {
+            return a.to_string();
+        }
+        if is_generic_name(&self.name) {
+            let fallback = [self.manufacturer.as_deref(), self.model.as_deref()]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(" ");
+            if !fallback.is_empty() {
+                return fallback;
+            }
+        }
+        self.name.clone()
+    }
 }
 
 pub struct PairingStore {
@@ -111,10 +140,24 @@ impl PairingStore {
         let previous = self.devices.meta.get(fingerprint);
         meta.paired_since = previous.and_then(|m| m.paired_since).or(Some(now));
         meta.last_seen = Some(now);
+        meta.alias = previous.and_then(|m| m.alias.clone());
         self.devices.meta.insert(fingerprint.to_string(), meta);
         if let Err(e) = self.save() {
             eprintln!("[!] não foi possível guardar paired_devices.json: {e}");
         }
+    }
+
+    /// Define (ou limpa, se vazio) o alias de um dispositivo já emparelhado.
+    pub fn set_alias(&mut self, fingerprint: &str, alias: &str) -> bool {
+        let Some(m) = self.devices.meta.get_mut(fingerprint) else {
+            return false;
+        };
+        let a = alias.trim();
+        m.alias = (!a.is_empty()).then(|| a.chars().take(40).collect());
+        if let Err(e) = self.save() {
+            eprintln!("[!] não foi possível guardar paired_devices.json: {e}");
+        }
+        true
     }
 
     pub fn meta(&self, fingerprint: &str) -> Option<&DeviceMeta> {
