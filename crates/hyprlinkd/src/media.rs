@@ -58,13 +58,10 @@ async fn best_player(conn: &Connection) -> Option<(String, String)> {
 
 /// `media.command` vindo do telemóvel: play_pause/play/pause/next/previous.
 ///
-/// ponytail: não reusa a conexão D-Bus compartilhada do `Ctx` — quem chama
-/// isto é a GUI (`gui/mod.rs`), que roda no executor do `iced`/runtime tokio
-/// próprio, diferente do runtime do daemon onde essa conexão foi criada;
-/// misturar os dois é terreno arriscado (I/O preso a um runtime específico)
-/// pra um caminho raro (clique manual do usuário, não um poll contínuo).
-/// Se algum dia isso for chamado com frequência, mover a chamada pro lado do
-/// daemon (via `ctx.active`/canal) resolve isso também.
+/// ponytail: abre uma ligação D-Bus própria em vez de reusar a do `Ctx` —
+/// herança de quando a GUI antiga o chamava de outro runtime. Hoje só o
+/// daemon chama (servidor e bridge); é um caminho raro (clique), por isso
+/// fica assim até valer a pena passar a `ctx.dbus`.
 pub async fn handle_command(cmd: &str) {
     let method = match cmd {
         "play_pause" | "playpause" => "PlayPause",

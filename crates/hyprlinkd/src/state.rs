@@ -1,6 +1,5 @@
-//! Estado partilhado entre o daemon (tokio, thread própria) e a GUI (iced,
-//! thread principal). A GUI só lê uma cópia (via `snapshot()`); o daemon é
-//! quem escreve.
+//! Estado interno do daemon. Quem está de fora (o hyprlink-gui, o
+//! hyprlinkctl) vê-o pela bridge (`bridge.rs`), nunca diretamente.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -15,11 +14,7 @@ const MAX_HISTORY: usize = 50;
 #[derive(Debug, Clone)]
 pub struct ClipEntry {
     pub id: u64,
-    pub at: String,
-    pub direction: &'static str,
-    pub text: String,
     pub pinned: bool,
-    // ── dados para o socket local (a GUI antiga usa os de cima) ──
     pub from_phone: bool,
     pub mime: &'static str,
     /// Conteúdo de texto; `None` para imagens (os bytes não ficam guardados).
@@ -40,7 +35,6 @@ pub struct TransferProgress {
     pub direction: &'static str, // "recebendo" · "enviando"
     pub bytes: u64,
     pub total: u64,
-    pub started_at: std::time::Instant,
 }
 
 #[derive(Debug, Clone)]
@@ -50,11 +44,9 @@ pub struct TransferRecord {
     pub at_unix: u64,
     pub total: u64,
     pub cancelled: bool,
-    pub at: String,
     pub name: String,
     pub direction: &'static str,
     pub bytes: u64,
-    pub duration_secs: u64,
     pub ok: bool,
     pub error: Option<String>,
 }
@@ -64,7 +56,6 @@ pub struct TransferRecord {
 #[derive(Debug, Clone)]
 pub struct BatterySample {
     pub at_unix: u64,
-    pub pc: Option<i64>,
     pub phone: Option<i64>,
 }
 const MAX_BATTERY_SAMPLES: usize = 144;
@@ -74,7 +65,6 @@ pub struct NotifEntry {
     /// Chave do Android (`StatusBarNotification.key`).
     pub key: String,
     pub at_unix: u64,
-    pub at: String,
     pub app: String,
     pub title: String,
     pub text: String,
@@ -153,23 +143,15 @@ pub struct ModuleStatus {
 #[derive(Debug, Clone)]
 pub struct HudState {
     pub conn: ConnState,
-    pub local_addr: String,
-    pub server_fingerprint_hex: String,
     pub pairing_token_hex: String,
     pub logs: Vec<String>,
     pub modules: ModuleStatus,
 }
 
 impl HudState {
-    pub fn new(
-        local_addr: String,
-        server_fingerprint_hex: String,
-        pairing_token_hex: String,
-    ) -> Arc<Mutex<Self>> {
+    pub fn new(pairing_token_hex: String) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
             conn: ConnState::Pairing,
-            local_addr,
-            server_fingerprint_hex,
             pairing_token_hex,
             logs: Vec::new(),
             modules: ModuleStatus::default(),
@@ -237,39 +219,26 @@ pub const DIR_PC_TO_PHONE: &str = "PC → telemóvel";
 
 pub fn push_clip_entry(state: &Arc<Mutex<HudState>>, direction: &'static str, text: String) {
     let bytes = text.len() as u64;
-    push_clip(
-        state,
-        direction,
-        text.clone(),
-        "text/plain",
-        Some(text),
-        bytes,
-    );
+    push_clip(state, direction, "text/plain", Some(text), bytes);
 }
 
 /// Imagem PNG no clipboard: só o tamanho fica (os bytes não se guardam).
 pub fn push_clip_image(state: &Arc<Mutex<HudState>>, direction: &'static str, bytes: u64) {
-    let label = format!("🖼️ PNG ({} KB)", bytes / 1024);
-    push_clip(state, direction, label, "image/png", None, bytes);
+    push_clip(state, direction, "image/png", None, bytes);
 }
 
 fn push_clip(
     state: &Arc<Mutex<HudState>>,
     direction: &'static str,
-    text: String,
     mime: &'static str,
     content: Option<String>,
     bytes: u64,
 ) {
     let mut s = state.lock().unwrap();
-    let at = chrono::Local::now().format("%H:%M:%S").to_string();
     let id = s.modules.clip_next_id;
     s.modules.clip_next_id += 1;
     s.modules.clip_history.push_front(ClipEntry {
         id,
-        at,
-        direction,
-        text,
         pinned: false,
         from_phone: direction == DIR_PHONE_TO_PC,
         mime,
@@ -303,16 +272,6 @@ pub fn clip_entry(state: &Arc<Mutex<HudState>>, id: u64) -> Option<ClipEntry> {
     s.modules.clip_history.iter().find(|e| e.id == id).cloned()
 }
 
-/// Fixados não escapam do teto de `MAX_HISTORY` (sem persistência em disco
-/// ainda, ver comentário na constante) — só ficam ordenados no topo da lista
-/// enquanto estiverem dentro da janela das últimas 50 entradas.
-pub fn toggle_clip_pin(state: &Arc<Mutex<HudState>>, id: u64) {
-    let mut s = state.lock().unwrap();
-    if let Some(entry) = s.modules.clip_history.iter_mut().find(|e| e.id == id) {
-        entry.pinned = !entry.pinned;
-    }
-}
-
 pub fn push_notif_entry(
     state: &Arc<Mutex<HudState>>,
     key: String,
@@ -325,7 +284,6 @@ pub fn push_notif_entry(
     let entry = NotifEntry {
         key,
         at_unix: now_unix(),
-        at: chrono::Local::now().format("%H:%M:%S").to_string(),
         app,
         title,
         text,
@@ -377,7 +335,6 @@ pub fn start_file_transfer(
         direction,
         bytes: 0,
         total,
-        started_at: std::time::Instant::now(),
     });
     s.modules.file_cancel = Some(cancel.clone());
     cancel
@@ -450,18 +407,15 @@ pub fn finish_file_transfer(state: &Arc<Mutex<HudState>>, ok: bool, error: Optio
         .as_ref()
         .is_some_and(|f| f.load(Ordering::Relaxed));
     if let Some(t) = s.modules.file_transfer.take() {
-        let duration_secs = t.started_at.elapsed().as_secs();
         s.modules.file_history.push_front(TransferRecord {
             id: t.id,
             wire_id: t.wire_id,
             at_unix: t.at_unix,
             total: t.total,
             cancelled,
-            at: chrono::Local::now().format("%H:%M").to_string(),
             name: t.name,
             direction: t.direction,
             bytes: t.bytes,
-            duration_secs,
             ok,
             error,
         });
@@ -503,7 +457,6 @@ pub fn sample_battery_history(state: &Arc<Mutex<HudState>>) {
     let mut s = state.lock().unwrap();
     let sample = BatterySample {
         at_unix: now_unix(),
-        pc: s.modules.pc_battery_pct,
         phone: s.modules.phone_battery_pct,
     };
     s.modules.battery_history.push(sample);
@@ -539,16 +492,6 @@ pub fn set_speaker_active(state: &Arc<Mutex<HudState>>, active: bool) {
 
 pub fn set_audio_tap_bytes(state: &Arc<Mutex<HudState>>, bytes: u64) {
     state.lock().unwrap().modules.audio_tap_bytes = bytes;
-}
-
-/// Segundos desde que o tap começou nesta sessão — `None` se estiver parado.
-pub fn audio_tap_elapsed_secs(state: &Arc<Mutex<HudState>>) -> Option<u64> {
-    state
-        .lock()
-        .unwrap()
-        .modules
-        .audio_tap_started_at
-        .map(|t| t.elapsed().as_secs())
 }
 
 const MAX_VU_SAMPLES: usize = 16;
@@ -604,7 +547,7 @@ mod tests {
     use super::*;
 
     fn hud() -> Arc<Mutex<HudState>> {
-        HudState::new("127.0.0.1:7443".into(), "AA".into(), "00".into())
+        HudState::new("00".into())
     }
 
     #[test]
@@ -644,7 +587,7 @@ mod tests {
         assert!(remove_active_notif(&h, "k2"));
         assert!(!remove_active_notif(&h, "k2"));
         assert_eq!(active_notif_keys(&h), vec!["k1"]);
-        // O histórico (GUI antiga) guarda tudo.
+        // O histórico guarda tudo.
         assert_eq!(h.lock().unwrap().modules.notif_history.len(), 3);
     }
 }

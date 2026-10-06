@@ -15,10 +15,6 @@ pub struct PhoneAudioState {
     pub alarm_percent: i64,
     /// "normal" | "vibrate" | "silent".
     pub ringer_mode: String,
-    /// Se o telemóvel não concedeu acesso "Não Perturbe", `set_ringer_mode`
-    /// pra vibrar/silencioso e `set_dnd` são ignorados do lado dele — a GUI
-    /// avisa disso.
-    pub dnd_access: bool,
     /// Filtro de interrupção do Android (`NotificationManager`) — diferente
     /// do `ringer_mode` (som/vibra/silencioso), é o "Não Perturbe" de
     /// verdade (deixa passar só notificações prioritárias).
@@ -35,7 +31,6 @@ pub async fn get_state(active: &ActiveConn) -> Option<PhoneAudioState> {
         ringer_mode: body_get_str(&body, "ringer_mode")
             .unwrap_or("normal")
             .to_string(),
-        dnd_access: body_get_bool(&body, "dnd_access").unwrap_or(false),
         dnd_enabled: body_get_bool(&body, "dnd_enabled").unwrap_or(false),
     })
 }

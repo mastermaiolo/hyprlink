@@ -475,7 +475,7 @@ mod tests {
     /// mesmo com o handle vazio.
     #[test]
     fn stop_com_handle_vazio_desliga_e_tira_a_dona() {
-        let hud = HudState::new("127.0.0.1:7443".into(), "AA".into(), "00".into());
+        let hud = HudState::new("00".into());
         let handle: TapHandle = Arc::new(Mutex::new(None));
         state::set_audio_tap_active(&hud, true);
         let geracao = GERACAO.load(Ordering::SeqCst);

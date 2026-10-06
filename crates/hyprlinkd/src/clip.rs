@@ -19,15 +19,6 @@ use crate::state::{self, HudState, push_log};
 /// não "um PSD de 2 GB".
 const MAX_IMAGE_BYTES: usize = 32 * 1024 * 1024;
 
-pub fn preview(text: &str) -> String {
-    let clean = text.trim();
-    if clean.chars().count() > 40 {
-        format!("{}…", clean.chars().take(40).collect::<String>())
-    } else {
-        clean.to_string()
-    }
-}
-
 /// Último texto que o próprio daemon escreveu no clipboard local (via pedido
 /// do telemóvel) — evita reenviar o mesmo conteúdo de volta assim que o
 /// watcher do wl-paste perceber a mudança que nós mesmos causamos.

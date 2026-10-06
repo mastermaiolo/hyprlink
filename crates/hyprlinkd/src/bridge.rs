@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
-/// Duração do teste de rede da câmara (igual ao da GUI antiga).
+/// Duração do teste de rede da câmara.
 const NET_TEST: Duration = Duration::from_secs(60);
 /// Um nível de microfone mais velho do que isto já não é "agora".
 const LEVEL_STALE: Duration = Duration::from_millis(500);
@@ -1145,7 +1145,7 @@ async fn stop_webcam(b: &Bridge) {
     crate::webcam::stop(&b.ctx.webcam, &b.ctx.hud);
 }
 
-/// Teste de rede igual ao da GUI antiga: 1080p30 H.264 durante 60 s, débito
+/// Teste de rede: 1080p30 H.264 durante 60 s, débito
 /// médio medido pelo pipeline da câmara; RTT e perda vêm do QUIC.
 async fn net_test(b: &Bridge) -> Option<NetTest> {
     let conn = b.connection()?;
@@ -1184,7 +1184,7 @@ async fn net_test(b: &Bridge) -> Option<NetTest> {
 }
 
 /// Fecha o QUIC com educação e substitui o processo por um novo (mesmos
-/// argumentos). Sob systemd ou com a GUI antiga, o comportamento é o mesmo.
+/// argumentos). Sob systemd o comportamento é o mesmo.
 fn restart(b: &Bridge) {
     use std::os::unix::process::CommandExt;
     if let Some(conn) = b.ctx.active.lock().unwrap().take() {

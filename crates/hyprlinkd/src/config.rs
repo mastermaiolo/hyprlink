@@ -55,12 +55,6 @@ impl Default for TrackSettings {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum BatteryAlertKind {
-    Low,
-    Full,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Lang {
     PtPt,
@@ -183,92 +177,16 @@ pub fn set_download_dir(config: &SharedConfig, dir: &Path) {
     c.save();
 }
 
-pub fn tray_special_workspace(config: &SharedConfig) -> bool {
-    config.lock().unwrap().tray_special_workspace
-}
-
-pub fn set_tray_special_workspace(config: &SharedConfig, enabled: bool) {
-    let mut c = config.lock().unwrap();
-    c.tray_special_workspace = enabled;
-    c.save();
-}
-
 pub fn shortcuts(config: &SharedConfig) -> Vec<Shortcut> {
     config.lock().unwrap().shortcuts.clone()
-}
-
-pub fn add_shortcut(config: &SharedConfig, name: String, command: String) {
-    let mut c = config.lock().unwrap();
-    c.shortcuts.push(Shortcut { name, command });
-    c.save();
-}
-
-pub fn remove_shortcut(config: &SharedConfig, index: usize) {
-    let mut c = config.lock().unwrap();
-    if index < c.shortcuts.len() {
-        c.shortcuts.remove(index);
-        c.save();
-    }
 }
 
 pub fn battery_alerts(config: &SharedConfig) -> BatteryAlerts {
     config.lock().unwrap().battery_alerts
 }
 
-pub fn set_battery_alert_low(config: &SharedConfig, enabled: bool) {
-    let mut c = config.lock().unwrap();
-    c.battery_alerts.low = enabled;
-    c.save();
-}
-
-pub fn set_battery_alert_full(config: &SharedConfig, enabled: bool) {
-    let mut c = config.lock().unwrap();
-    c.battery_alerts.full = enabled;
-    c.save();
-}
-
 pub fn track_settings(config: &SharedConfig) -> TrackSettings {
     config.lock().unwrap().track
-}
-
-pub fn set_track_sensitivity(config: &SharedConfig, v: f32) {
-    let mut c = config.lock().unwrap();
-    c.track.sensitivity = v;
-    c.save();
-}
-
-pub fn set_track_scroll_speed(config: &SharedConfig, v: f32) {
-    let mut c = config.lock().unwrap();
-    c.track.scroll_speed = v;
-    c.save();
-}
-
-pub fn set_track_acceleration(config: &SharedConfig, enabled: bool) {
-    let mut c = config.lock().unwrap();
-    c.track.acceleration = enabled;
-    c.save();
-}
-
-pub fn set_track_invert_scroll(config: &SharedConfig, enabled: bool) {
-    let mut c = config.lock().unwrap();
-    c.track.invert_scroll = enabled;
-    c.save();
-}
-
-pub fn set_track_virtual_keyboard(config: &SharedConfig, enabled: bool) {
-    let mut c = config.lock().unwrap();
-    c.track.virtual_keyboard = enabled;
-    c.save();
-}
-
-pub fn lang(config: &SharedConfig) -> Lang {
-    config.lock().unwrap().lang
-}
-
-pub fn set_lang(config: &SharedConfig, lang: Lang) {
-    let mut c = config.lock().unwrap();
-    c.lang = lang;
-    c.save();
 }
 
 /// Sink a restaurar quando o modo coluna desligar (ver `speaker.rs`).

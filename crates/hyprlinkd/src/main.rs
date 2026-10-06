@@ -5,7 +5,6 @@ mod bridge;
 mod clip;
 mod config;
 mod ctl;
-mod gui;
 mod hub;
 mod hypr;
 mod identity;
@@ -24,9 +23,7 @@ mod speaker;
 mod state;
 mod tap;
 mod telemetry;
-mod theme;
 mod tls_verifier;
-mod tray;
 mod webcam;
 
 use std::sync::{Arc, Mutex};
@@ -42,89 +39,34 @@ fn main() -> anyhow::Result<()> {
     let local_ip = local_ip_guess();
 
     let token_hex = pairing.lock().unwrap().current_token_hex.clone();
-    let hud = state::HudState::new(
-        format!("{local_ip}:{PORT}"),
-        identity.fingerprint_hex.clone(),
-        token_hex.clone(),
-    );
+    let hud = state::HudState::new(token_hex.clone());
     let config = config::load();
     // Sessão anterior morreu com o modo coluna ativo? Devolve o som do PC
     // ao sink original antes de qualquer outra coisa — sem isto, o PC
     // ficaria mudo (apps a tocar no sink virtual que já ninguém consome).
     speaker::cleanup_orphans(&config);
-    // Compartilhado com a GUI só pra permitir um `close()` educado da conexão
-    // QUIC (frame CONNECTION_CLOSE de verdade) no botão de fechar — sem isso
-    // o telemóvel fica "conectado" até o idle timeout expirar sozinho.
-    let active = active::new_registry();
-    // Compartilhado com a GUI pra ela poder pedir "iniciar/parar stream" no
-    // ecrã da webcam sem precisar de todo o `Ctx` do servidor.
-    let pending_webcam = webcam::new_pending();
-    // Tap e modo coluna partilhados entre daemon e GUI (o toggle da coluna
-    // vive na GUI, o telemóvel dispara o tap pelo servidor — mesmo slot).
-    let tap_handle = tap::new_handle();
-    let speaker_handle = speaker::new_handle();
-    // Compartilhado com a GUI: o ícone da bandeja roda numa thread/executor
-    // próprio (ksni) — sinaliza aqui quando o usuário clica nele, a GUI
-    // consome no `Tick` (polling, não dá pra mandar `Message` direto de fora).
-    let tray_show = tray::new_show_flag();
 
     print_terminal_qr(&identity.fingerprint_hex, local_ip, &token_hex)?;
 
-    let pairing_for_gui = pairing.clone();
-
-    {
-        let hud = hud.clone();
-        let config = config.clone();
-        let active = active.clone();
-        let pending_webcam = pending_webcam.clone();
-        let tap_handle = tap_handle.clone();
-        let speaker_handle = speaker_handle.clone();
-        let tray_show = tray_show.clone();
-        std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().expect("falha ao criar runtime tokio");
-            rt.block_on(run_daemon(
-                identity,
-                pairing,
-                hud,
-                config,
-                active,
-                pending_webcam,
-                tray_show,
-                tap_handle,
-                speaker_handle,
-                local_ip,
-            ));
-        });
-    }
-
-    gui::run(
-        hud,
-        config,
-        active,
-        pending_webcam,
-        tray_show,
-        pairing_for_gui,
-        tap_handle,
-        speaker_handle,
-    )
-    .map_err(|e| anyhow::anyhow!("erro na GUI: {e}"))
+    // O daemon não tem janela: a interface é o hyprlink-gui (e o
+    // hyprlinkctl), que falam com ele pelo socket local da bridge.
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(run_daemon(identity, pairing, hud, config, local_ip));
+    Ok(())
 }
 
-// Os handles partilhados com a GUI antiga passam a estado interno do daemon
-// quando o IPC substituir a partilha de memória (Fase 2).
-#[allow(clippy::too_many_arguments)]
 async fn run_daemon(
     identity: identity::ServerIdentity,
     pairing: Arc<Mutex<pairing::PairingStore>>,
     hud: Arc<Mutex<state::HudState>>,
     config: config::SharedConfig,
-    active: active::ActiveConn,
-    pending_webcam: webcam::PendingWebcam,
-    tray_show: tray::ShowRequested,
-    tap_handle: tap::TapHandle,
-    speaker_handle: speaker::SpeakerHandle,
     local_ip: std::net::IpAddr,
 ) {
+    let active = active::new_registry();
+    let pending_webcam = webcam::new_pending();
+    let tap_handle = tap::new_handle();
+    let speaker_handle = speaker::new_handle();
+
     let addr: std::net::SocketAddr = format!("0.0.0.0:{PORT}")
         .parse()
         .expect("porta fixa válida");
@@ -156,7 +98,6 @@ async fn run_daemon(
         format!("{local_ip}:{PORT}"),
     )
     .await;
-    tokio::spawn(tray::spawn(tray_show));
     server::run(endpoint, pairing, ctx).await;
 }
 
@@ -179,7 +120,7 @@ fn print_terminal_qr(
     let qr_ascii = code.render::<unicode::Dense1x2>().quiet_zone(true).build();
     println!("{qr_ascii}");
     println!(
-        "\n[+] Aponte a câmara do app HyprLink para o QR Code acima, ou use a GUI que vai abrir.\n"
+        "\n[+] Aponte a câmara do app HyprLink para o QR Code acima, ou abra a GUI: hyprlink-gui\n"
     );
     Ok(())
 }
