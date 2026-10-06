@@ -25,8 +25,9 @@ use serde::{Deserialize, Serialize};
 
 /// Mesmos nomes de variante que o `Lang` do `hyprlinkd` (`config.rs`), para o
 /// JSON ser intercambiável.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Lang {
+    #[default]
     PtPt,
     PtBr,
     EnGb,

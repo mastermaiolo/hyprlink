@@ -8,6 +8,8 @@
 //!   NeedsAttention → pairing in progress
 
 use crate::app::Message;
+use hyprlink_gui::fmt;
+use hyprlink_gui::i18n::{Lang, t};
 use iced::Subscription;
 use iced::futures::channel::mpsc;
 use iced::futures::{SinkExt, StreamExt};
@@ -36,6 +38,9 @@ pub struct Snapshot {
     pub mirror: bool,
     pub pairing: bool,
     pub phase: crate::link::LinkPhase,
+    /// Language the labels were built for: a change makes the snapshot differ,
+    /// so the app pushes it and ksni re-reads the menu and the tooltip.
+    pub lang: Lang,
 }
 
 pub struct HyprTray {
@@ -101,17 +106,17 @@ impl ksni::Tray for HyprTray {
         let s = &self.snap;
         let description = match &s.device {
             Some(name) => format!(
-                "{name} · {}%{} · {} · {:.1} ms",
+                "{name} · {}%{} · {} · {} ms",
                 s.battery
                     .map(|b| b.to_string())
                     .unwrap_or_else(|| "—".into()),
                 if s.charging { "+" } else { "" },
                 s.network,
-                s.latency_ms
+                fmt::decimal(s.latency_ms as f64, 1)
             ),
             None => match s.phase {
-                crate::link::LinkPhase::Connecting => "A ligar ao telemóvel…".into(),
-                _ => "Nenhum telemóvel ligado".into(),
+                crate::link::LinkPhase::Connecting => t("A ligar ao telemóvel…").into(),
+                _ => t("Nenhum telemóvel ligado").into(),
             },
         };
         ToolTip {
@@ -133,7 +138,7 @@ impl ksni::Tray for HyprTray {
                 Some(b) => format!("{name} — {b}%"),
                 None => name.clone(),
             },
-            None => "Sem telemóvel".into(),
+            None => t("Sem telemóvel").into(),
         };
         vec![
             StandardItem {
@@ -144,7 +149,7 @@ impl ksni::Tray for HyprTray {
             .into(),
             MenuItem::Separator,
             StandardItem {
-                label: "Abrir HYPRLINK".into(),
+                label: t("Abrir HYPRLINK").into(),
                 activate: Box::new(|t: &mut Self| t.send(Action::Open)),
                 ..Default::default()
             }
@@ -158,14 +163,14 @@ impl ksni::Tray for HyprTray {
             }
             .into(),
             StandardItem {
-                label: "Enviar área de transferência".into(),
+                label: t("Enviar área de transferência").into(),
                 enabled: linked,
                 activate: Box::new(|t: &mut Self| t.send(Action::Clipboard)),
                 ..Default::default()
             }
             .into(),
             CheckmarkItem {
-                label: "Microfone do telemóvel".into(),
+                label: t("Microfone do telemóvel").into(),
                 enabled: linked,
                 checked: self.snap.mic,
                 activate: Box::new(|t: &mut Self| {
@@ -176,7 +181,7 @@ impl ksni::Tray for HyprTray {
             }
             .into(),
             CheckmarkItem {
-                label: "Espelhar ecrã".into(),
+                label: t("Espelhar ecrã").into(),
                 enabled: linked,
                 checked: self.snap.mirror,
                 activate: Box::new(|t: &mut Self| {
@@ -188,7 +193,7 @@ impl ksni::Tray for HyprTray {
             .into(),
             MenuItem::Separator,
             StandardItem {
-                label: "Sair".into(),
+                label: t("Sair").into(),
                 activate: Box::new(|t: &mut Self| t.send(Action::Quit)),
                 ..Default::default()
             }

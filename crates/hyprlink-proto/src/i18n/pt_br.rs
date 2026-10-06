@@ -19,4 +19,10 @@ pub const TABLE: &[(&str, &str)] = &[
     ("recusado pelo telemóvel", "recusado pelo celular"),
     ("A TRANSFERIR", "TRANSFERINDO"),
     ("sem telemóvel", "sem celular"),
+    // ── tray.rs ──
+    ("A ligar ao telemóvel…", "Conectando ao celular…"),
+    ("Nenhum telemóvel ligado", "Nenhum celular conectado"),
+    ("Sem telemóvel", "Sem celular"),
+    ("Microfone do telemóvel", "Microfone do celular"),
+    ("Espelhar ecrã", "Espelhar tela"),
 ];

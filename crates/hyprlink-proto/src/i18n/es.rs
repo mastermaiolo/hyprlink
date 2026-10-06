@@ -86,4 +86,13 @@ pub const TABLE: &[(&str, &str)] = &[
     ("há {} h", "hace {} h"),
     ("sem telemóvel", "sin móvil"),
     ("workspace", "workspace"),
+    // ── tray.rs ──
+    ("A ligar ao telemóvel…", "Conectando con el móvil…"),
+    ("Nenhum telemóvel ligado", "Ningún móvil enlazado"),
+    ("Sem telemóvel", "Sin móvil"),
+    ("Abrir HYPRLINK", "Abrir HYPRLINK"),
+    ("Enviar área de transferência", "Enviar portapapeles"),
+    ("Microfone do telemóvel", "Micrófono del móvil"),
+    ("Espelhar ecrã", "Duplicar pantalla"),
+    ("Sair", "Salir"),
 ];

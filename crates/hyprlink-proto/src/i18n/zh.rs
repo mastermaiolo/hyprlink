@@ -80,4 +80,13 @@ pub const TABLE: &[(&str, &str)] = &[
     ("há {} h", "{} 小时前"),
     ("sem telemóvel", "无手机"),
     ("workspace", "工作区"),
+    // ── tray.rs ──
+    ("A ligar ao telemóvel…", "正在连接手机…"),
+    ("Nenhum telemóvel ligado", "没有已连接的手机"),
+    ("Sem telemóvel", "无手机"),
+    ("Abrir HYPRLINK", "打开 HYPRLINK"),
+    ("Enviar área de transferência", "发送剪贴板"),
+    ("Microfone do telemóvel", "手机麦克风"),
+    ("Espelhar ecrã", "镜像屏幕"),
+    ("Sair", "退出"),
 ];
