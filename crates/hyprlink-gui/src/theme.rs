@@ -63,6 +63,15 @@ pub const SERIF_ITALIC: Font = Font {
     style: FontStyle::Italic,
     ..Font::DEFAULT
 };
+/// The italic serif of the decks. The Noto Sans SC subset has no italic, so in
+/// 中文 the fallback leaves tofu squares: use the upright sans there.
+pub fn serif_italic() -> Font {
+    if hyprlink_gui::i18n::get() == hyprlink_gui::i18n::Lang::Zh {
+        SANS
+    } else {
+        SERIF_ITALIC
+    }
+}
 pub const SANS: Font = Font::with_name("Inter");
 pub const SANS_MEDIUM: Font = Font {
     weight: Weight::Medium,
@@ -124,6 +133,10 @@ pub const FONTS: &[&[u8]] = &[
     include_bytes!("../assets/fonts/IBMPlexMono-Regular.ttf"),
     include_bytes!("../assets/fonts/IBMPlexMono-Medium.ttf"),
     include_bytes!("../assets/fonts/IBMPlexMono-SemiBold.ttf"),
+    // 中文: subconjunto do Noto Sans CJK SC (scripts/font-zh-subset.py), para o
+    // texto não aparecer em quadrados onde não há fontes CJK no sistema.
+    include_bytes!("../assets/fonts/NotoSansSC-Regular.otf"),
+    include_bytes!("../assets/fonts/NotoSansSC-Bold.otf"),
 ];
 
 pub fn theme() -> Theme {

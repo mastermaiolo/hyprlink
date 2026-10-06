@@ -487,4 +487,12 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Smart Band 10 · sleep_state", "Smart Band 10 · sleep_state"),
     ("desbloqueia + restaura workspace", "desbloquea + restaura el workspace"),
     ("modo foco · makoctl mode dnd", "modo concentración · makoctl mode dnd"),
+    // ── extra ──
+    ("fechar a janela deixa a app no tray", "cerrar la ventana deja la app en la bandeja"),
+    ("sincroniza sozinha; texto e PNG · clip.rs", "se sincroniza sola; texto y PNG · clip.rs"),
+    ("hyprctl dispatch …  (ex.: workspace 5, exec kitty)", "hyprctl dispatch …  (p. ej.: workspace 5, exec kitty)"),
+    ("datagramas QUIC", "datagramas QUIC"),
+    ("QUIC · mTLS · porta 7443", "QUIC · mTLS · puerto 7443"),
+    ("stream unidirecional QUIC dedicado", "stream QUIC unidireccional dedicado"),
+    ("fp | host:porta | token", "fp | host:puerto | token"),
 ];

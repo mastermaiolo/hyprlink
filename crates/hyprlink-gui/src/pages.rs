@@ -28,7 +28,7 @@ pub fn proposed_banner<'a>(why: &'a str) -> El<'a> {
         row![
             tag_outline(t("PROPOSTO"), HOT),
             hgap(space::L),
-            text(why).font(SERIF_ITALIC).size(size::DECK_S).color(SUB),
+            text(why).font(serif_italic()).size(size::DECK_S).color(SUB),
         ]
         .align_y(Alignment::Center),
     )
@@ -134,7 +134,7 @@ pub fn shortcuts(app: &App) -> El<'_> {
         gap(space::L),
         row![
             text_input(
-                "hyprctl dispatch …  (ex.: workspace 5, exec kitty)",
+                t("hyprctl dispatch …  (ex.: workspace 5, exec kitty)"),
                 &app.dispatch_input
             )
             .on_input(Message::DispatchInput)
@@ -884,7 +884,7 @@ pub fn share(app: &App) -> El<'_> {
         gap(space::L),
         clip_list,
         gap(space::M),
-        mono("sincroniza sozinha; texto e PNG · clip.rs", FAINT),
+        mono(t("sincroniza sozinha; texto e PNG · clip.rs"), FAINT),
     ]
     .width(fill_portion(1));
 
@@ -1106,7 +1106,7 @@ pub fn media(app: &App) -> El<'_> {
             .align_y(Alignment::Center),
             gap(space::L),
             text(np.title.as_str())
-                .font(SERIF_ITALIC)
+                .font(serif_italic())
                 .size(72)
                 .color(PAPER)
                 .line_height(LineHeight::Relative(1.0)),
@@ -1283,7 +1283,7 @@ pub fn settings(app: &App) -> El<'_> {
         subhead("C", t("Arranque")),
         kv_text(t("COM O HYPRLAND"), "exec-once = hyprlink-gui --hidden"),
         kv_text(t("DAEMON"), "systemctl --user enable --now hyprlinkd"),
-        kv_text(t("TRAY"), "fechar a janela deixa a app no tray"),
+        kv_text(t("TRAY"), t("fechar a janela deixa a app no tray")),
         gap(space::XXL),
         subhead("D", t("Idioma")),
         langs,

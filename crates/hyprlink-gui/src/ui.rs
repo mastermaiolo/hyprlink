@@ -36,11 +36,11 @@ pub fn headline<'a>(s: impl text::IntoFragment<'a>, sz: f32) -> text::Text<'a> {
 
 /// The magazine voice: Instrument Serif italic.
 pub fn deck<'a>(s: impl text::IntoFragment<'a>) -> text::Text<'a> {
-    t(s, SERIF_ITALIC, size::DECK, SUB).line_height(LineHeight::Relative(1.15))
+    t(s, serif_italic(), size::DECK, SUB).line_height(LineHeight::Relative(1.15))
 }
 
 pub fn deck_s<'a>(s: impl text::IntoFragment<'a>) -> text::Text<'a> {
-    t(s, SERIF_ITALIC, size::DECK_S, SUB).line_height(LineHeight::Relative(1.2))
+    t(s, serif_italic(), size::DECK_S, SUB).line_height(LineHeight::Relative(1.2))
 }
 
 pub fn body<'a>(s: impl text::IntoFragment<'a>) -> text::Text<'a> {

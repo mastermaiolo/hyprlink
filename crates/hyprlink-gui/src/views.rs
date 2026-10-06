@@ -164,7 +164,7 @@ pub fn cover(app: &App) -> El<'_> {
                     hgap(space::M),
                     column![
                         text(s.title()).font(SANS_SEMI).size(14).color(PAPER),
-                        text(line).font(SERIF_ITALIC).size(16).color(SUB),
+                        text(line).font(serif_italic()).size(16).color(SUB),
                     ]
                     .spacing(1),
                 ]
@@ -389,7 +389,7 @@ pub fn cover(app: &App) -> El<'_> {
             )),
             gap(space::S),
             text(np.title.as_str())
-                .font(SERIF_ITALIC)
+                .font(serif_italic())
                 .size(34)
                 .color(PAPER),
             mono(np.artist.clone().unwrap_or_default(), SUB),
@@ -765,7 +765,7 @@ pub fn devices(app: &App) -> El<'_> {
         )
         .width(Length::Fill),
         gap(space::S),
-        mono("QUIC · mTLS · porta 7443", FAINT),
+        mono(t("QUIC · mTLS · porta 7443"), FAINT),
     ]
     .width(340);
 
@@ -1041,7 +1041,7 @@ pub fn pairing<'a>(app: &'a App, ticket: &'a PairingTicket) -> El<'a> {
         row![
             left,
             hgap(space::GUTTER),
-            column![qr, gap(space::S), mono("fp | host:porta | token", MUTED)]
+            column![qr, gap(space::S), mono(t("fp | host:porta | token"), MUTED)]
                 .align_x(Alignment::Center)
         ]
         .align_y(Alignment::Center),
@@ -1094,7 +1094,7 @@ pub fn desk(app: &App) -> El<'_> {
             );
         }
         if !occupied {
-            apps = apps.push(text(t("vazio")).font(SERIF_ITALIC).size(15).color(FAINT));
+            apps = apps.push(text(t("vazio")).font(serif_italic()).size(15).color(FAINT));
         }
         button(
             column![
@@ -1349,7 +1349,7 @@ pub fn mirror_body(app: &App) -> El<'_> {
                         .size(size::BODY)
                         .color(PAPER),
                     gap(3.0),
-                    mono("stream unidirecional QUIC dedicado", MUTED).size(11)
+                    mono(t("stream unidirecional QUIC dedicado"), MUTED).size(11)
                 ]
                 .width(Length::Fill),
                 text(format!("{:.0} Mb/s", cfg.bitrate_mbps))
@@ -1597,7 +1597,7 @@ pub fn audio(app: &App) -> El<'_> {
                 },
             ),
             kv_text(t("PACOTES"), packets::TAP_FAMILY),
-            kv_text(t("TRANSPORTE"), "datagramas QUIC"),
+            kv_text(t("TRANSPORTE"), t("datagramas QUIC")),
             kv_text(t("MÓDULO"), "tap.rs · speaker.rs"),
         ],
     );

@@ -481,4 +481,12 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Smart Band 10 · sleep_state", "Smart Band 10 · sleep_state"),
     ("desbloqueia + restaura workspace", "解锁并恢复 workspace"),
     ("modo foco · makoctl mode dnd", "专注模式 · makoctl mode dnd"),
+    // ── extra ──
+    ("fechar a janela deixa a app no tray", "关闭窗口后应用留在托盘中"),
+    ("sincroniza sozinha; texto e PNG · clip.rs", "自动同步;文本和 PNG · clip.rs"),
+    ("hyprctl dispatch …  (ex.: workspace 5, exec kitty)", "hyprctl dispatch …  (例如:workspace 5, exec kitty)"),
+    ("datagramas QUIC", "QUIC 数据报"),
+    ("QUIC · mTLS · porta 7443", "QUIC · mTLS · 端口 7443"),
+    ("stream unidirecional QUIC dedicado", "专用单向 QUIC 流"),
+    ("fp | host:porta | token", "fp | host:端口 | token"),
 ];

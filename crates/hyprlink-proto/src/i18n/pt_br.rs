@@ -150,4 +150,8 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Chamada a entrar", "Chamada recebida"),
     ("A carregar na secretária", "Carregando na mesa"),
     ("Pulseira deteta sono", "Pulseira detecta sono"),
+    // ── extra ──
+    ("fechar a janela deixa a app no tray", "fechar a janela deixa o app na bandeja"),
+    ("hyprctl dispatch …  (ex.: workspace 5, exec kitty)", "hyprctl dispatch …  (ex.: workspace 5, exec kitty)"),
+    ("fp | host:porta | token", "fp | host:porta | token"),
 ];
