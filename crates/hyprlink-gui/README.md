@@ -22,7 +22,8 @@ Preto, editorial, cyberpunk contido. Dez secções numeradas, como uma revista, 
 ![Índice](docs/screenshots/indice.png)
 
 Teclas `1`–`9` e `0` navegam entre secções; `Esc` fecha o emparelhamento. Largar um ficheiro na janela
-envia-o para o telemóvel.
+envia-o para o telemóvel; o botão «ESCOLHER FICHEIROS…» (Partilha) abre o seletor do sistema, com
+vários ficheiros de qualquer formato.
 
 ## Princípio: primeiro o outro lado
 
@@ -30,6 +31,21 @@ Na GUI do PC, o **telemóvel vem primeiro** — bateria, rede, armazenamento, o 
 notificações — e só depois **Este PC** (CPU, memória, bateria do portátil, tempo ligado, lidos de
 `/proc` e `/sys`, sem dependências). Na app Android será o inverso. A mesma regra vale para o tray,
 para o `hyprlinkctl` (campos do JSON pela ordem de leitura) e para o plugin do Noctalia.
+
+## Dependências do sistema
+
+O botão «ESCOLHER FICHEIROS…» usa o seletor de ficheiros do **portal XDG** (`rfd` sem GTK: a GUI não
+liga a nenhuma biblioteca gráfica). Precisa de um backend que implemente `FileChooser`:
+
+```sh
+paru -S xdg-desktop-portal-gtk      # ou xdg-desktop-portal-kde
+```
+
+O `xdg-desktop-portal-hyprland` **não** tem seletor de ficheiros. Sem `-gtk`/`-kde` a GUI mostra o
+aviso «Sem seletor de ficheiros — instala xdg-desktop-portal-gtk, ou larga o ficheiro aqui.» e o resto
+(largar na janela, escrever o caminho) continua a funcionar. Verificar: `pacman -Q xdg-desktop-portal-gtk`.
+Se o Hyprland não escolher o `-gtk` para o `FileChooser`, em `~/.config/xdg-desktop-portal/hyprland-portals.conf`:
+`org.freedesktop.impl.portal.FileChooser=gtk`.
 
 ## Correr
 

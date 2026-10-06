@@ -41,6 +41,14 @@ Classes CSS disponíveis: `connected`, `disconnected`, `unknown`.
 O `install.sh` regista um `.desktop` com `%f` — aparece no menu de contexto
 de Nautilus/Nemo/Thunar/KDE pra qualquer tipo de ficheiro comum.
 
+## Dependências opcionais
+
+| Pacote | Para quê |
+|---|---|
+| `xdg-desktop-portal-gtk` (ou `-kde`) | seletor de ficheiros do botão «ESCOLHER FICHEIROS…» da GUI; o `xdg-desktop-portal-hyprland` não o fornece |
+
+Não há PKGBUILD neste repositório; quando existir, entra em `optdepends`.
+
 ## Instalar tudo
 
 ```bash
