@@ -7,6 +7,8 @@ use crate::link::{Codec, Device, Dir, Kind, LinkState, PairingTicket, PhoneStatu
 use crate::theme::{self, *};
 use crate::ui::*;
 use hyprlink_gui::fmt;
+use hyprlink_gui::i18n::t;
+use hyprlink_gui::tr;
 use hyprlink_gui::link::packets;
 
 use chrono::{Datelike, Local};
@@ -30,33 +32,46 @@ fn state_color(s: LinkState) -> Color {
 
 pub fn number_word(n: usize) -> &'static str {
     [
-        "NENHUM", "UM", "DOIS", "TRÊS", "QUATRO", "CINCO", "SEIS", "SETE",
+        t("NENHUM"),
+        t("UM"),
+        t("DOIS"),
+        t("TRÊS"),
+        t("QUATRO"),
+        t("CINCO"),
+        t("SEIS"),
+        t("SETE"),
     ]
     .get(n)
     .copied()
-    .unwrap_or("MUITOS")
+    .unwrap_or(t("MUITOS"))
 }
 
 fn date_pt() -> String {
     let d = Local::now();
     let wd = [
-        "SEGUNDA", "TERÇA", "QUARTA", "QUINTA", "SEXTA", "SÁBADO", "DOMINGO",
+        t("SEGUNDA"),
+        t("TERÇA"),
+        t("QUARTA"),
+        t("QUINTA"),
+        t("SEXTA"),
+        t("SÁBADO"),
+        t("DOMINGO"),
     ][d.weekday().num_days_from_monday() as usize];
     let m = [
-        "JANEIRO",
-        "FEVEREIRO",
-        "MARÇO",
-        "ABRIL",
-        "MAIO",
-        "JUNHO",
-        "JULHO",
-        "AGOSTO",
-        "SETEMBRO",
-        "OUTUBRO",
-        "NOVEMBRO",
-        "DEZEMBRO",
+        t("JANEIRO"),
+        t("FEVEREIRO"),
+        t("MARÇO"),
+        t("ABRIL"),
+        t("MAIO"),
+        t("JUNHO"),
+        t("JULHO"),
+        t("AGOSTO"),
+        t("SETEMBRO"),
+        t("OUTUBRO"),
+        t("NOVEMBRO"),
+        t("DEZEMBRO"),
     ][d.month0() as usize];
-    format!("{wd}, {} DE {m} DE {}", d.day(), d.year())
+    tr!("{0}, {1} DE {2} DE {3}", wd, d.day(), m, d.year())
 }
 
 /// A thin proportional bar (battery, countdowns).
@@ -92,13 +107,13 @@ pub fn spark<'a>(data: Vec<f32>, c: Color, min: f32, max: f32, h: f32) -> El<'a>
 
 pub fn cover(app: &App) -> El<'_> {
     let dev = app.primary();
-    let name = dev.map(fmt::name).unwrap_or_else(|| "SEM LIGAÇÃO".into());
+    let name = dev.map(fmt::name).unwrap_or_else(|| t("SEM LIGAÇÃO").into());
 
     let top = column![
         row![
             kicker_c("§01", ACID),
             hgap(space::M),
-            kicker("CAPA"),
+            kicker(t("CAPA")),
             fill_x(),
             kicker(date_pt()),
         ]
@@ -111,7 +126,7 @@ pub fn cover(app: &App) -> El<'_> {
 
     // Hero: the device as the cover star, with a table of contents beside it.
     let hero_left = column![
-        kicker("EM DESTAQUE — O DISPOSITIVO PRINCIPAL"),
+        kicker(t("EM DESTAQUE — O DISPOSITIVO PRINCIPAL")),
         gap(space::M),
         headline(name.clone(), size::MASTHEAD)
             .line_height(LineHeight::Relative(0.92))
@@ -124,7 +139,7 @@ pub fn cover(app: &App) -> El<'_> {
                     state_color(d.state),
                     VOID
                 ),
-                None => tag("■ DESLIGADO", HOT, VOID),
+                None => tag(t("■ DESLIGADO"), HOT, VOID),
             },
             hgap(space::M),
             mono(dev.map(fmt::os).unwrap_or_else(|| fmt::DASH.into()), SUB),
@@ -137,7 +152,7 @@ pub fn cover(app: &App) -> El<'_> {
         ]
         .align_y(Alignment::Center),
         gap(space::XL),
-        deck("O telemóvel é a outra metade da tua secretária.").size(34),
+        deck(t("O telemóvel é a outra metade da tua secretária.")).size(34),
     ]
     .width(fill_portion(5));
 
@@ -170,35 +185,38 @@ pub fn cover(app: &App) -> El<'_> {
         .into()
     };
     let near = if !app.rssi_known {
-        "sem leitura"
+        t("sem leitura")
     } else if app.rssi > app.unlock_at {
-        "perto — ao alcance da mão"
+        t("perto — ao alcance da mão")
     } else if app.rssi > app.lock_at {
-        "na sala, mas longe"
+        t("na sala, mas longe")
     } else {
-        "longe — sessão a trancar"
+        t("longe — sessão a trancar")
     };
     let hero_right = column![
-        kicker("NESTA EDIÇÃO"),
+        kicker(t("NESTA EDIÇÃO")),
         gap(space::S),
         rule_c(PAPER, 1.0),
         toc_entry(
             Section::Dispositivos,
-            format!(
-                "{} {}, {} ligado",
-                app.devices.len(),
-                if app.devices.len() == 1 { "aparelho" } else { "aparelhos" },
-                app.devices
+            {
+                let linked = app
+                    .devices
                     .iter()
                     .filter(|d| d.state == LinkState::Linked)
-                    .count()
-            )
+                    .count();
+                if app.devices.len() == 1 {
+                    tr!("{} aparelho, {} ligado", app.devices.len(), linked)
+                } else {
+                    tr!("{} aparelhos, {} ligado", app.devices.len(), linked)
+                }
+            }
         ),
         toc_entry(
             Section::Notificacoes,
             match app.notifs.first() {
-                Some(n) => format!("{} por ler, a última de {}", app.notifs.len(), n.app),
-                None => "nada por ler".into(),
+                Some(n) => tr!("{} por ler, a última de {}", app.notifs.len(), n.app),
+                None => t("nada por ler").into(),
             }
         ),
         toc_entry(
@@ -209,26 +227,27 @@ pub fn cover(app: &App) -> El<'_> {
                 .filter(|t| t.state == crate::link::TransferState::Active)
                 .count()
             {
-                0 => format!("{} entradas no clipboard", app.clips.len()),
-                1 => "um ficheiro a caminho".into(),
-                n => format!("{n} ficheiros a caminho"),
+                0 => tr!("{} entradas no clipboard", app.clips.len()),
+                1 => t("um ficheiro a caminho").into(),
+                n => tr!("{} ficheiros a caminho", n),
             }
         ),
         toc_entry(
             Section::Audio,
             match (app.mic_on, app.tap_on) {
-                (true, true) => "microfone e retorno ativos".into(),
-                (true, false) => "o microfone está aberto".into(),
-                (false, true) => "a música desce para o bolso".into(),
-                _ => "em silêncio".into(),
+                (true, true) => t("microfone e retorno ativos").into(),
+                (true, false) => t("o microfone está aberto").into(),
+                (false, true) => t("a música desce para o bolso").into(),
+                _ => t("em silêncio").into(),
             }
         ),
         toc_entry(
             Section::Sensores,
             if app.rssi_known {
-                format!("{:.0} dBm, {near}", app.rssi)
+                let v = format!("{:.0}", app.rssi);
+                tr!("{} dBm, {}", v, near)
             } else {
-                "ainda sem leitura de sinal".to_string()
+                t("ainda sem leitura de sinal").to_string()
             },
         ),
     ]
@@ -246,7 +265,7 @@ pub fn cover(app: &App) -> El<'_> {
         ),
         right: (
             app.host.hostname.to_uppercase(),
-            format!("{} · ESTE PC", app.host.compositor.to_uppercase()),
+            tr!("{} · ESTE PC", app.host.compositor.to_uppercase()),
         ),
         latency: app.latency.last(),
         online: dev.is_some(),
@@ -273,9 +292,9 @@ pub fn cover(app: &App) -> El<'_> {
         cell(
             column![
                 stat(
-                    "BATERIA",
+                    t("BATERIA"),
                     fmt::opt(bat),
-                    if charging { "% · a carregar" } else { "%" },
+                    if charging { t("% · a carregar") } else { "%" },
                     if bat.is_some_and(|b| b < 20) {
                         HOT
                     } else {
@@ -293,7 +312,7 @@ pub fn cover(app: &App) -> El<'_> {
         cell(
             column![
                 stat(
-                    "REDE MÓVEL",
+                    t("REDE MÓVEL"),
                     net_main.to_string(),
                     net_rest.to_string(),
                     PAPER
@@ -322,7 +341,7 @@ pub fn cover(app: &App) -> El<'_> {
         cell(
             column![
                 stat(
-                    "ARMAZENAMENTO",
+                    t("ARMAZENAMENTO"),
                     sto_u
                         .map(|u| format!("{u:.0}"))
                         .unwrap_or_else(|| fmt::DASH.into()),
@@ -347,7 +366,7 @@ pub fn cover(app: &App) -> El<'_> {
         cell(
             column![
                 stat(
-                    "LATÊNCIA",
+                    t("LATÊNCIA"),
                     format!("{lat:.1}"),
                     "ms",
                     if lat > 100.0 { HOT } else { PAPER }
@@ -363,9 +382,9 @@ pub fn cover(app: &App) -> El<'_> {
     // What the phone is doing right now.
     let now_playing: El = match ph.and_then(|p| p.now_playing.as_ref()) {
         Some(np) => column![
-            kicker(format!(
+            kicker(tr!(
                 "{} NO TELEMÓVEL · {}",
-                if np.playing { "A TOCAR" } else { "EM PAUSA" },
+                if np.playing { t("A TOCAR") } else { t("EM PAUSA") },
                 np.app.clone().unwrap_or_default().to_uppercase()
             )),
             gap(space::S),
@@ -379,9 +398,9 @@ pub fn cover(app: &App) -> El<'_> {
         ]
         .into(),
         None => column![
-            kicker("NO TELEMÓVEL"),
+            kicker(t("NO TELEMÓVEL")),
             gap(space::S),
-            deck_s("Nada a tocar."),
+            deck_s(t("Nada a tocar.")),
         ]
         .into(),
     };
@@ -390,7 +409,7 @@ pub fn cover(app: &App) -> El<'_> {
         container(now_playing).width(fill_portion(3)),
         hgap(space::GUTTER),
         column![
-            kicker("NOTIFICAÇÕES"),
+            kicker(t("NOTIFICAÇÕES")),
             gap(space::S),
             text(fmt::opt(notif))
                 .font(DISPLAY)
@@ -401,19 +420,19 @@ pub fn cover(app: &App) -> El<'_> {
         .width(fill_portion(1)),
         column![
             kv(
-                "ECRÃ",
+                t("ECRÃ"),
                 match ph.and_then(|p| p.screen_on) {
-                    Some(true) => tag("LIGADO", PAPER, VOID),
-                    Some(false) => tag_outline("DESLIGADO", MUTED),
+                    Some(true) => tag(t("LIGADO"), PAPER, VOID),
+                    Some(false) => tag_outline(t("DESLIGADO"), MUTED),
                     None => mono(fmt::DASH, MUTED).into(),
                 }
             ),
             kv_text(
-                "MEMÓRIA",
+                t("MEMÓRIA"),
                 ph.map(ram_line).unwrap_or_else(|| fmt::DASH.into())
             ),
             kv_text(
-                "TEMPERATURA",
+                t("TEMPERATURA"),
                 ph.and_then(|p| p.battery_temp_c)
                     .map(|t| format!("{t:.1} °C"))
                     .unwrap_or_else(|| fmt::DASH.into())
@@ -427,14 +446,14 @@ pub fn cover(app: &App) -> El<'_> {
     let up = h.uptime_s;
     let pc = column![
         row![
-            kicker("ESTE PC"),
+            kicker(t("ESTE PC")),
             hgap(space::M),
             text(h.hostname.as_str())
                 .font(SANS_SEMI)
                 .size(14)
                 .color(PAPER),
             fill_x(),
-            kicker(format!(
+            kicker(tr!(
                 "{} · LINUX {}",
                 h.compositor.to_uppercase(),
                 h.kernel
@@ -453,7 +472,7 @@ pub fn cover(app: &App) -> El<'_> {
             .width(Length::Fill),
             hgap(space::XL),
             container(small_stat(
-                "MEMÓRIA",
+                t("MEMÓRIA"),
                 format!("{:.1}", h.ram_used_gb),
                 format!("/ {:.0} GB", h.ram_total_gb)
             ))
@@ -461,16 +480,16 @@ pub fn cover(app: &App) -> El<'_> {
             hgap(space::XL),
             container(match h.battery {
                 Some((pct, chg)) => small_stat(
-                    "BATERIA DO PC",
+                    t("BATERIA DO PC"),
                     format!("{pct}"),
-                    if chg { "% · a carregar" } else { "%" }
+                    if chg { t("% · a carregar") } else { "%" }
                 ),
-                None => small_stat("ALIMENTAÇÃO", "CA".to_string(), ""),
+                None => small_stat(t("ALIMENTAÇÃO"), "CA".to_string(), ""),
             })
             .width(Length::Fill),
             hgap(space::XL),
             container(small_stat(
-                "LIGADO HÁ",
+                t("LIGADO HÁ"),
                 format!("{}h{:02}", up / 3600, (up / 60) % 60),
                 ""
             ))
@@ -483,11 +502,11 @@ pub fn cover(app: &App) -> El<'_> {
     // Quick actions + the wire.
     let id = dev.map(|d| d.id).unwrap_or(0);
     let actions = column![
-        subhead("A", "Ações rápidas"),
+        subhead("A", t("Ações rápidas")),
         row![
-            btn("PING", theme::ghost, dev.map(|_| Message::Ping(id))).width(Length::Fill),
+            btn(t("PING"), theme::ghost, dev.map(|_| Message::Ping(id))).width(Length::Fill),
             btn(
-                "ENVIAR CLIPBOARD",
+                t("ENVIAR CLIPBOARD"),
                 theme::ghost,
                 dev.map(|_| Message::Clipboard(id))
             )
@@ -498,9 +517,9 @@ pub fn cover(app: &App) -> El<'_> {
         row![
             btn(
                 if app.mic_on {
-                    "FECHAR MICROFONE"
+                    t("FECHAR MICROFONE")
                 } else {
-                    "ABRIR MICROFONE"
+                    t("ABRIR MICROFONE")
                 },
                 if app.mic_on {
                     theme::danger
@@ -512,9 +531,9 @@ pub fn cover(app: &App) -> El<'_> {
             .width(Length::Fill),
             btn(
                 if app.mirror_on {
-                    "PARAR ESPELHO"
+                    t("PARAR ESPELHO")
                 } else {
-                    "ESPELHAR ECRÃ"
+                    t("ESPELHAR ECRÃ")
                 },
                 if app.mirror_on {
                     theme::danger
@@ -531,13 +550,13 @@ pub fn cover(app: &App) -> El<'_> {
         ]
         .spacing(space::S),
         gap(space::XL),
-        deck_s("“Cada pacote é uma stream: um frame, um propósito, e fecha-se.”"),
+        deck_s(t("“Cada pacote é uma stream: um frame, um propósito, e fecha-se.”")),
         gap(space::S),
-        kicker("— NOTAS DE ARQUITETURA, HYPRLINK"),
+        kicker(t("— NOTAS DE ARQUITETURA, HYPRLINK")),
     ]
     .width(fill_portion(2));
 
-    let mut wire = column![subhead("B", "O fio")];
+    let mut wire = column![subhead("B", t("O fio"))];
     for p in app.packets.iter().rev().take(7) {
         wire = wire.push(packet_row(p, true));
     }
@@ -553,7 +572,7 @@ pub fn cover(app: &App) -> El<'_> {
         rule_c(PAPER, 1.0),
         gap(space::S),
         row![
-            kicker_c("O TELEMÓVEL", ACID),
+            kicker_c(t("O TELEMÓVEL"), ACID),
             fill_x(),
             kicker(dev.map(fmt::model).unwrap_or_default())
         ],
@@ -581,8 +600,8 @@ fn phone_state<'a>(app: &'a App, d: &'a Device) -> El<'a> {
         return Space::new().into();
     };
     column![
-        subhead("A", "Estado do telemóvel"),
-        kv_text("REDE", fmt::network_line(p)),
+        subhead("A", t("Estado do telemóvel")),
+        kv_text(t("REDE"), fmt::network_line(p)),
         kv_text(
             "WI-FI",
             p.wifi
@@ -596,7 +615,7 @@ fn phone_state<'a>(app: &'a App, d: &'a Device) -> El<'a> {
                 .unwrap_or_else(|| fmt::DASH.into())
         ),
         kv(
-            "ARMAZENAMENTO",
+            t("ARMAZENAMENTO"),
             match (fmt::gb(p.storage_used_b), fmt::gb(p.storage_total_b)) {
                 (Some(u), Some(t)) if t > 0.0 => row![
                     mono(format!("{u:.0} / {t:.0} GB"), PAPER),
@@ -608,33 +627,33 @@ fn phone_state<'a>(app: &'a App, d: &'a Device) -> El<'a> {
                 _ => El::from(mono(fmt::DASH, PAPER)),
             }
         ),
-        kv_text("MEMÓRIA", ram_line(p)),
+        kv_text(t("MEMÓRIA"), ram_line(p)),
         kv_text(
-            "TEMPERATURA",
+            t("TEMPERATURA"),
             p.battery_temp_c
                 .map(|t| format!("{t:.1} °C"))
                 .unwrap_or_else(|| fmt::DASH.into())
         ),
         kv_text(
-            "ECRÃ",
+            t("ECRÃ"),
             match p.screen_on {
-                Some(true) => "ligado",
-                Some(false) => "desligado",
+                Some(true) => t("ligado"),
+                Some(false) => t("desligado"),
                 None => fmt::DASH,
             }
         ),
         kv_text(
-            "NÃO INCOMODAR",
+            t("NÃO INCOMODAR"),
             match p.dnd {
-                Some(true) => "ativo",
-                Some(false) => "inativo",
+                Some(true) => t("ativo"),
+                Some(false) => t("inativo"),
                 None => fmt::DASH,
             }
         ),
         kv_text(
-            "NOTIFICAÇÕES",
+            t("NOTIFICAÇÕES"),
             p.notifications
-                .map(|n| format!("{n} por ler"))
+                .map(|n| tr!("{} por ler", n))
                 .unwrap_or_else(|| fmt::DASH.into())
         ),
         gap(space::XXL),
@@ -740,7 +759,7 @@ pub fn devices(app: &App) -> El<'_> {
         list,
         gap(space::L),
         btn(
-            "＋  EMPARELHAR NOVO",
+            t("＋  EMPARELHAR NOVO"),
             theme::primary,
             Some(Message::BeginPair)
         )
@@ -753,8 +772,8 @@ pub fn devices(app: &App) -> El<'_> {
     let detail: El = match app.device() {
         Some(d) => device_detail(app, d),
         None => column![
-            headline("NENHUM APARELHO.", size::D3),
-            deck_s("Emparelha um telemóvel para começar.")
+            headline(t("NENHUM APARELHO."), size::D3),
+            deck_s(t("Emparelha um telemóvel para começar."))
         ]
         .into(),
     };
@@ -762,13 +781,13 @@ pub fn devices(app: &App) -> El<'_> {
     column![
         opener(
             "02",
-            "DISPOSITIVOS",
+            t("DISPOSITIVOS"),
             format!(
                 "{} {}.",
                 number_word(n),
-                if n == 1 { "APARELHO" } else { "APARELHOS" }
+                if n == 1 { t("APARELHO") } else { t("APARELHOS") }
             ),
-            "Cada um com o seu certificado. Nenhum sem a tua autorização.",
+            t("Cada um com o seu certificado. Nenhum sem a tua autorização."),
         ),
         row![
             list,
@@ -782,7 +801,7 @@ pub fn devices(app: &App) -> El<'_> {
 fn device_card(d: &Device, selected: bool) -> El<'_> {
     let sc = state_color(d.state);
     let meta: El = if d.state == LinkState::Offline {
-        mono(format!("emparelhado {}", fmt::date(d.paired_since)), FAINT).into()
+        mono(tr!("emparelhado {}", fmt::date(d.paired_since)), FAINT).into()
     } else {
         let b = d.battery.unwrap_or(0);
         row![
@@ -843,9 +862,9 @@ fn device_detail<'a>(app: &'a App, d: &'a Device) -> El<'a> {
         caps = caps.push(tag_outline(fmt::cap(*c), SUB));
     }
     let kind_hint = match d.kind {
-        Kind::Phone => "O comando principal.",
-        Kind::Wearable => "Uma ponte para o pulso, através do telemóvel.",
-        Kind::Tablet => "Um segundo ecrã, quando aparece.",
+        Kind::Phone => t("O comando principal."),
+        Kind::Wearable => t("Uma ponte para o pulso, através do telemóvel."),
+        Kind::Tablet => t("Um segundo ecrã, quando aparece."),
     };
     column![
         row![
@@ -865,7 +884,7 @@ fn device_detail<'a>(app: &'a App, d: &'a Device) -> El<'a> {
         gap(space::XL),
         row![
             container(stat(
-                "BATERIA",
+                t("BATERIA"),
                 if online {
                     fmt::battery(d)
                 } else {
@@ -876,7 +895,7 @@ fn device_detail<'a>(app: &'a App, d: &'a Device) -> El<'a> {
             ))
             .width(Length::Fill),
             container(stat(
-                "LATÊNCIA",
+                t("LATÊNCIA"),
                 if online {
                     fmt::latency(d.latency_ms)
                 } else {
@@ -887,7 +906,7 @@ fn device_detail<'a>(app: &'a App, d: &'a Device) -> El<'a> {
             ))
             .width(Length::Fill),
             container(stat(
-                "SINAL",
+                t("SINAL"),
                 if online {
                     fmt::opt(d.rssi)
                 } else {
@@ -907,34 +926,34 @@ fn device_detail<'a>(app: &'a App, d: &'a Device) -> El<'a> {
         },
         subhead(
             if has_phone_state(app, d) { "C" } else { "A" },
-            "Identidade"
+            t("Identidade")
         ),
         rename_row(app, d),
-        kv_text("MODELO", fmt::model(d)),
-        kv_text("SISTEMA", fmt::os(d)),
+        kv_text(t("MODELO"), fmt::model(d)),
+        kv_text(t("SISTEMA"), fmt::os(d)),
         kv_text("APP HYPRLINK", fmt::opt(d.app_version.clone())),
-        kv_text("ENDEREÇO", fmt::opt(d.addr.clone())),
-        kv("CERTIFICADO SHA-256", fp_lines),
-        kv_text("EMPARELHADO DESDE", fmt::date(d.paired_since)),
-        kv_text("PROTOCOLO", "hyprlink/1 · QUIC · mTLS"),
+        kv_text(t("ENDEREÇO"), fmt::opt(d.addr.clone())),
+        kv(t("CERTIFICADO SHA-256"), fp_lines),
+        kv_text(t("EMPARELHADO DESDE"), fmt::date(d.paired_since)),
+        kv_text(t("PROTOCOLO"), "hyprlink/1 · QUIC · mTLS"),
         gap(space::XXL),
         subhead(
             if has_phone_state(app, d) { "D" } else { "B" },
-            "Capacidades"
+            t("Capacidades")
         ),
         caps.wrap().vertical_spacing(space::S),
         gap(space::XXL),
         row![
-            btn("PING", theme::ghost, online.then_some(Message::Ping(d.id))),
+            btn(t("PING"), theme::ghost, online.then_some(Message::Ping(d.id))),
             hgap(space::S),
             btn(
-                "ENVIAR CLIPBOARD",
+                t("ENVIAR CLIPBOARD"),
                 theme::ghost,
                 online.then_some(Message::Clipboard(d.id))
             ),
             fill_x(),
             btn(
-                "REVOGAR CERTIFICADO",
+                t("REVOGAR CERTIFICADO"),
                 theme::danger,
                 Some(Message::Unpair(d.id))
             ),
@@ -955,15 +974,15 @@ pub fn pairing<'a>(app: &'a App, ticket: &'a PairingTicket) -> El<'a> {
         );
     }
     let left = column![
-        kicker_c("EMPARELHAR — PASSO 1 DE 2", ACID),
+        kicker_c(t("EMPARELHAR — PASSO 1 DE 2"), ACID),
         gap(space::M),
-        headline("APONTA O TELEMÓVEL.", size::D3),
+        headline(t("APONTA O TELEMÓVEL."), size::D3),
         gap(space::M),
-        deck_s("Abre a HyprLink no Android e lê o código. Ou escreve-o à mão."),
+        deck_s(t("Abre a HyprLink no Android e lê o código. Ou escreve-o à mão.")),
         gap(space::XL),
         if ticket.code.is_some() {
             column![
-                kicker("CÓDIGO DE VERIFICAÇÃO"),
+                kicker(t("CÓDIGO DE VERIFICAÇÃO")),
                 gap(space::S),
                 code,
                 gap(space::XL)
@@ -974,7 +993,7 @@ pub fn pairing<'a>(app: &'a App, ticket: &'a PairingTicket) -> El<'a> {
         match ticket.expires_in {
             Some(left) => column![
                 row![
-                    kicker("EXPIRA EM"),
+                    kicker(t("EXPIRA EM")),
                     fill_x(),
                     kicker_c(format!("{left:.0} s"), PAPER)
                 ],
@@ -982,7 +1001,7 @@ pub fn pairing<'a>(app: &'a App, ticket: &'a PairingTicket) -> El<'a> {
                 bar(left / 120.0, ACID, 2.0),
                 gap(space::S),
             ],
-            None => column![kicker("O CÓDIGO SERVE UMA VEZ"), gap(space::S)],
+            None => column![kicker(t("O CÓDIGO SERVE UMA VEZ")), gap(space::S)],
         },
         row![
             square(
@@ -994,14 +1013,14 @@ pub fn pairing<'a>(app: &'a App, ticket: &'a PairingTicket) -> El<'a> {
                 6.0
             ),
             hgap(space::S),
-            mono("à espera de resposta…", SUB)
+            mono(t("à espera de resposta…"), SUB)
         ]
         .align_y(Alignment::Center),
         gap(space::XL),
         row![
-            btn("CANCELAR", theme::ghost, Some(Message::CancelPair)),
+            btn(t("CANCELAR"), theme::ghost, Some(Message::CancelPair)),
             fill_x(),
-            kicker("ESC PARA FECHAR")
+            kicker(t("ESC PARA FECHAR"))
         ]
         .align_y(Alignment::Center),
     ]
@@ -1075,7 +1094,7 @@ pub fn desk(app: &App) -> El<'_> {
             );
         }
         if !occupied {
-            apps = apps.push(text("vazio").font(SERIF_ITALIC).size(15).color(FAINT));
+            apps = apps.push(text(t("vazio")).font(SERIF_ITALIC).size(15).color(FAINT));
         }
         button(
             column![
@@ -1087,7 +1106,7 @@ pub fn desk(app: &App) -> El<'_> {
                         .line_height(LineHeight::Relative(1.0)),
                     fill_x(),
                     if active {
-                        text("● ATIVO").font(MONO_SEMI).size(10).color(VOID)
+                        text(t("● ATIVO")).font(MONO_SEMI).size(10).color(VOID)
                     } else {
                         text(format!("{}", ws.clients.len()))
                             .font(MONO)
@@ -1119,10 +1138,10 @@ pub fn desk(app: &App) -> El<'_> {
         }
     }
 
-    let mut gestures = column![subhead("A", "Gestos no telemóvel")];
+    let mut gestures = column![subhead("A", t("Gestos no telemóvel"))];
     for (i, g) in app.gestures.iter().enumerate() {
         gestures = gestures.push(setting(
-            g.gesture,
+            t(g.gesture),
             format!("hyprctl dispatch {}", g.action),
             switch(g.on, move |b| Message::Gesture(i, b)),
         ));
@@ -1142,38 +1161,38 @@ pub fn desk(app: &App) -> El<'_> {
         .unwrap_or_default();
 
     let compositor = column![
-        subhead("B", "Ligação ao compositor"),
+        subhead("B", t("Ligação ao compositor")),
         setting(
-            "Seguir o telemóvel",
-            "o PC muda de workspace quando o telemóvel pede",
+            t("Seguir o telemóvel"),
+            t("o PC muda de workspace quando o telemóvel pede"),
             switch(app.follow_phone, Message::FollowPhone)
         ),
-        kv_text("MONITOR", "eDP-1 · 1920×1080 @ 60"),
+        kv_text(t("MONITOR"), "eDP-1 · 1920×1080 @ 60"),
         kv_text(
-            "ATIVO",
-            format!("workspace {} — {}", app.active_ws, active_clients)
+            t("ATIVO"),
+            tr!("workspace {} — {}", app.active_ws, active_clients)
         ),
         kv_text(
-            "JANELA ATIVA",
+            t("JANELA ATIVA"),
             app.active_window
                 .as_ref()
                 .map(|w| format!("{} — {}", w.class, w.title))
                 .unwrap_or_else(|| fmt::DASH.into())
         ),
         kv_text("IPC", ".socket2.sock"),
-        kv_text("EVENTOS", "workspace>> activewindow>>"),
+        kv_text(t("EVENTOS"), "workspace>> activewindow>>"),
         gap(space::XL),
         deck_s(
-            "O telemóvel não controla o Hyprland: pede. O daemon decide, e o compositor obedece."
+            t("O telemóvel não controla o Hyprland: pede. O daemon decide, e o compositor obedece.")
         ),
     ];
 
     column![
         opener(
             "03",
-            "SECRETÁRIA",
-            "A SECRETÁRIA, VISTA DO BOLSO.",
-            "Dez workspaces do Hyprland, ao alcance do polegar."
+            t("SECRETÁRIA"),
+            t("A SECRETÁRIA, VISTA DO BOLSO."),
+            t("Dez workspaces do Hyprland, ao alcance do polegar.")
         ),
         r1,
         gap(space::S),
@@ -1220,29 +1239,29 @@ pub fn mirror_body(app: &App) -> El<'_> {
                     10.0
                 ),
                 hgap(space::M),
-                headline("EM DIRETO", size::D3).color(HOT)
+                headline(t("EM DIRETO"), size::D3).color(HOT)
             ]
             .align_y(Alignment::Center),
             gap(space::XL),
             row![
-                container(stat("IMAGENS/S", format!("{:.0}", m.fps), "fps", PAPER))
+                container(stat(t("IMAGENS/S"), format!("{:.0}", m.fps), "fps", PAPER))
                     .width(Length::Fill),
                 container(stat(
-                    "DESCODIFICAÇÃO",
+                    t("DESCODIFICAÇÃO"),
                     format!("{:.1}", m.decode_ms),
                     "ms",
                     PAPER
                 ))
                 .width(Length::Fill),
                 container(stat(
-                    "DÉBITO",
+                    t("DÉBITO"),
                     format!("{:.1}", m.kbps / 1000.0),
                     "Mb/s",
                     PAPER
                 ))
                 .width(Length::Fill),
                 container(stat(
-                    "PERDIDAS",
+                    t("PERDIDAS"),
                     format!("{}", m.dropped),
                     "",
                     if m.dropped > 20 { HOT } else { PAPER }
@@ -1253,9 +1272,9 @@ pub fn mirror_body(app: &App) -> El<'_> {
         .into()
     } else {
         column![
-            headline("PARADO", size::D3).color(MUTED),
+            headline(t("PARADO"), size::D3).color(MUTED),
             gap(space::S),
-            deck_s("Escolhe a codificação e carrega em iniciar. A janela abre-se flutuante, presa ao topo."),
+            deck_s(t("Escolhe a codificação e carrega em iniciar. A janela abre-se flutuante, presa ao topo.")),
         ]
         .into()
     };
@@ -1306,26 +1325,26 @@ pub fn mirror_body(app: &App) -> El<'_> {
     let controls = column![
         status,
         gap(space::XXL),
-        subhead("A", "Codificação"),
+        subhead("A", t("Codificação")),
         setting(
-            "Codec",
-            "MediaCodec no Android · VA-API no desktop",
+            t("Codec"),
+            t("MediaCodec no Android · VA-API no desktop"),
             codecs.into()
         ),
         setting(
-            "Imagens por segundo",
-            "limite superior; o telemóvel pode baixar",
+            t("Imagens por segundo"),
+            t("limite superior; o telemóvel pode baixar"),
             fps.into()
         ),
         setting(
-            "Escala",
-            format!("{w}×{h} a partir de 1080×2400"),
+            t("Escala"),
+            tr!("{} a partir de 1080×2400", format!("{w}×{h}")),
             scales.into()
         ),
         column![
             row![
                 column![
-                    text("Débito")
+                    text(t("Débito"))
                         .font(SANS_MEDIUM)
                         .size(size::BODY)
                         .color(PAPER),
@@ -1347,18 +1366,18 @@ pub fn mirror_body(app: &App) -> El<'_> {
         .padding(Padding::from([12, 0])),
         rule(),
         gap(space::XXL),
-        subhead("B", "Regra de janela"),
+        subhead("B", t("Regra de janela")),
         code,
         gap(space::XL),
         if live {
             btn(
-                "■  PARAR TRANSMISSÃO",
+                t("■  PARAR TRANSMISSÃO"),
                 theme::danger,
                 Some(Message::MirrorStop),
             )
         } else {
             btn(
-                "▶  INICIAR ESPELHO",
+                t("▶  INICIAR ESPELHO"),
                 theme::primary,
                 Some(Message::MirrorStart),
             )
@@ -1455,7 +1474,7 @@ fn channel<'a>(
             hgap(space::S),
             mono(
                 if on && !measured {
-                    "dBFS · sem medidor"
+                    t("dBFS · sem medidor")
                 } else {
                     "dBFS"
                 },
@@ -1463,9 +1482,9 @@ fn channel<'a>(
             ),
             fill_x(),
             if on {
-                tag("● ABERTO", ACID, VOID)
+                tag(t("● ABERTO"), ACID, VOID)
             } else {
-                tag_outline("FECHADO", MUTED)
+                tag_outline(t("FECHADO"), MUTED)
             },
         ]
         .align_y(Alignment::End),
@@ -1499,7 +1518,7 @@ fn channel<'a>(
         gap(space::XL),
         column![
             row![
-                text("Ganho")
+                text(t("Ganho"))
                     .font(SANS_MEDIUM)
                     .size(size::BODY)
                     .color(PAPER),
@@ -1534,9 +1553,9 @@ fn channel<'a>(
 pub fn audio(app: &App) -> El<'_> {
     let mic = channel(
         "01",
-        "TELEMÓVEL → PC",
-        "MICROFONE",
-        "O PC pede, o telemóvel aceita — e passa a ser um microfone sem fios no PipeWire.",
+        t("TELEMÓVEL → PC"),
+        t("MICROFONE"),
+        t("O PC pede, o telemóvel aceita — e passa a ser um microfone sem fios no PipeWire."),
         app.mic_on,
         app.mic_measured.then_some(app.mic),
         app.mic_peak,
@@ -1545,17 +1564,17 @@ pub fn audio(app: &App) -> El<'_> {
         Message::Mic,
         Message::MicGain,
         vec![
-            kv_text("PACOTES", packets::MIC_FAMILY),
-            kv_text("FONTE PIPEWIRE", "hyprlink-mic"),
-            kv_text("FORMATO", "PCM · 48 kHz · mono"),
-            kv_text("MÓDULO", "mic.rs"),
+            kv_text(t("PACOTES"), packets::MIC_FAMILY),
+            kv_text(t("FONTE PIPEWIRE"), "hyprlink-mic"),
+            kv_text(t("FORMATO"), "PCM · 48 kHz · mono"),
+            kv_text(t("MÓDULO"), "mic.rs"),
         ],
     );
     let tap = channel(
         "02",
-        "PC → TELEMÓVEL",
-        "RETORNO",
-        "O som do desktop no telemóvel. Em modo coluna, o telemóvel é uma saída do PC.",
+        t("PC → TELEMÓVEL"),
+        t("RETORNO"),
+        t("O som do desktop no telemóvel. Em modo coluna, o telemóvel é uma saída do PC."),
         app.tap_on,
         app.tap_measured.then_some(app.tap),
         app.tap_peak,
@@ -1565,29 +1584,29 @@ pub fn audio(app: &App) -> El<'_> {
         Message::TapGain,
         vec![
             setting(
-                "Modo coluna",
-                "o telemóvel aparece no PC como a saída hyprlink-speaker",
+                t("Modo coluna"),
+                t("o telemóvel aparece no PC como a saída hyprlink-speaker"),
                 switch(app.speaker, Message::Speaker),
             ),
             kv_text(
-                "ORIGEM",
+                t("ORIGEM"),
                 if app.speaker {
                     "sink hyprlink-speaker"
                 } else {
-                    "todo o áudio do PC"
+                    t("todo o áudio do PC")
                 },
             ),
-            kv_text("PACOTES", packets::TAP_FAMILY),
-            kv_text("TRANSPORTE", "datagramas QUIC"),
-            kv_text("MÓDULO", "tap.rs · speaker.rs"),
+            kv_text(t("PACOTES"), packets::TAP_FAMILY),
+            kv_text(t("TRANSPORTE"), "datagramas QUIC"),
+            kv_text(t("MÓDULO"), "tap.rs · speaker.rs"),
         ],
     );
     column![
         opener(
             "05",
-            "ÁUDIO",
-            "DOIS SENTIDOS, UM FIO.",
-            "A voz sobe; a música desce. PCM a 48 kHz, por cima do mesmo QUIC."
+            t("ÁUDIO"),
+            t("DOIS SENTIDOS, UM FIO."),
+            t("A voz sobe; a música desce. PCM a 48 kHz, por cima do mesmo QUIC.")
         ),
         crate::pages::phone_audio(app),
         gap(space::XXL),
@@ -1605,7 +1624,7 @@ pub fn sensors_grid(app: &App) -> El<'_> {
     let card = |k: SensorKind| -> El<'_> {
         let (name, value, unit, detail, target, min, max) = match k {
             SensorKind::Accel => (
-                "ACELERÓMETRO",
+                t("ACELERÓMETRO"),
                 format!(
                     "{:.2}",
                     (s.accel[0].powi(2) + s.accel[1].powi(2) + s.accel[2].powi(2)).sqrt()
@@ -1620,7 +1639,7 @@ pub fn sensors_grid(app: &App) -> El<'_> {
                 10.2,
             ),
             SensorKind::Gyro => (
-                "GIROSCÓPIO",
+                t("GIROSCÓPIO"),
                 format!(
                     "{:.3}",
                     (s.gyro[0].powi(2) + s.gyro[1].powi(2) + s.gyro[2].powi(2)).sqrt()
@@ -1635,41 +1654,41 @@ pub fn sensors_grid(app: &App) -> El<'_> {
                 0.5,
             ),
             SensorKind::Light => (
-                "LUZ AMBIENTE",
+                t("LUZ AMBIENTE"),
                 format!("{:.0}", s.lux),
                 "lux",
-                "→ brightnessctl, curva suave".into(),
+                t("→ brightnessctl, curva suave").into(),
                 "iio:hyprlink-als",
                 100.0,
                 500.0,
             ),
             SensorKind::Proximity => (
-                "PROXIMIDADE",
+                t("PROXIMIDADE"),
                 if s.proximity_cm < 1.0 {
-                    "PERTO".into()
+                    t("PERTO").into()
                 } else {
-                    "LIVRE".into()
+                    t("LIVRE").into()
                 },
                 if s.proximity_cm < 1.0 { "0 cm" } else { "5 cm" },
-                "telemóvel virado para baixo → silêncio".into(),
+                t("telemóvel virado para baixo → silêncio").into(),
                 "dbus:dev.hyprlink.Proximity",
                 -1.0,
                 6.0,
             ),
             SensorKind::Pressure => (
-                "BARÓMETRO",
+                t("BARÓMETRO"),
                 format!("{:.1}", s.pressure_hpa),
                 "hPa",
-                "altitude relativa ±0.4 m".into(),
+                t("altitude relativa ±0.4 m").into(),
                 "dbus:dev.hyprlink.Pressure",
                 1011.6,
                 1013.2,
             ),
             SensorKind::Thermal => (
-                "TEMPERATURA",
+                t("TEMPERATURA"),
                 format!("{:.1}", s.battery_temp),
                 "°C",
-                "bateria · throttling a 42 °C".into(),
+                t("bateria · throttling a 42 °C").into(),
                 "hwmon:hyprlink",
                 29.0,
                 34.0,
@@ -1707,7 +1726,7 @@ pub fn sensors_grid(app: &App) -> El<'_> {
             gap(space::M),
             row![
                 kicker_c(
-                    if on { "PONTE →" } else { "PONTE ·" },
+                    if on { t("PONTE →") } else { t("PONTE ·") },
                     if on { ACID } else { FAINT }
                 ),
                 hgap(space::S),
@@ -1730,7 +1749,7 @@ pub fn sensors_grid(app: &App) -> El<'_> {
         row![card(k[3]), card(k[4]), card(k[5])].spacing(space::L),
         gap(space::XL),
         mono(
-            format!(
+            tr!(
                 "{} de 6 sensores em ponte · 20 Hz · {} (proposto)",
                 app.bridges.len(),
                 packets::SENSOR_FRAME
@@ -1745,16 +1764,16 @@ pub fn sensors_grid(app: &App) -> El<'_> {
 
 pub fn presence_body(app: &App) -> El<'_> {
     let (zone, zc) = if !app.rssi_known {
-        ("Ainda sem leitura — o telemóvel não envia RSSI.", MUTED)
+        (t("Ainda sem leitura — o telemóvel não envia RSSI."), MUTED)
     } else if app.rssi > app.unlock_at {
-        ("Perto — ao alcance da mão.", ACID)
+        (t("Perto — ao alcance da mão."), ACID)
     } else if app.rssi > app.lock_at {
-        ("Na sala, mas longe da secretária.", PAPER)
+        (t("Na sala, mas longe da secretária."), PAPER)
     } else {
-        ("Longe. A sessão vai trancar-se.", HOT)
+        (t("Longe. A sessão vai trancar-se."), HOT)
     };
     let now = column![
-        kicker(format!(
+        kicker(tr!(
             "SINAL AGORA · {}",
             app.device().map(fmt::name).unwrap_or_else(|| "—".into())
         )),
@@ -1817,7 +1836,7 @@ pub fn presence_body(app: &App) -> El<'_> {
         .into()
     };
 
-    let mut rules = column![subhead("·", "Regras")];
+    let mut rules = column![subhead("·", t("Regras"))];
     for (i, r) in app.rules.iter().enumerate() {
         rules = rules.push(column![
             row![
@@ -1827,18 +1846,18 @@ pub fn presence_body(app: &App) -> El<'_> {
                     .color(if r.on { ACID } else { FAINT })
                     .width(56),
                 column![
-                    text(r.trigger)
+                    text(t(r.trigger))
                         .font(SANS_SEMI)
                         .size(15)
                         .color(if r.on { PAPER } else { SUB }),
                     gap(2.0),
-                    mono(r.detail, MUTED).size(11.5)
+                    mono(t(r.detail), MUTED).size(11.5)
                 ]
                 .width(fill_portion(3)),
                 row![
                     text("→").font(MONO).size(13).color(FAINT),
                     hgap(space::S),
-                    mono(r.action, if r.on { PAPER } else { MUTED })
+                    mono(t(r.action), if r.on { PAPER } else { MUTED })
                 ]
                 .width(fill_portion(3))
                 .align_y(Alignment::Center),
@@ -1855,16 +1874,16 @@ pub fn presence_body(app: &App) -> El<'_> {
         gap(space::XXL),
         row![
             threshold(
-                "Limiar de bloqueio",
-                "abaixo disto durante 10 s → hyprlock",
+                t("Limiar de bloqueio"),
+                t("abaixo disto durante 10 s → hyprlock"),
                 app.lock_at,
                 HOT,
                 Message::LockAt
             ),
             hgap(space::GUTTER),
             threshold(
-                "Limiar de desbloqueio",
-                "acima disto, com mTLS válido → abre",
+                t("Limiar de desbloqueio"),
+                t("acima disto, com mTLS válido → abre"),
                 app.unlock_at,
                 ACID,
                 Message::UnlockAt
@@ -1882,18 +1901,18 @@ pub fn sensors(app: &App) -> El<'_> {
     column![
         opener(
             "09",
-            "SENSORES & PRESENÇA",
-            "ESTÁS AQUI?",
-            "A sessão tranca-se quando te afastas; o que o telemóvel sente chega ao desktop."
+            t("SENSORES & PRESENÇA"),
+            t("ESTÁS AQUI?"),
+            t("A sessão tranca-se quando te afastas; o que o telemóvel sente chega ao desktop.")
         ),
         crate::pages::proposed_banner(
-            "Ainda sem pacotes no protocolo: presence.rssi e sensor.frame estão propostos. Esta página mostra o desenho com dados simulados."
+            t("Ainda sem pacotes no protocolo: presence.rssi e sensor.frame estão propostos. Esta página mostra o desenho com dados simulados.")
         ),
         gap(space::XXL),
-        subhead("A", "Presença"),
+        subhead("A", t("Presença")),
         presence_body(app),
         gap(space::GUTTER),
-        subhead("B", "Sensores em ponte"),
+        subhead("B", t("Sensores em ponte")),
         sensors_grid(app),
     ]
     .into()
@@ -1920,7 +1939,7 @@ pub fn journal(app: &App) -> El<'_> {
 
     let toolbar = row![
         chip(
-            format!("TODOS {}", app.packets.len()),
+            tr!("TODOS {}", app.packets.len()),
             app.filter == Filter::All,
             Message::Filter(Filter::All)
         ),
@@ -1935,7 +1954,7 @@ pub fn journal(app: &App) -> El<'_> {
             Message::Filter(Filter::Rx)
         ),
         hgap(space::L),
-        text_input("filtrar: hypr.dispatch, mic, battery…", &app.query)
+        text_input(t("filtrar: hypr.dispatch, mic, battery…"), &app.query)
             .on_input(Message::Query)
             .font(MONO)
             .size(12)
@@ -1945,25 +1964,25 @@ pub fn journal(app: &App) -> El<'_> {
         fill_x(),
         btn(
             if app.paused {
-                "▶  RETOMAR"
+                t("▶  RETOMAR")
             } else {
-                "❚❚  PAUSAR"
+                t("❚❚  PAUSAR")
             },
             theme::ghost,
             Some(Message::Pause(!app.paused))
         ),
         hgap(space::S),
-        btn("LIMPAR", theme::ghost, Some(Message::ClearJournal)),
+        btn(t("LIMPAR"), theme::ghost, Some(Message::ClearJournal)),
     ]
     .spacing(space::S)
     .align_y(Alignment::Center);
 
     let header = row![
         kicker("T+ (S)").width(84),
-        kicker("DIR").width(36),
-        kicker("TIPO").width(fill_portion(4)),
-        kicker("TAMANHO").width(80),
-        kicker("NOTA").width(fill_portion(4)),
+        kicker(t("DIR")).width(36),
+        kicker(t("TIPO")).width(fill_portion(4)),
+        kicker(t("TAMANHO")).width(80),
+        kicker(t("NOTA")).width(fill_portion(4)),
     ]
     .padding(Padding::from([8, 0]));
 
@@ -1971,7 +1990,7 @@ pub fn journal(app: &App) -> El<'_> {
     if visible.is_empty() {
         list = list.push(
             container(deck_s(
-                "Nada a mostrar. O fio está calado — ou o filtro é demasiado exigente.",
+                t("Nada a mostrar. O fio está calado — ou o filtro é demasiado exigente."),
             ))
             .padding(Padding::from([space::XL, 0.0])),
         );
@@ -1983,9 +2002,9 @@ pub fn journal(app: &App) -> El<'_> {
     column![
         opener(
             "10",
-            "DIÁRIO",
-            "DIÁRIO DE BORDO.",
-            "Cada pacote, pela ordem em que aconteceu."
+            t("DIÁRIO"),
+            t("DIÁRIO DE BORDO."),
+            t("Cada pacote, pela ordem em que aconteceu.")
         ),
         toolbar,
         gap(space::XL),
@@ -2003,10 +2022,10 @@ fn rename_row<'a>(app: &'a App, d: &'a Device) -> El<'a> {
     let value: &str = if editing { &app.rename_input } else { &d.name };
     let changed = editing && app.rename_input.trim() != d.name;
     column![
-        kicker("NOME NO PC"),
+        kicker(t("NOME NO PC")),
         gap(space::XS),
         row![
-            iced::widget::text_input("nome deste telemóvel", value)
+            iced::widget::text_input(t("nome deste telemóvel"), value)
                 .on_input(move |s| Message::RenameInput(d.id, s))
                 .on_submit(Message::RenameSave(d.id))
                 .size(14)
@@ -2014,7 +2033,7 @@ fn rename_row<'a>(app: &'a App, d: &'a Device) -> El<'a> {
                 .style(theme::input),
             hgap(space::S),
             btn(
-                "GUARDAR",
+                t("GUARDAR"),
                 theme::primary,
                 changed.then_some(Message::RenameSave(d.id))
             ),
