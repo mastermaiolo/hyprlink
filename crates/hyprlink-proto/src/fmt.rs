@@ -1,6 +1,8 @@
 //! Everything a human reads about the link is written here — never on the
-//! wire. pt-PT. The daemon sends data; this module turns it into words.
+//! wire. Source text is pt-PT; [`crate::i18n`] turns it into the current
+//! language. The daemon sends data; this module turns it into words.
 
+use crate::i18n::{self, t};
 use crate::link::{
     CamCodec, Cap, Codec, Device, ErrorKind, Kind, LinkState, Network, Notice, Op, Origin,
     PhoneStatus, PhoneStream, Ringer, TransferState,
@@ -10,45 +12,45 @@ pub const DASH: &str = "—";
 
 pub fn kind(k: Kind) -> &'static str {
     match k {
-        Kind::Phone => "TELEMÓVEL",
-        Kind::Tablet => "TABLET",
-        Kind::Wearable => "WEARABLE",
+        Kind::Phone => t("TELEMÓVEL"),
+        Kind::Tablet => t("TABLET"),
+        Kind::Wearable => t("WEARABLE"),
     }
 }
 
 pub fn state(s: LinkState) -> &'static str {
     match s {
-        LinkState::Linked => "LIGADO",
-        LinkState::Idle => "EM ESPERA",
-        LinkState::Offline => "FORA DE ALCANCE",
+        LinkState::Linked => t("LIGADO"),
+        LinkState::Idle => t("EM ESPERA"),
+        LinkState::Offline => t("FORA DE ALCANCE"),
     }
 }
 
 pub fn phase(p: crate::link::LinkPhase) -> &'static str {
     use crate::link::LinkPhase::*;
     match p {
-        Connected => "LIGADO",
-        Connecting => "A LIGAR…",
-        Disconnected => "DESLIGADO",
+        Connected => t("LIGADO"),
+        Connecting => t("A LIGAR…"),
+        Disconnected => t("DESLIGADO"),
     }
 }
 
 pub fn cap(c: Cap) -> &'static str {
     match c {
-        Cap::Workspaces => "workspaces",
-        Cap::Mirror => "espelho",
-        Cap::Webcam => "câmara",
-        Cap::Mic => "mic",
-        Cap::Tap => "retorno",
-        Cap::Speaker => "coluna",
-        Cap::Sensors => "sensores",
-        Cap::Presence => "presença",
-        Cap::Clipboard => "clipboard",
-        Cap::Files => "ficheiros",
-        Cap::Notifications => "notificações",
-        Cap::Input => "trackpad",
-        Cap::PhoneStatus => "estado do telemóvel",
-        Cap::MediaSession => "mídia do telemóvel",
+        Cap::Workspaces => t("workspaces"),
+        Cap::Mirror => t("espelho"),
+        Cap::Webcam => t("câmara"),
+        Cap::Mic => t("mic"),
+        Cap::Tap => t("retorno"),
+        Cap::Speaker => t("coluna"),
+        Cap::Sensors => t("sensores"),
+        Cap::Presence => t("presença"),
+        Cap::Clipboard => t("clipboard"),
+        Cap::Files => t("ficheiros"),
+        Cap::Notifications => t("notificações"),
+        Cap::Input => t("trackpad"),
+        Cap::PhoneStatus => t("estado do telemóvel"),
+        Cap::MediaSession => t("multimédia do telemóvel"),
     }
 }
 
@@ -94,7 +96,8 @@ pub fn battery(d: &Device) -> String {
 }
 
 pub fn latency(v: Option<f32>) -> String {
-    v.map(|v| format!("{v:.1}")).unwrap_or_else(|| DASH.into())
+    v.map(|v| decimal(v as f64, 1))
+        .unwrap_or_else(|| DASH.into())
 }
 
 /// Lowercase hex → two lines of four groups, uppercase, `·`-free.
@@ -132,7 +135,7 @@ pub fn gb(bytes: Option<u64>) -> Option<f32> {
 pub fn network(p: &PhoneStatus) -> (String, String) {
     match p.network {
         Some(Network::Cellular) => (
-            p.cell_gen.clone().unwrap_or_else(|| "REDE".into()),
+            p.cell_gen.clone().unwrap_or_else(|| t("REDE").into()),
             p.carrier.clone().unwrap_or_default(),
         ),
         Some(Network::Wifi) => (
@@ -143,7 +146,7 @@ pub fn network(p: &PhoneStatus) -> (String, String) {
                 .unwrap_or_default(),
         ),
         Some(Network::Ethernet) => ("LAN".into(), String::new()),
-        Some(Network::None) => ("SEM REDE".into(), String::new()),
+        Some(Network::None) => (t("SEM REDE").into(), String::new()),
         None => (DASH.into(), String::new()),
     }
 }
@@ -160,21 +163,21 @@ pub fn network_line(p: &PhoneStatus) -> String {
 
 fn op(o: Op) -> &'static str {
     match o {
-        Op::Ping => "Ping",
-        Op::Clipboard => "Área de transferência",
-        Op::Mic => "Microfone",
-        Op::Tap => "Retorno",
-        Op::Speaker => "Modo coluna",
-        Op::Mirror => "Espelho",
-        Op::Sensors => "Sensores",
-        Op::Presence => "Presença",
-        Op::Pairing => "Emparelhamento",
-        Op::Workspace => "Workspace",
-        Op::Webcam => "Câmara",
-        Op::Files => "Ficheiros",
-        Op::Media => "Multimédia",
-        Op::Dispatch => "Dispatch",
-        Op::PhoneAudio => "Volume do telemóvel",
+        Op::Ping => t("Ping"),
+        Op::Clipboard => t("Área de transferência"),
+        Op::Mic => t("Microfone"),
+        Op::Tap => t("Retorno"),
+        Op::Speaker => t("Modo coluna"),
+        Op::Mirror => t("Espelho"),
+        Op::Sensors => t("Sensores"),
+        Op::Presence => t("Presença"),
+        Op::Pairing => t("Emparelhamento"),
+        Op::Workspace => t("Workspace"),
+        Op::Webcam => t("Câmara"),
+        Op::Files => t("Ficheiros"),
+        Op::Media => t("Multimédia"),
+        Op::Dispatch => t("Dispatch"),
+        Op::PhoneAudio => t("Volume do telemóvel"),
     }
 }
 
@@ -183,20 +186,23 @@ pub fn notice(n: &Notice, lookup: impl Fn(u32) -> Option<String>) -> String {
     let who = |id: u32| lookup(id).unwrap_or_else(|| format!("#{id}"));
     match n {
         Notice::PingReply { device, rtt_ms } => {
-            format!("PING · {} respondeu em {rtt_ms:.1} ms", who(*device))
+            let rtt = decimal(*rtt_ms as f64, 1);
+            crate::tr!("PING · {} respondeu em {} ms", who(*device), rtt)
         }
-        Notice::ClipboardSent { device } => format!("ÁREA DE TRANSFERÊNCIA → {}", who(*device)),
-        Notice::Paired { name, .. } => format!("EMPARELHADO · {}", name.to_uppercase()),
-        Notice::Revoked { name, .. } => format!("{} · certificado revogado", name.to_uppercase()),
-        Notice::MirrorStarted => "ESPELHO · transmissão iniciada".into(),
-        Notice::Failed { op: o, error } => format!(
+        Notice::ClipboardSent { device } => crate::tr!("ÁREA DE TRANSFERÊNCIA → {}", who(*device)),
+        Notice::Paired { name, .. } => crate::tr!("EMPARELHADO · {}", name.to_uppercase()),
+        Notice::Revoked { name, .. } => {
+            crate::tr!("{} · certificado revogado", name.to_uppercase())
+        }
+        Notice::MirrorStarted => t("ESPELHO · transmissão iniciada").into(),
+        Notice::Failed { op: o, error } => crate::tr!(
             "{} · {}",
             op(*o).to_uppercase(),
             match error {
-                ErrorKind::NotImplemented => "ainda por implementar",
-                ErrorKind::Offline => "sem telemóvel ligado",
-                ErrorKind::Refused => "recusado pelo telemóvel",
-                ErrorKind::Timeout => "sem resposta",
+                ErrorKind::NotImplemented => t("ainda por implementar"),
+                ErrorKind::Offline => t("sem telemóvel ligado"),
+                ErrorKind::Refused => t("recusado pelo telemóvel"),
+                ErrorKind::Timeout => t("sem resposta"),
             }
         ),
     }
@@ -204,18 +210,18 @@ pub fn notice(n: &Notice, lookup: impl Fn(u32) -> Option<String>) -> String {
 
 pub fn stream(s: PhoneStream) -> &'static str {
     match s {
-        PhoneStream::Media => "Multimédia",
-        PhoneStream::Ring => "Toque",
-        PhoneStream::Notification => "Notificações",
-        PhoneStream::Alarm => "Alarme",
+        PhoneStream::Media => t("Multimédia"),
+        PhoneStream::Ring => t("Toque"),
+        PhoneStream::Notification => t("Notificações"),
+        PhoneStream::Alarm => t("Alarme"),
     }
 }
 
 pub fn ringer(r: Ringer) -> &'static str {
     match r {
-        Ringer::Normal => "SOM",
-        Ringer::Vibrate => "VIBRAR",
-        Ringer::Silent => "SILÊNCIO",
+        Ringer::Normal => t("SOM"),
+        Ringer::Vibrate => t("VIBRAR"),
+        Ringer::Silent => t("SILÊNCIO"),
     }
 }
 
@@ -228,21 +234,31 @@ pub fn cam_codec(c: CamCodec) -> &'static str {
 
 pub fn origin(o: Origin) -> &'static str {
     match o {
-        Origin::Phone => "TELEMÓVEL",
-        Origin::Pc => "PC",
+        Origin::Phone => t("TELEMÓVEL"),
+        Origin::Pc => t("PC"),
     }
 }
 
 pub fn transfer_state(s: TransferState) -> &'static str {
     match s {
-        TransferState::Active => "A TRANSFERIR",
-        TransferState::Done => "CONCLUÍDO",
-        TransferState::Failed => "FALHOU",
-        TransferState::Cancelled => "CANCELADO",
+        TransferState::Active => t("A TRANSFERIR"),
+        TransferState::Done => t("CONCLUÍDO"),
+        TransferState::Failed => t("FALHOU"),
+        TransferState::Cancelled => t("CANCELADO"),
     }
 }
 
-/// 1 234 567 bytes → "1,2 MB" (pt-PT decimal comma).
+/// `v` with `places` decimals; comma in pt-PT / pt-BR / es, point in en / zh.
+pub fn decimal(v: f64, places: usize) -> String {
+    let out = format!("{v:.places$}");
+    if i18n::get().decimal_comma() {
+        out.replace('.', ",")
+    } else {
+        out
+    }
+}
+
+/// 1 234 567 bytes → "1,2 MB" (decimal comma in pt/es, point in en/zh).
 pub fn size(bytes: u64) -> String {
     let b = bytes as f64;
     let (v, u) = if b >= 1e9 {
@@ -254,7 +270,15 @@ pub fn size(bytes: u64) -> String {
     } else {
         return format!("{bytes} B");
     };
-    format!("{v:.1} {u}").replace('.', ",")
+    format!("{} {u}", decimal(v, 1))
+}
+
+/// Short month name in the current language (`month0` is 0–11).
+pub fn month(month0: usize) -> &'static str {
+    const M: [&str; 12] = [
+        "jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez",
+    ];
+    t(M[month0.min(11)])
 }
 
 /// Unix seconds → "14:05" (today) or "3 out 14:05".
@@ -267,13 +291,10 @@ pub fn time(unix: u64) -> String {
     if t.date_naive() == now.date_naive() {
         t.format("%H:%M").to_string()
     } else {
-        const M: [&str; 12] = [
-            "jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez",
-        ];
-        format!(
-            "{} {} {}",
+        crate::tr!(
+            "{0} {1} {2}",
             t.day(),
-            M[t.month0() as usize],
+            month(t.month0() as usize),
             t.format("%H:%M")
         )
     }
@@ -284,9 +305,9 @@ pub fn ago(unix: u64) -> String {
     let now = chrono::Local::now().timestamp().max(0) as u64;
     let d = now.saturating_sub(unix);
     match d {
-        0..=59 => "agora".into(),
-        60..=3599 => format!("há {} min", d / 60),
-        3600..=86_399 => format!("há {} h", d / 3600),
+        0..=59 => t("agora").into(),
+        60..=3599 => crate::tr!("há {} min", d / 60),
+        3600..=86_399 => crate::tr!("há {} h", d / 3600),
         _ => time(unix),
     }
 }

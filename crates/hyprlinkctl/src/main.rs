@@ -25,6 +25,7 @@
 mod legacy;
 
 use hyprlink_proto::fmt;
+use hyprlink_proto::i18n::{self, Lang};
 use hyprlink_proto::host::Probe;
 #[cfg(feature = "mock")]
 use hyprlink_proto::link::mock::Simulator;
@@ -210,7 +211,7 @@ fn human(s: &Snapshot) -> String {
                 .unwrap_or_else(|| fmt::DASH.into()),
             fmt::latency(s.latency_ms)
         ),
-        None => "sem telemóvel".into(),
+        None => i18n::t("sem telemóvel").into(),
     };
     let pc = s
         .host
@@ -223,11 +224,17 @@ fn human(s: &Snapshot) -> String {
         })
         .unwrap_or_default();
     format!(
-        "{phone}\n  mic {} · tap {}{} · espelho {} · workspace {}\n{pc}",
+        "{phone}\n  mic {} · tap {}{} · {} {} · {} {}\n{pc}",
         if s.mic.on { "on" } else { "off" },
         if s.tap.on { "on" } else { "off" },
-        if s.tap.speaker { " (coluna)" } else { "" },
+        if s.tap.speaker {
+            format!(" ({})", i18n::t("coluna"))
+        } else {
+            String::new()
+        },
+        i18n::t("espelho"),
         if s.mirror.on { "on" } else { "off" },
+        i18n::t("workspace"),
         fmt::opt(s.workspace)
     )
 }
@@ -256,17 +263,46 @@ fn ok(json: bool, msg: &str, extra: serde_json::Value) -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "uso: hyprlinkctl <watch|status|ping|clipboard|pair|mic|tap|speaker|mirror|ws|open> [args] [--json]\n\
+        "uso: hyprlinkctl <watch|status|ping|clipboard|pair|mic|tap|speaker|mirror|ws|open> [args] [--json] [--lang L]\n\
          \n  sem --json, status|ping|mic|tap|speaker usam o protocolo de texto do daemon (ok …/erro: …)\
          \n  só texto: send <ficheiro> · dispatch <cmd> · lock · notif <título> [corpo] · url · phone-url · phone-app\n\
          \n  watch --json [--interval MS]   uma linha JSON por instantâneo (por omissão 500 ms)\
-         \n  mic|tap|speaker on|off|toggle\n  mirror start|stop|toggle\n  ws <1-10>"
+         \n  mic|tap|speaker on|off|toggle\n  mirror start|stop|toggle\n  ws <1-10>\
+         \n  --lang pt-PT|pt-BR|en|es|zh   idioma dos textos (por omissão, o do ambiente)"
     );
     ExitCode::from(2)
 }
 
+/// Tira `--lang X` / `--lang=X` dos argumentos; devolve o idioma pedido
+/// (`Err` com o valor se não for um dos cinco).
+fn take_lang(args: Vec<String>) -> (Vec<String>, Result<Option<Lang>, String>) {
+    let mut out = Vec::with_capacity(args.len());
+    let mut lang = Ok(None);
+    let mut it = args.into_iter();
+    while let Some(a) = it.next() {
+        let value = if a == "--lang" {
+            Some(it.next().unwrap_or_default())
+        } else {
+            a.strip_prefix("--lang=").map(str::to_owned)
+        };
+        match value {
+            Some(v) => lang = Lang::parse(&v).map(Some).ok_or(v),
+            None => out.push(a),
+        }
+    }
+    (out, lang)
+}
+
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let (args, lang) = take_lang(std::env::args().skip(1).collect());
+    match lang {
+        // Sem flag, o idioma vem do ambiente (LC_ALL / LC_MESSAGES / LANG).
+        Ok(l) => i18n::set(l.unwrap_or_else(i18n::detect)),
+        Err(v) => {
+            eprintln!("erro: --lang {v:?} desconhecido (pt-PT|pt-BR|en|es|zh)");
+            return ExitCode::from(2);
+        }
+    }
     let json = args.iter().any(|a| a == "--json");
     let first = args
         .iter()
@@ -416,5 +452,28 @@ fn main() -> ExitCode {
             }
         }
         _ => usage(),
+    }
+}
+
+#[cfg(test)]
+mod lang_tests {
+    use super::*;
+
+    fn v(a: &[&str]) -> Vec<String> {
+        a.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn take_lang_strips_the_flag_in_both_spellings() {
+        let (rest, l) = take_lang(v(&["--lang", "es", "status", "--json"]));
+        assert_eq!(rest, v(&["status", "--json"]));
+        assert_eq!(l, Ok(Some(Lang::EsEs)));
+        let (rest, l) = take_lang(v(&["status", "--lang=zh"]));
+        assert_eq!(rest, v(&["status"]));
+        assert_eq!(l, Ok(Some(Lang::Zh)));
+        let (rest, l) = take_lang(v(&["status"]));
+        assert_eq!(rest, v(&["status"]));
+        assert_eq!(l, Ok(None));
+        assert_eq!(take_lang(v(&["--lang", "klingon"])).1, Err("klingon".into()));
     }
 }
