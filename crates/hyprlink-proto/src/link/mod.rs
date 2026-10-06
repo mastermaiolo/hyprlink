@@ -261,8 +261,10 @@ pub enum Event {
         down_kbps: f32,
     },
     Sensors(Sensors),
-    /// Linear 0–1 levels, ≥ 30 Hz. `None` = not measured (e.g. the mic has
-    /// no meter yet).
+    /// Linear 0–1 levels, ≥ 30 Hz. `None` = that channel is OFF (the mic is
+    /// not streaming / the tap is not running); `Some` = on, with its level
+    /// (`0.0` when on but not measured yet). The GUI derives the on/off
+    /// state of both toggles from this, so it never shows a stale "ABERTO".
     Levels {
         mic: Option<f32>,
         tap: Option<f32>,
@@ -565,6 +567,10 @@ pub struct Settings {
     pub downloads_dir: String,
     pub daemon_version: String,
     pub socket: String,
+    /// When the daemon started (Unix seconds) — the GUI shows its uptime.
+    /// `0` = unknown (an older daemon).
+    #[serde(default)]
+    pub started_unix: u64,
 }
 
 /// Commands for the new pages. Kept apart so the original enum stays readable.

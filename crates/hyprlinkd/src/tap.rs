@@ -119,6 +119,7 @@ pub fn stop(handle: &TapHandle, hud: &Arc<Mutex<HudState>>) {
     }
     if hud.lock().unwrap().modules.audio_tap_active {
         state::set_audio_tap_active(hud, false);
+        push_log(hud, "[i] audio tap parado".to_string());
     }
 }
 
@@ -432,6 +433,13 @@ async fn run_once(
                 let _ = dead.set_state(gst::State::Null);
             }
         }
+        push_log(
+            &hud_thread,
+            format!(
+                "[i] audio tap: sessão encerrada ({} KB no total)",
+                total / 1024
+            ),
+        );
         let _ = tx.send(fim);
     });
 

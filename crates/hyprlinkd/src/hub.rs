@@ -173,6 +173,7 @@ mod tests {
             downloads_dir: String::new(),
             daemon_version: String::new(),
             socket: String::new(),
+            started_unix: 0,
         })));
         assert!(a.is_some() && b.is_some() && a != b);
     }

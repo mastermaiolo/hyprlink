@@ -19,6 +19,10 @@ use iced::{Alignment, Element, Length, Padding, Subscription, Task};
 use std::collections::{HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
+/// How long a toggle keeps the user's choice before the daemon's state wins
+/// (the phone has to accept a mic request; the tap pipeline takes a moment).
+const TOGGLE_GRACE: Duration = Duration::from_secs(3);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Section {
     Capa,
@@ -168,6 +172,11 @@ pub struct App {
     pub mic_gain: f32,
     pub mic_measured: bool,
     pub tap_measured: bool,
+    /// When the user last flipped each toggle. For `TOGGLE_GRACE` after a
+    /// click the GUI keeps the user's choice; after that the daemon's
+    /// `Event::Levels` (None = off) is the truth.
+    mic_clicked: Option<Instant>,
+    tap_clicked: Option<Instant>,
     /// Tap source is the `hyprlink-speaker` sink (phone as PC output).
     pub speaker: bool,
     pub tap_gain: f32,
@@ -362,7 +371,7 @@ impl App {
             bridges: [SensorKind::Accel, SensorKind::Light, SensorKind::Proximity]
                 .into_iter()
                 .collect(),
-            mic_on: true,
+            mic_on: false,
             tap_on: false,
             mic: 0.0,
             tap: 0.0,
@@ -371,6 +380,8 @@ impl App {
             mic_gain: 0.72,
             mic_measured: false,
             tap_measured: false,
+            mic_clicked: None,
+            tap_clicked: None,
             speaker: true,
             tap_gain: 0.85,
             mic_hist: History::new(160),
@@ -646,9 +657,17 @@ impl App {
                 }
             }
             Event::Levels { mic, tap } => {
-                // `None` = the daemon does not measure that channel (yet).
+                // `None` = that channel is off. The toggles follow the
+                // daemon, except right after a click (the phone may still be
+                // accepting the request).
                 self.mic_measured = mic.is_some();
                 self.tap_measured = tap.is_some();
+                if self.mic_clicked.is_none_or(|t| t.elapsed() > TOGGLE_GRACE) {
+                    self.mic_on = mic.is_some();
+                }
+                if self.tap_clicked.is_none_or(|t| t.elapsed() > TOGGLE_GRACE) {
+                    self.tap_on = tap.is_some();
+                }
                 self.mic = (mic.unwrap_or(0.0) * self.mic_gain * 1.25).min(1.0);
                 self.tap = (tap.unwrap_or(0.0) * self.tap_gain).min(1.0);
                 self.mic_peak = if self.mic > self.mic_peak {
@@ -850,6 +869,7 @@ impl App {
             }
             Message::Mic(b) => {
                 self.mic_on = b;
+                self.mic_clicked = Some(Instant::now());
                 self.link.send(Command::SetMic(b));
             }
             Message::Speaker(b) => {
@@ -858,6 +878,7 @@ impl App {
             }
             Message::Tap(b) => {
                 self.tap_on = b;
+                self.tap_clicked = Some(Instant::now());
                 self.link.send(Command::SetTap(b));
             }
             Message::MicGain(g) => self.mic_gain = g,
@@ -1166,7 +1187,27 @@ impl App {
         .style(theme::nav(settings_active))
         .on_press(Message::Nav(Section::Definicoes));
 
-        let up = self.t as u64 + 3 * 3600 + 17 * 60;
+        // Version and uptime come from the daemon (`Settings`); "—" until
+        // the first `Settings` arrives or when the daemon is older.
+        let started = self.settings.as_ref().map_or(0, |s| s.started_unix);
+        let version = self
+            .settings
+            .as_ref()
+            .map_or("—".to_string(), |s| s.daemon_version.clone());
+        let uptime = if started == 0 {
+            "uptime —".to_string()
+        } else {
+            let up = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs())
+                .saturating_sub(started);
+            format!(
+                "uptime {:02}:{:02}:{:02}",
+                up / 3600,
+                (up / 60) % 60,
+                up % 60
+            )
+        };
         let daemon = column![
             rule(),
             gap(space::L),
@@ -1178,17 +1219,9 @@ impl App {
             ]
             .align_y(Alignment::Center),
             gap(space::S),
-            ui::mono("hyprlinkd 0.4.2", PAPER),
+            ui::mono(format!("hyprlinkd {version}"), PAPER),
             ui::mono("udp/7443 · quic · mtls", MUTED),
-            ui::mono(
-                format!(
-                    "uptime {:02}:{:02}:{:02}",
-                    up / 3600,
-                    (up / 60) % 60,
-                    up % 60
-                ),
-                MUTED
-            ),
+            ui::mono(uptime, MUTED),
         ]
         .padding(Padding {
             top: 0.0,

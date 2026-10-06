@@ -375,6 +375,7 @@ impl Bridge {
             downloads_dir: config::download_dir(&self.ctx.config).display().to_string(),
             daemon_version: env!("CARGO_PKG_VERSION").to_string(),
             socket: self.socket.clone(),
+            started_unix: crate::state::now_unix().saturating_sub(uptime_s() as u64),
         }
     }
 }

@@ -136,6 +136,8 @@ impl Snapshot {
                 }
             }
             Event::Levels { mic, tap } => {
+                self.mic.on = mic.is_some();
+                self.tap.on = tap.is_some();
                 self.mic.level = mic.map(|v| (v * 100.0).round() / 100.0);
                 self.tap.level = tap.map(|v| (v * 100.0).round() / 100.0);
             }
@@ -175,6 +177,23 @@ mod tests {
 
     /// Golden shape of v1: the fields the Noctalia plugin reads must exist
     /// with these JSON types (null allowed where documented).
+    /// `Levels` with `None` means the channel is off: `/mic/on` and
+    /// `/tap/on` must follow it (the real daemon sends exactly that).
+    #[test]
+    fn levels_drive_on_off() {
+        let mut s = Snapshot::new("up");
+        s.apply(&Event::Levels {
+            mic: Some(0.0),
+            tap: None,
+        });
+        assert!(s.mic.on && !s.tap.on);
+        s.apply(&Event::Levels {
+            mic: None,
+            tap: Some(0.4),
+        });
+        assert!(!s.mic.on && s.tap.on);
+    }
+
     #[test]
     fn v1_shape() {
         let mut sim = Simulator::new();

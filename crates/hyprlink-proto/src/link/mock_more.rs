@@ -300,8 +300,13 @@ impl More {
             ],
             settings: Settings {
                 downloads_dir: "~/Transferências/HyprLink".into(),
-                daemon_version: "0.4.2".into(),
+                daemon_version: env!("CARGO_PKG_VERSION").into(),
                 socket: "$XDG_RUNTIME_DIR/hyprlink.sock".into(),
+                // A believable uptime for design captures: 3 h 17 min ago.
+                started_unix: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |d| d.as_secs())
+                    .saturating_sub(3 * 3600 + 17 * 60),
             },
             next_id: 100,
             active_ws: 3,
