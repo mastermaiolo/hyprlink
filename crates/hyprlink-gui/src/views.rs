@@ -169,7 +169,9 @@ pub fn cover(app: &App) -> El<'_> {
         .on_press(Message::Nav(s))
         .into()
     };
-    let near = if app.rssi > app.unlock_at {
+    let near = if !app.rssi_known {
+        "sem leitura"
+    } else if app.rssi > app.unlock_at {
         "perto — ao alcance da mão"
     } else if app.rssi > app.lock_at {
         "na sala, mas longe"
@@ -183,8 +185,9 @@ pub fn cover(app: &App) -> El<'_> {
         toc_entry(
             Section::Dispositivos,
             format!(
-                "{} aparelhos, {} ligado",
+                "{} {}, {} ligado",
                 app.devices.len(),
+                if app.devices.len() == 1 { "aparelho" } else { "aparelhos" },
                 app.devices
                     .iter()
                     .filter(|d| d.state == LinkState::Linked)
@@ -220,7 +223,14 @@ pub fn cover(app: &App) -> El<'_> {
                 _ => "em silêncio".into(),
             }
         ),
-        toc_entry(Section::Sensores, format!("{:.0} dBm, {near}", app.rssi)),
+        toc_entry(
+            Section::Sensores,
+            if app.rssi_known {
+                format!("{:.0} dBm, {near}", app.rssi)
+            } else {
+                "ainda sem leitura de sinal".to_string()
+            },
+        ),
     ]
     .width(fill_portion(2));
 
@@ -340,7 +350,7 @@ pub fn cover(app: &App) -> El<'_> {
                     "LATÊNCIA",
                     format!("{lat:.1}"),
                     "ms",
-                    if lat > 10.0 { HOT } else { PAPER }
+                    if lat > 100.0 { HOT } else { PAPER }
                 ),
                 gap(space::M),
                 spark(app.latency.to_vec(), ACID, 0.0, lat_max, 40.0)
@@ -1734,7 +1744,9 @@ pub fn sensors_grid(app: &App) -> El<'_> {
 // ═════════════════════════════ 07 PRESENÇA ═════════════════════════════
 
 pub fn presence_body(app: &App) -> El<'_> {
-    let (zone, zc) = if app.rssi > app.unlock_at {
+    let (zone, zc) = if !app.rssi_known {
+        ("Ainda sem leitura — o telemóvel não envia RSSI.", MUTED)
+    } else if app.rssi > app.unlock_at {
         ("Perto — ao alcance da mão.", ACID)
     } else if app.rssi > app.lock_at {
         ("Na sala, mas longe da secretária.", PAPER)
@@ -1742,10 +1754,17 @@ pub fn presence_body(app: &App) -> El<'_> {
         ("Longe. A sessão vai trancar-se.", HOT)
     };
     let now = column![
-        kicker("SINAL AGORA · POCO F4"),
+        kicker(format!(
+            "SINAL AGORA · {}",
+            app.device().map(fmt::name).unwrap_or_else(|| "—".into())
+        )),
         gap(space::S),
         row![
-            text(format!("{:.0}", app.rssi))
+            text(if app.rssi_known {
+                format!("{:.0}", app.rssi)
+            } else {
+                "—".to_string()
+            })
                 .font(DISPLAY)
                 .size(size::D1)
                 .color(zc)
@@ -1761,6 +1780,7 @@ pub fn presence_body(app: &App) -> El<'_> {
 
     let scale = canvas(RssiScale {
         rssi: app.rssi,
+        known: app.rssi_known,
         lock_at: app.lock_at,
         unlock_at: app.unlock_at,
         history: app.rssi_hist.to_vec(),

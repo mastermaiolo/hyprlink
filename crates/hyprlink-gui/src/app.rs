@@ -188,6 +188,8 @@ pub struct App {
     pub mirror_on: bool,
 
     pub rssi: f32,
+    /// `false` até chegar um `Event::Rssi` real — sem isso mostra-se «—».
+    pub rssi_known: bool,
     pub rssi_hist: History,
     pub lock_at: f32,
     pub unlock_at: f32,
@@ -400,6 +402,7 @@ impl App {
             mirror: None,
             mirror_on: false,
             rssi: -52.0,
+            rssi_known: false,
             rssi_hist: History::new(60),
             lock_at: -80.0,
             unlock_at: -65.0,
@@ -694,6 +697,7 @@ impl App {
             Event::Mirror(m) => self.mirror = m,
             Event::Rssi(r) => {
                 self.rssi = r as f32;
+                self.rssi_known = true;
                 self.rssi_hist.push(r as f32);
             }
             Event::Packet(p) => {
@@ -1125,7 +1129,12 @@ impl App {
                     ACID,
                 )
                 .into(),
-                Section::Sensores => kicker(format!("{:.0}", self.rssi)).into(),
+                Section::Sensores => kicker(if self.rssi_known {
+                    format!("{:.0}", self.rssi)
+                } else {
+                    "—".to_string()
+                })
+                .into(),
                 Section::Diario => kicker(format!("{}", self.packets.len())).into(),
                 _ => kicker("").into(),
             };
@@ -1286,7 +1295,14 @@ impl App {
                     SUB
                 ),
                 hgap(space::M),
-                ui::mono(format!("{:.0} dBm", self.rssi), SUB),
+                ui::mono(
+                    if self.rssi_known {
+                        format!("{:.0} dBm", self.rssi)
+                    } else {
+                        "— dBm".to_string()
+                    },
+                    SUB,
+                ),
             ]
             .align_y(Alignment::Center)
             .into(),

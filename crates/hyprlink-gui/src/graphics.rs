@@ -532,6 +532,7 @@ impl<M> canvas::Program<M> for Phone {
 
 pub struct RssiScale {
     pub rssi: f32,
+    pub known: bool,
     pub lock_at: f32,
     pub unlock_at: f32,
     pub history: Vec<f32>,
@@ -634,7 +635,10 @@ impl<M> canvas::Program<M> for RssiScale {
             );
         }
 
-        // Marker.
+        // Marker (só com leitura real).
+        if !self.known {
+            return vec![f.into_geometry()];
+        }
         let mx = x(self.rssi);
         let marker = Path::new(|p| {
             p.move_to(Point::new(mx, base - 12.0));
