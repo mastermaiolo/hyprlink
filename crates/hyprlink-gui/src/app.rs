@@ -11,6 +11,8 @@ use crate::tray;
 use crate::ui::{self, *};
 use crate::views;
 use hyprlink_gui::fmt;
+use hyprlink_gui::i18n::t;
+use hyprlink_gui::tr;
 
 use iced::keyboard::{self, Key};
 use iced::widget::{button, canvas, column, container, qr_code, row, scrollable, stack, text};
@@ -72,17 +74,17 @@ impl Section {
 
     pub fn title(self) -> &'static str {
         match self {
-            Section::Capa => "Capa",
-            Section::Dispositivos => "Dispositivos",
-            Section::Secretaria => "Secretária",
-            Section::Camera => "Câmara & Ecrã",
-            Section::Audio => "Áudio",
-            Section::Notificacoes => "Notificações",
-            Section::Partilha => "Partilha",
-            Section::Multimedia => "Multimédia",
-            Section::Sensores => "Sensores & Presença",
-            Section::Diario => "Diário",
-            Section::Definicoes => "Definições",
+            Section::Capa => t("Capa"),
+            Section::Dispositivos => t("Dispositivos"),
+            Section::Secretaria => t("Secretária"),
+            Section::Camera => t("Câmara & Ecrã"),
+            Section::Audio => t("Áudio"),
+            Section::Notificacoes => t("Notificações"),
+            Section::Partilha => t("Partilha"),
+            Section::Multimedia => t("Multimédia"),
+            Section::Sensores => t("Sensores & Presença"),
+            Section::Diario => t("Diário"),
+            Section::Definicoes => t("Definições"),
         }
     }
 }
@@ -1089,7 +1091,7 @@ impl App {
             ]
             .align_y(Alignment::End),
             gap(space::M),
-            kicker("EDIÇÃO 0.1 — OUT 2026"),
+            kicker(t("EDIÇÃO 0.1 — OUT 2026")),
             kicker("ANDROID ⇄ HYPRLAND"),
             gap(space::S),
             // Colour never carries meaning alone: the state is also spelled out.
@@ -1103,7 +1105,7 @@ impl App {
                 Section::Dispositivos => kicker(format!("{}", self.devices.len())).into(),
                 Section::Secretaria => kicker(format!("W{}", self.active_ws)).into(),
                 Section::Camera if self.webcam.is_some() || self.mirror.is_some() => {
-                    kicker_c("LIVE", HOT).into()
+                    kicker_c(t("LIVE"), HOT).into()
                 }
                 Section::Notificacoes if !self.notifs.is_empty() => {
                     kicker_c(format!("{}", self.notifs.len()), ACID).into()
@@ -1192,7 +1194,7 @@ impl App {
                 ),
                 hgap(space::M),
                 ui::t(
-                    "Definições",
+                    t("Definições"),
                     if settings_active {
                         SANS_SEMI
                     } else {
@@ -1222,26 +1224,22 @@ impl App {
             .as_ref()
             .map_or("—".to_string(), |s| s.daemon_version.clone());
         let uptime = if started == 0 {
-            "uptime —".to_string()
+            tr!("uptime {}", "—")
         } else {
             let up = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_secs())
                 .saturating_sub(started);
-            format!(
-                "uptime {:02}:{:02}:{:02}",
-                up / 3600,
-                (up / 60) % 60,
-                up % 60
-            )
+            let hms = format!("{:02}:{:02}:{:02}", up / 3600, (up / 60) % 60, up % 60);
+            tr!("uptime {}", hms)
         };
         let daemon = column![
             rule(),
             gap(space::L),
             row![
-                kicker("DAEMON"),
+                kicker(t("DAEMON")),
                 fill_x(),
-                row![square(ACID, 6.0), hgap(6.0), kicker_c("A ESCUTAR", ACID)]
+                row![square(ACID, 6.0), hgap(6.0), kicker_c(t("A ESCUTAR"), ACID)]
                     .align_y(Alignment::Center)
             ]
             .align_y(Alignment::Center),
@@ -1312,8 +1310,8 @@ impl App {
                 hgap(8.0),
                 ui::mono(
                     match self.phase {
-                        link::LinkPhase::Connecting => "A LIGAR AO TELEMÓVEL…",
-                        _ => "SEM LIGAÇÃO",
+                        link::LinkPhase::Connecting => t("A LIGAR AO TELEMÓVEL…"),
+                        _ => t("SEM LIGAÇÃO"),
                     },
                     self.link_color()
                 )
@@ -1329,7 +1327,7 @@ impl App {
                 hgap(space::S),
                 ui::t(self.section.title(), SANS_SEMI, 13.0, PAPER),
                 hgap(space::L),
-                kicker("TECLAS 1–9 · 0 PARA NAVEGAR").color(FAINT),
+                kicker(t("TECLAS 1–9 · 0 PARA NAVEGAR")).color(FAINT),
                 fill_x(),
                 dev,
                 hgap(space::XL),
@@ -1350,7 +1348,13 @@ impl App {
     fn ticker(&self) -> El<'_> {
         let mut items: Vec<(String, Color)> = vec![
             ("HYPRLINK".into(), PAPER),
-            (format!("LATÊNCIA {:.1} MS", self.latency.last()), SUB),
+            (
+                tr!(
+                    "LATÊNCIA {} MS",
+                    fmt::decimal(self.latency.last() as f64, 1)
+                ),
+                SUB,
+            ),
             (
                 format!(
                     "↑ {:.0} KB/S  ↓ {:.0} KB/S",
@@ -1359,7 +1363,7 @@ impl App {
                 ),
                 SUB,
             ),
-            (format!("WORKSPACE {:02}", self.active_ws), SUB),
+            (tr!("WORKSPACE {}", format!("{:02}", self.active_ws)), SUB),
         ];
         for p in self.packets.iter().rev().take(4) {
             items.push((
@@ -1372,7 +1376,7 @@ impl App {
             ));
         }
         row![
-            container(kicker_c("AO VIVO", VOID))
+            container(kicker_c(t("AO VIVO"), VOID))
                 .padding(Padding::from([0, 10]))
                 .height(Length::Fill)
                 .align_y(Alignment::Center)

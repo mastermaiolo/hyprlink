@@ -6,6 +6,7 @@
 pub mod instance;
 pub mod langcfg;
 
+pub use hyprlink_proto::tr;
 pub use hyprlink_proto::{fmt, host, i18n, link, snapshot};
 
 use link::Transport;

@@ -123,7 +123,7 @@ pub fn opener<'a>(
             hgap(space::M),
             kicker(title),
             fill_x(),
-            kicker("HYPRLINK · EDIÇÃO 0.1"),
+            kicker(hyprlink_gui::i18n::t("HYPRLINK · EDIÇÃO 0.1")),
         ]
         .align_y(Alignment::Center),
         gap(space::S),

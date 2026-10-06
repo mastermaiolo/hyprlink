@@ -299,7 +299,7 @@ impl<M> canvas::Program<M> for LinkDiagram {
         let mid = format!(
             "QUIC · mTLS · :7443 — {}",
             if self.online {
-                format!("{:.1} ms", self.latency)
+                format!("{} ms", hyprlink_gui::fmt::decimal(self.latency as f64, 1))
             } else {
                 "—".into()
             }
@@ -429,7 +429,7 @@ impl<M> canvas::Program<M> for Phone {
             );
             label(
                 &mut f,
-                "DOMINGO · 4 OUTUBRO",
+                hyprlink_gui::i18n::t("DOMINGO · 4 OUTUBRO"),
                 Point::new(
                     sx + sw / 2.0,
                     sy + screen.height * 0.12 + (sw * 0.30).min(72.0) * 1.25,
@@ -516,7 +516,7 @@ impl<M> canvas::Program<M> for Phone {
             );
             label(
                 &mut f,
-                "SEM SINAL",
+                hyprlink_gui::i18n::t(hyprlink_gui::i18n::t("SEM SINAL")),
                 Point::new(cx, cy - 14.0),
                 22.0,
                 PAPER,
@@ -610,8 +610,8 @@ impl<M> canvas::Program<M> for RssiScale {
 
         // Thresholds.
         for (v, c, s) in [
-            (self.lock_at, HOT, "BLOQUEIA"),
-            (self.unlock_at, ACID, "DESBLOQUEIA"),
+            (self.lock_at, HOT, hyprlink_gui::i18n::t("BLOQUEIA")),
+            (self.unlock_at, ACID, hyprlink_gui::i18n::t("DESBLOQUEIA")),
         ] {
             let xx = x(v).round() + 0.5;
             f.stroke(
