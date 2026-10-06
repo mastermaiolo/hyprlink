@@ -8,7 +8,10 @@
 //! - [`ipc`]: o envelope do socket local `hyprlink.sock` (u32 BE + CBOR).
 //! - [`snapshot`]: o JSON v1 estável para plugins de shell.
 //! - [`host`]: "Este PC" lido de `/proc` e `/sys`.
-//! - `fmt` (feature `fmt`): os textos pt-PT — só para quem desenha.
+//! - `fmt` (feature `fmt`): os textos para humanos, no idioma atual — só para
+//!   quem desenha (o texto-fonte é pt-PT).
+//! - `i18n` (feature `fmt`): `Lang`, `t()`, `tr!`, `detect()` e as tabelas por
+//!   idioma (pt-PT é a chave; pt-BR, en, es e zh traduzem-na).
 //! - `link::mock` (feature `mock`): o daemon simulado.
 //!
 //! Desde 2026-10-06 este crate e o `hyprlink-gui` são a única fonte do

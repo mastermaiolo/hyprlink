@@ -123,6 +123,35 @@ windowrulev2 = float, class:^(dev.hyprlink.gui)$
 windowrulev2 = size 1480 940, class:^(dev.hyprlink.gui)$
 ```
 
+## Idiomas
+
+Cinco idiomas, os mesmos da app Android e do `Lang` do daemon: `PtPt` (fonte e omissão),
+`PtBr`, `EnGb`, `EsEs`, `Zh`. Escolhe-se em Definições → Idioma e aplica-se na hora (janela,
+bandeja e toasts), sem reiniciar.
+
+- **Onde fica:** `$XDG_CONFIG_HOME/hyprlink/gui.json` (por omissão `~/.config/hyprlink/gui.json`),
+  campo `"lang"` com o nome da variante (`{"lang": "EnGb"}`). Não é do contrato nem do daemon.
+  Sem ficheiro, deteta-se por `LC_ALL` / `LC_MESSAGES` / `LANG` (`pt_PT`→PtPt, `pt_BR`/`pt`→PtBr,
+  `en*`→EnGb, `es*`→EsEs, `zh*`→Zh; outro → EnGb).
+- **Como funciona:** a chave é o próprio texto em pt-PT. `t("Guardar")` devolve a tradução do
+  idioma atual (ou o pt-PT se faltar); `tr!("{} por ler", n)` formata com valores, e a tradução
+  pode reordenar com `{0}`, `{1}`. Tabelas em `crates/hyprlink-proto/src/i18n/{pt_br,en,es,zh}.rs`
+  (`pt_br.rs` só tem o que difere do pt-PT). Fora do âmbito: o daemon (logs) e o protocolo.
+- **Acrescentar um texto:** escreve-o em pt-PT dentro de `t("…")` / `tr!("…", …)` e acrescenta a
+  tradução às tabelas `en`, `es` e `zh` (e à `pt_br` se diferir). Não uses `{n}` nem `{:.0}` dentro
+  de `tr!`: formata o número antes (`let v = format!("{:.0}", x); tr!("{} dBm", v)`). Plurais:
+  duas chaves, escolhidas no código.
+- **Acrescentar um idioma:** variante nova em `Lang` (`i18n/mod.rs`: `ALL`, `label`, `code`,
+  `parse`, `table`, `detect_with`), tabela nova `i18n/<id>.rs`, um chip em Definições (sai de
+  `Lang::ALL`) e, se a escrita não for latina, a fonte (ver «Fontes»).
+- **O teste avisa:** `cargo test -p hyprlink-gui --test i18n_completeness` extrai todas as chaves
+  de `t()` / `tr!` do código da GUI e de `fmt.rs` e **falha** se faltar uma em `en`, `es` ou `zh`,
+  se houver chaves repetidas numa tabela ou se a tradução tiver outro número de `{}` / `{N}`.
+  Os dados de demonstração `gesture:` / `trigger:` / `detail:` de `app.rs` também contam.
+- **hyprlinkctl:** `--lang pt-PT|pt-BR|en|es|zh`; sem a flag usa o ambiente (`detect()`).
+- **Capturas:** `scripts/gui-capture-lang.sh` gera `docs/screenshots/lang-capa-*.png` e
+  `lang-definicoes-*.png`, uma por idioma.
+
 ## Estrutura
 
 ```
@@ -161,4 +190,8 @@ O daemon publica a fase da ligação (`Event::Link`) a partir de `ConnState`
 
 Todas SIL Open Font License 1.1, embutidas em `assets/fonts/` com as respetivas licenças:
 Anton (Vernon Adams), Instrument Serif (Instrument), Inter (Rasmus Andersson),
-IBM Plex Mono (IBM).
+IBM Plex Mono (IBM) e, para 中文, um subconjunto do Noto Sans CJK SC (Adobe/Google;
+Regular e Bold, hanzi GB2312 nível 1, +3,6 MB no binário; gerado por
+`scripts/font-zh-subset.py`). Texto CJK fora do subconjunto (nomes de ficheiros, notificações do
+telemóvel) cai para as fontes CJK do sistema, se existirem. Instrument Serif Itálico não tem
+glifos CJK: em 中文 os *decks* usam Inter vertical.

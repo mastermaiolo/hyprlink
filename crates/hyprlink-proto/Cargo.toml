@@ -9,7 +9,8 @@ description = "Contrato entre o hyprlinkd, a GUI e o hyprlinkctl: Command/Event,
 default = []
 # Daemon simulado (trabalho de design, capturas, plugin sem telemóvel).
 mock = []
-# Textos pt-PT para humanos. Só a GUI e o hyprlinkctl; o daemon nunca.
+# Textos para humanos no idioma atual (fonte pt-PT) e o módulo i18n. Só a GUI
+# e o hyprlinkctl; o daemon nunca.
 fmt = ["dep:chrono"]
 
 [dependencies]
