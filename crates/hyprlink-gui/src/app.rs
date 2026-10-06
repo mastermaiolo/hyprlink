@@ -269,6 +269,9 @@ pub enum Message {
     SwitchWs(u8),
     FollowPhone(bool),
     Gesture(usize, bool),
+    /// Seletor de idioma em Definições: aplica na hora, grava `gui.json` e
+    /// manda o idioma novo à bandeja.
+    SetLang(hyprlink_gui::i18n::Lang),
     Mic(bool),
     Tap(bool),
     Speaker(bool),
@@ -876,6 +879,10 @@ impl App {
             Message::CancelPair => self.link.send(Command::CancelPairing),
             Message::SwitchWs(n) => self.link.send(Command::SwitchWorkspace(n)),
             Message::FollowPhone(b) => self.follow_phone = b,
+            Message::SetLang(l) => {
+                hyprlink_gui::langcfg::apply_and_save(l);
+                return self.push_tray();
+            }
             Message::Gesture(i, b) => {
                 if let Some(g) = self.gestures.get_mut(i) {
                     g.on = b;

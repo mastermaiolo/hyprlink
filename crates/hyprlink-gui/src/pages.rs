@@ -5,7 +5,7 @@
 //!
 //! Reading order is always the same: the phone first, this PC after.
 
-use crate::app::{App, CamMode, Message, Section};
+use crate::app::{App, CamMode, Message};
 use crate::graphics::CameraFrame;
 use crate::link::{
     CamCodec, Cap, Command2, Dir, MediaAction, Origin, PhoneStream, Ringer, TrackpadConfig,
@@ -15,6 +15,8 @@ use crate::theme::{self, *};
 use crate::ui::*;
 use crate::views::{bar, fill_portion, number_word, spark};
 use hyprlink_gui::fmt;
+use hyprlink_gui::i18n::{Lang, t};
+use hyprlink_gui::tr;
 
 use iced::widget::text::{LineHeight, Wrapping};
 use iced::widget::{Space, button, canvas, column, container, row, slider, text, text_input};
@@ -24,7 +26,7 @@ use iced::{Alignment, Length, Padding};
 pub fn proposed_banner<'a>(why: &'a str) -> El<'a> {
     container(
         row![
-            tag_outline("PROPOSTO", HOT),
+            tag_outline(t("PROPOSTO"), HOT),
             hgap(space::L),
             text(why).font(SERIF_ITALIC).size(size::DECK_S).color(SUB),
         ]
@@ -67,17 +69,17 @@ pub fn battery_block(app: &App) -> El<'_> {
         fill_x(),
         kicker("−6 H"),
         fill_x(),
-        kicker("AGORA")
+        kicker(t("AGORA"))
     ];
     let mut low_row = column![setting(
-        "Avisar bateria baixa",
-        "notificação no PC quando o telemóvel desce do limiar",
+        t("Avisar bateria baixa"),
+        t("notificação no PC quando o telemóvel desce do limiar"),
         switch(low.is_some(), Message::LowAlert),
     )];
     if let Some(v) = low {
         low_row = low_row.push(
             column![
-                row![kicker("LIMIAR"), fill_x(), kicker_c(format!("{v}%"), ACID)],
+                row![kicker(t("LIMIAR")), fill_x(), kicker_c(format!("{v}%"), ACID)],
                 gap(space::S),
                 slider(5.0..=50.0, v as f32, Message::LowLevel)
                     .step(5.0_f32)
@@ -88,15 +90,15 @@ pub fn battery_block(app: &App) -> El<'_> {
         low_row = low_row.push(rule());
     }
     column![
-        subhead("B", "Bateria — últimas 12 horas"),
+        subhead("B", t("Bateria — últimas 12 horas")),
         spark(data, ACID, 0.0, 100.0, 72.0),
         gap(space::S),
         axis,
         gap(space::L),
         low_row,
         setting(
-            "Avisar carga completa",
-            "quando chega aos 100 % a carregar",
+            t("Avisar carga completa"),
+            t("quando chega aos 100 % a carregar"),
             switch(app.alerts.full, Message::FullAlert),
         ),
         gap(space::XXL),
@@ -127,7 +129,7 @@ pub fn shortcuts(app: &App) -> El<'_> {
         );
     }
     column![
-        subhead("C", "Atalhos"),
+        subhead("C", t("Atalhos")),
         grid.wrap().vertical_spacing(space::S),
         gap(space::L),
         row![
@@ -143,14 +145,14 @@ pub fn shortcuts(app: &App) -> El<'_> {
             .style(theme::input),
             hgap(space::S),
             btn(
-                "EXECUTAR",
+                t("EXECUTAR"),
                 theme::primary,
                 (!app.dispatch_input.trim().is_empty()).then_some(Message::DispatchRun)
             ),
         ]
         .align_y(Alignment::Center),
         gap(space::S),
-        mono("os atalhos também aparecem no telemóvel", FAINT),
+        mono(t("os atalhos também aparecem no telemóvel"), FAINT),
     ]
     .into()
 }
@@ -179,28 +181,28 @@ pub fn trackpad(app: &App) -> El<'_> {
         .into()
     };
     column![
-        subhead("D", "Trackpad"),
-        fader("Sensibilidade", c.sensitivity, |c, x| TrackpadConfig {
+        subhead("D", t("Trackpad")),
+        fader(t("Sensibilidade"), c.sensitivity, |c, x| TrackpadConfig {
             sensitivity: x,
             ..c
         }),
         rule(),
-        fader("Velocidade do scroll", c.scroll, |c, x| TrackpadConfig {
+        fader(t("Velocidade do scroll"), c.scroll, |c, x| TrackpadConfig {
             scroll: x,
             ..c
         }),
         rule(),
         setting(
-            "Aceleração",
-            "movimentos rápidos vão mais longe",
+            t("Aceleração"),
+            t("movimentos rápidos vão mais longe"),
             switch(c.acceleration, move |b| Message::Trackpad(TrackpadConfig {
                 acceleration: b,
                 ..c
             })),
         ),
         setting(
-            "Scroll natural",
-            "inverte o sentido, como no telemóvel",
+            t("Scroll natural"),
+            t("inverte o sentido, como no telemóvel"),
             switch(c.natural_scroll, move |b| Message::Trackpad(
                 TrackpadConfig {
                     natural_scroll: b,
@@ -209,8 +211,8 @@ pub fn trackpad(app: &App) -> El<'_> {
             )),
         ),
         setting(
-            "Teclado do telemóvel",
-            "escrever no PC a partir do teclado Android",
+            t("Teclado do telemóvel"),
+            t("escrever no PC a partir do teclado Android"),
             switch(c.keyboard, move |b| Message::Trackpad(TrackpadConfig {
                 keyboard: b,
                 ..c
@@ -226,12 +228,12 @@ pub fn camera(app: &App) -> El<'_> {
     let mode = app.cam_mode;
     let modes = row![
         chip(
-            "CÂMARA",
+            t("CÂMARA"),
             mode == CamMode::Camera,
             Message::CamMode(CamMode::Camera)
         ),
         chip(
-            "ECRÃ · PROPOSTO",
+            t("ECRÃ · PROPOSTO"),
             mode == CamMode::Screen,
             Message::CamMode(CamMode::Screen)
         ),
@@ -240,19 +242,19 @@ pub fn camera(app: &App) -> El<'_> {
 
     let (headline_text, deck_text) = match mode {
         CamMode::Camera => (
-            "A CÂMARA DO BOLSO.",
-            "A câmara do telemóvel chega ao PC como uma webcam — qualquer app a vê.",
+            t("A CÂMARA DO BOLSO."),
+            t("A câmara do telemóvel chega ao PC como uma webcam — qualquer app a vê."),
         ),
         CamMode::Screen => (
-            "O ECRÃ, NUMA JANELA.",
-            "O telemóvel projetado numa janela flutuante do Hyprland — com as tuas regras.",
+            t("O ECRÃ, NUMA JANELA."),
+            t("O telemóvel projetado numa janela flutuante do Hyprland — com as tuas regras."),
         ),
     };
 
     let body: El = match mode {
         CamMode::Screen => column![
             proposed_banner(
-                "O espelho de ecrã precisa de MediaProjection na app Android e do pacote mirror.start. O desenho está pronto."
+                t("O espelho de ecrã precisa de MediaProjection na app Android e do pacote mirror.start. O desenho está pronto.")
             ),
             gap(space::XXL),
             crate::views::mirror_body(app),
@@ -262,8 +264,8 @@ pub fn camera(app: &App) -> El<'_> {
     };
 
     column![
-        opener("04", "CÂMARA & ECRÃ", headline_text, deck_text),
-        row![modes, fill_x(), kicker("TECLA 4")].align_y(Alignment::Center),
+        opener("04", t("CÂMARA & ECRÃ"), headline_text, deck_text),
+        row![modes, fill_x(), kicker(t("TECLA 4"))].align_y(Alignment::Center),
         gap(space::XL),
         body,
     ]
@@ -294,22 +296,22 @@ fn camera_body(app: &App) -> El<'_> {
                     10.0
                 ),
                 hgap(space::M),
-                headline("EM DIRETO", size::D3).color(HOT)
+                headline(t("EM DIRETO"), size::D3).color(HOT)
             ]
             .align_y(Alignment::Center),
             gap(space::XL),
             row![
-                container(stat("DÉBITO", format!("{:.1}", w.mbps), "Mb/s", PAPER))
+                container(stat(t("DÉBITO"), format!("{:.1}", w.mbps), "Mb/s", PAPER))
                     .width(Length::Fill),
                 container(stat(
-                    "IMAGENS/S",
+                    t("IMAGENS/S"),
                     w.fps
                         .map(|f| format!("{f:.0}"))
                         .unwrap_or_else(|| fmt::DASH.into()),
                     if w.fps.is_some() {
                         "fps"
                     } else {
-                        "não medido"
+                        t("não medido")
                     },
                     PAPER
                 ))
@@ -318,9 +320,9 @@ fn camera_body(app: &App) -> El<'_> {
         ]
         .into(),
         None => column![
-            headline("PARADA", size::D3).color(MUTED),
+            headline(t("PARADA"), size::D3).color(MUTED),
             gap(space::S),
-            deck_s("Escolhe o formato e liga. Aparece no PC como /dev/video42."),
+            deck_s(t("Escolhe o formato e liga. Aparece no PC como /dev/video42.")),
         ]
         .into(),
     };
@@ -350,49 +352,49 @@ fn camera_body(app: &App) -> El<'_> {
 
     let net: El = match app.nettest {
         Some(n) => column![
-            kv_text("DÉBITO", format!("{:.1} Mb/s", n.mbps)),
-            kv_text("RTT", format!("{:.1} ms", n.rtt_ms)),
-            kv_text("PERDAS", format!("{:.1} %", n.loss_pct)),
+            kv_text(t("DÉBITO"), format!("{:.1} Mb/s", n.mbps)),
+            kv_text(t("RTT"), format!("{:.1} ms", n.rtt_ms)),
+            kv_text(t("PERDAS"), format!("{:.1} %", n.loss_pct)),
         ]
         .into(),
-        None => column![deck_s("Ainda não testada."), gap(space::S)].into(),
+        None => column![deck_s(t("Ainda não testada.")), gap(space::S)].into(),
     };
 
     let controls = column![
         status,
         gap(space::XXL),
-        subhead("A", "Formato"),
+        subhead("A", t("Formato")),
         setting(
-            "Resolução",
+            t("Resolução"),
             format!("{}×{}", cfg.width, cfg.height),
             res.into()
         ),
-        setting("Imagens por segundo", "o telemóvel pode baixar", fps.into()),
-        setting("Codec", "MJPEG é mais leve para o telemóvel", codecs.into()),
+        setting(t("Imagens por segundo"), t("o telemóvel pode baixar"), fps.into()),
+        setting(t("Codec"), t("MJPEG é mais leve para o telemóvel"), codecs.into()),
         gap(space::XL),
-        subhead("B", "Rede"),
+        subhead("B", t("Rede")),
         net,
         gap(space::M),
         btn(
-            "TESTAR REDE",
+            t("TESTAR REDE"),
             theme::ghost,
             Some(Message::Do(Command2::TestNetwork))
         ),
         gap(space::XL),
         subhead("C", "No PC"),
-        kv_text("DISPOSITIVO", "/dev/video42"),
-        kv_text("DRIVER", "v4l2loopback"),
-        kv_text("MÓDULO", "webcam.rs"),
+        kv_text(t("DISPOSITIVO"), "/dev/video42"),
+        kv_text(t("DRIVER"), "v4l2loopback"),
+        kv_text(t("MÓDULO"), "webcam.rs"),
         gap(space::XL),
         if live {
             btn(
-                "■  DESLIGAR CÂMARA",
+                t("■  DESLIGAR CÂMARA"),
                 theme::danger,
                 Some(Message::WebcamStop),
             )
         } else {
             btn(
-                "▶  LIGAR CÂMARA",
+                t("▶  LIGAR CÂMARA"),
                 theme::primary,
                 Some(Message::WebcamStart),
             )
@@ -405,7 +407,7 @@ fn camera_body(app: &App) -> El<'_> {
             frame,
             gap(space::S),
             row![
-                kicker("CÂMARA DO TELEMÓVEL"),
+                kicker(t("CÂMARA DO TELEMÓVEL")),
                 fill_x(),
                 kicker(format!("{}×{} · {} FPS", cfg.width, cfg.height, cfg.fps)),
             ],
@@ -422,9 +424,9 @@ fn camera_body(app: &App) -> El<'_> {
 pub fn phone_audio(app: &App) -> El<'_> {
     let Some(a) = app.phone_audio.as_ref() else {
         return column![
-            kicker_c("O TELEMÓVEL", ACID),
+            kicker_c(t("O TELEMÓVEL"), ACID),
             gap(space::S),
-            deck_s("Sem volumes do telemóvel."),
+            deck_s(t("Sem volumes do telemóvel.")),
         ]
         .into();
     };
@@ -468,9 +470,9 @@ pub fn phone_audio(app: &App) -> El<'_> {
         });
     container(column![
         row![
-            kicker_c("O TELEMÓVEL", ACID),
+            kicker_c(t("O TELEMÓVEL"), ACID),
             hgap(space::M),
-            kicker("VOLUMES, TOQUE, SILÊNCIO"),
+            kicker(t("VOLUMES, TOQUE, SILÊNCIO")),
             fill_x(),
             kicker("phone_audio.rs")
         ]
@@ -480,13 +482,13 @@ pub fn phone_audio(app: &App) -> El<'_> {
             container(streams).width(fill_portion(3)),
             hgap(space::GUTTER),
             column![
-                kicker("MODO DE TOQUE"),
+                kicker(t("MODO DE TOQUE")),
                 gap(space::S),
                 ringers,
                 gap(space::L),
                 setting(
-                    "Não incomodar",
-                    "silencia o telemóvel inteiro",
+                    t("Não incomodar"),
+                    t("silencia o telemóvel inteiro"),
                     switch(a.dnd, |b| Message::Do(Command2::SetDnd(b))),
                 ),
             ]
@@ -541,7 +543,7 @@ pub fn mixer(app: &App) -> El<'_> {
                     })
                     .width(48),
                 hgap(space::S),
-                container(chip(if muted { "MUDO" } else { "SOM" }, muted, on_mute))
+                container(chip(if muted { t("MUDO") } else { t("SOM") }, muted, on_mute))
                     .width(64)
                     .align_x(Alignment::End),
             ]
@@ -556,9 +558,9 @@ pub fn mixer(app: &App) -> El<'_> {
     for s in &app.sinks {
         let id = s.id;
         let right: El = if s.default {
-            tag("PREDEFINIDA", PAPER, VOID)
+            tag(t("PREDEFINIDA"), PAPER, VOID)
         } else {
-            small_btn("USAR ESTA", Some(Message::Do(Command2::SetDefaultSink(id))))
+            small_btn(t("USAR ESTA"), Some(Message::Do(Command2::SetDefaultSink(id))))
         };
         sinks = sinks.push(vol_row(
             s.description.clone(),
@@ -592,9 +594,9 @@ pub fn mixer(app: &App) -> El<'_> {
 
     column![
         row![
-            kicker("ESTE PC"),
+            kicker(t("ESTE PC")),
             hgap(space::M),
-            text("Misturador").font(SANS_SEMI).size(14).color(PAPER),
+            text(t("Misturador")).font(SANS_SEMI).size(14).color(PAPER),
             fill_x(),
             kicker("PIPEWIRE · audio.rs"),
         ]
@@ -602,10 +604,10 @@ pub fn mixer(app: &App) -> El<'_> {
         gap(space::S),
         rule_c(PAPER, 1.0),
         gap(space::L),
-        kicker("SAÍDAS"),
+        kicker(t("SAÍDAS")),
         sinks,
         gap(space::XL),
-        kicker("APLICAÇÕES"),
+        kicker(t("APLICAÇÕES")),
         apps,
     ]
     .into()
@@ -616,9 +618,9 @@ pub fn mixer(app: &App) -> El<'_> {
 pub fn notifications(app: &App) -> El<'_> {
     let n = app.notifs.len();
     let headline_text = if n == 0 {
-        "NADA POR LER.".to_string()
+        t("NADA POR LER.").to_string()
     } else {
-        format!("{} POR LER.", number_word(n))
+        tr!("{} POR LER.", number_word(n))
     };
 
     // App index, magazine-style.
@@ -659,9 +661,9 @@ pub fn notifications(app: &App) -> El<'_> {
         .on_press(msg)
         .into()
     };
-    let mut index = column![kicker("APLICAÇÕES"), gap(space::S), rule_c(PAPER, 1.0)];
+    let mut index = column![kicker(t("APLICAÇÕES")), gap(space::S), rule_c(PAPER, 1.0)];
     index = index.push(entry(
-        "Todas".into(),
+        t("Todas").into(),
         n,
         app.notif_app.is_none(),
         Message::NotifApp(None),
@@ -692,7 +694,7 @@ pub fn notifications(app: &App) -> El<'_> {
     for (i, x) in visible.iter().enumerate() {
         let key = x.key.clone();
         let dismiss = small_btn(
-            "DISPENSAR",
+            t("DISPENSAR"),
             Some(Message::Do(Command2::DismissNotification(key))),
         );
         if i == 0 {
@@ -750,17 +752,17 @@ pub fn notifications(app: &App) -> El<'_> {
             column![
                 headline(
                     if n == 0 {
-                        "SILÊNCIO."
+                        t("SILÊNCIO.")
                     } else {
-                        "NADA COM ESSE FILTRO."
+                        t("NADA COM ESSE FILTRO.")
                     },
                     size::D3
                 ),
                 gap(space::S),
                 deck_s(if n == 0 {
-                    "O telemóvel está calado."
+                    t("O telemóvel está calado.")
                 } else {
-                    "Tenta outra aplicação ou outra palavra."
+                    t("Tenta outra aplicação ou outra palavra.")
                 }),
             ]
             .padding(Padding::from([space::XL, 0.0])),
@@ -768,7 +770,7 @@ pub fn notifications(app: &App) -> El<'_> {
     }
 
     let toolbar = row![
-        text_input("procurar no título, no texto ou na app…", &app.notif_query)
+        text_input(t("procurar no título, no texto ou na app…"), &app.notif_query)
             .on_input(Message::NotifQuery)
             .font(MONO)
             .size(12)
@@ -777,7 +779,7 @@ pub fn notifications(app: &App) -> El<'_> {
             .style(theme::input),
         fill_x(),
         btn(
-            "DISPENSAR TODAS",
+            t("DISPENSAR TODAS"),
             theme::ghost,
             (n > 0).then_some(Message::Do(Command2::DismissAllNotifications))
         ),
@@ -787,9 +789,9 @@ pub fn notifications(app: &App) -> El<'_> {
     column![
         opener(
             "06",
-            "NOTIFICAÇÕES",
+            t("NOTIFICAÇÕES"),
             headline_text,
-            "O que o telemóvel recebeu, sem lhe pegar."
+            t("O que o telemóvel recebeu, sem lhe pegar.")
         ),
         row![
             container(index).width(240),
@@ -832,7 +834,7 @@ pub fn share(app: &App) -> El<'_> {
                     kicker(fmt::ago(c.at)),
                     fill_x(),
                     if c.pinned {
-                        kicker_c("■ FIXADO", ACID)
+                        kicker_c(t("■ FIXADO"), ACID)
                     } else {
                         kicker("")
                     },
@@ -846,19 +848,19 @@ pub fn share(app: &App) -> El<'_> {
                     .line_height(LineHeight::Relative(1.5)),
                 gap(space::M),
                 row![
-                    small_btn("COPIAR", Some(Message::Do(Command2::CopyClip(id)))),
+                    small_btn(t("COPIAR"), Some(Message::Do(Command2::CopyClip(id)))),
                     hgap(space::L),
                     small_btn(
-                        "ENVIAR AO TELEMÓVEL",
+                        t("ENVIAR AO TELEMÓVEL"),
                         Some(Message::Do(Command2::SendClipToPhone(id)))
                     ),
                     hgap(space::L),
                     small_btn(
-                        if c.pinned { "DESAFIXAR" } else { "FIXAR" },
+                        if c.pinned { t("DESAFIXAR") } else { t("FIXAR") },
                         Some(Message::Do(Command2::PinClip(id, !c.pinned)))
                     ),
                     fill_x(),
-                    small_btn("APAGAR", Some(Message::Do(Command2::DeleteClip(id)))),
+                    small_btn(t("APAGAR"), Some(Message::Do(Command2::DeleteClip(id)))),
                 ],
             ])
             .padding(space::L)
@@ -872,8 +874,8 @@ pub fn share(app: &App) -> El<'_> {
     }
 
     let left = column![
-        subhead("A", "Área de transferência"),
-        text_input("procurar no histórico…", &app.clip_query)
+        subhead("A", t("Área de transferência")),
+        text_input(t("procurar no histórico…"), &app.clip_query)
             .on_input(Message::ClipQuery)
             .font(MONO)
             .size(12)
@@ -906,7 +908,7 @@ pub fn share(app: &App) -> El<'_> {
                 .style(theme::input),
                 hgap(space::S),
                 btn(
-                    "ENVIAR",
+                    t("ENVIAR"),
                     theme::primary,
                     (!app.send_path.trim().is_empty()).then_some(Message::SendFile)
                 ),
@@ -927,14 +929,14 @@ pub fn share(app: &App) -> El<'_> {
     let mut history = column![];
     let mut tr: Vec<_> = app.transfers.iter().collect();
     tr.sort_by(|a, b| b.at.cmp(&a.at));
-    for t in tr {
-        let arrow = match t.dir {
-            Dir::Rx => "↓ DO TELEMÓVEL",
-            Dir::Tx => "↑ PARA O TELEMÓVEL",
+    for xfer in tr {
+        let arrow = match xfer.dir {
+            Dir::Rx => t("↓ DO TELEMÓVEL"),
+            Dir::Tx => t("↑ PARA O TELEMÓVEL"),
         };
-        if t.state == TransferState::Active {
-            let p = if t.bytes > 0 {
-                t.done as f32 / t.bytes as f32
+        if xfer.state == TransferState::Active {
+            let p = if xfer.bytes > 0 {
+                xfer.done as f32 / xfer.bytes as f32
             } else {
                 0.0
             };
@@ -946,19 +948,19 @@ pub fn share(app: &App) -> El<'_> {
                         kicker(format!("{:.0} %", p * 100.0))
                     ],
                     gap(space::S),
-                    text(t.name.as_str()).font(SANS_SEMI).size(16).color(PAPER),
+                    text(xfer.name.as_str()).font(SANS_SEMI).size(16).color(PAPER),
                     gap(space::M),
                     bar(p, ACID, 3.0),
                     gap(space::S),
                     row![
                         mono(
-                            format!("{} de {}", fmt::size(t.done), fmt::size(t.bytes)),
+                            tr!("{} de {}", fmt::size(xfer.done), fmt::size(xfer.bytes)),
                             SUB
                         ),
                         fill_x(),
                         small_btn(
-                            "CANCELAR",
-                            Some(Message::Do(Command2::CancelTransfer(t.id)))
+                            t("CANCELAR"),
+                            Some(Message::Do(Command2::CancelTransfer(xfer.id)))
                         ),
                     ]
                     .align_y(Alignment::Center),
@@ -968,26 +970,26 @@ pub fn share(app: &App) -> El<'_> {
                 .style(theme::frame_active),
             );
         } else {
-            let c = match t.state {
+            let c = match xfer.state {
                 TransferState::Done => SUB,
                 TransferState::Failed => HOT,
                 _ => MUTED,
             };
             history = history.push(column![
                 row![
-                    text(if t.dir == Dir::Rx { "↓" } else { "↑" })
+                    text(if xfer.dir == Dir::Rx { "↓" } else { "↑" })
                         .font(MONO_SEMI)
                         .size(12)
                         .color(FAINT)
                         .width(20),
-                    text(truncate(&t.name, 34))
+                    text(truncate(&xfer.name, 34))
                         .font(SANS_MEDIUM)
                         .size(13.5)
                         .color(PAPER)
                         .width(Length::Fill),
-                    mono(fmt::size(t.bytes), MUTED).width(80),
-                    kicker_c(fmt::transfer_state(t.state), c).width(100),
-                    kicker(fmt::ago(t.at)).width(70),
+                    mono(fmt::size(xfer.bytes), MUTED).width(80),
+                    kicker_c(fmt::transfer_state(xfer.state), c).width(100),
+                    kicker(fmt::ago(xfer.at)).width(70),
                 ]
                 .align_y(Alignment::Center)
                 .padding(Padding::from([9, 0])),
@@ -1002,20 +1004,20 @@ pub fn share(app: &App) -> El<'_> {
         .map(|s| s.downloads_dir.clone())
         .unwrap_or_else(|| fmt::DASH.into());
     let right = column![
-        subhead("B", "Ficheiros"),
+        subhead("B", t("Ficheiros")),
         drop,
         gap(space::L),
         active,
         gap(space::L),
-        kicker("HISTÓRICO"),
+        kicker(t("HISTÓRICO")),
         gap(space::S),
         rule_c(PAPER, 1.0),
         history,
         gap(space::L),
         row![
-            column![kicker("PASTA DE DESTINO"), gap(3.0), mono(dir, PAPER)].width(Length::Fill),
+            column![kicker(t("PASTA DE DESTINO")), gap(3.0), mono(dir, PAPER)].width(Length::Fill),
             btn(
-                "ABRIR PASTA",
+                t("ABRIR PASTA"),
                 theme::ghost,
                 Some(Message::Do(Command2::OpenDownloads))
             ),
@@ -1027,9 +1029,9 @@ pub fn share(app: &App) -> El<'_> {
     column![
         opener(
             "07",
-            "PARTILHA",
-            "O QUE PASSA DE MÃO EM MÃO.",
-            "Texto pela área de transferência, ficheiros pelo fio. Larga um ficheiro na janela para o enviar."
+            t("PARTILHA"),
+            t("O QUE PASSA DE MÃO EM MÃO."),
+            t("Texto pela área de transferência, ficheiros pelo fio. Larga um ficheiro na janela para o enviar.")
         ),
         row![left, hgap(space::GUTTER), right],
     ]
@@ -1040,13 +1042,13 @@ pub fn share(app: &App) -> El<'_> {
 
 fn transport<'a>(playing: bool, on: impl Fn(MediaAction) -> Option<Message>) -> El<'a> {
     row![
-        btn("ANTERIOR", theme::ghost, on(MediaAction::Previous)),
+        btn(t("ANTERIOR"), theme::ghost, on(MediaAction::Previous)),
         btn(
-            if playing { "PAUSA" } else { "TOCAR" },
+            if playing { t("PAUSA") } else { t("TOCAR") },
             theme::primary,
             on(MediaAction::PlayPause)
         ),
-        btn("SEGUINTE", theme::ghost, on(MediaAction::Next)),
+        btn(t("SEGUINTE"), theme::ghost, on(MediaAction::Next)),
     ]
     .spacing(space::S)
     .into()
@@ -1084,9 +1086,9 @@ pub fn media(app: &App) -> El<'_> {
         Some(np) => column![
             row![
                 kicker_c(
-                    format!(
+                    tr!(
                         "{} NO TELEMÓVEL{}",
-                        if np.playing { "A TOCAR" } else { "EM PAUSA" },
+                        if np.playing { t("A TOCAR") } else { t("EM PAUSA") },
                         np.app
                             .as_ref()
                             .map(|a| format!(" · {}", a.to_uppercase()))
@@ -1096,9 +1098,9 @@ pub fn media(app: &App) -> El<'_> {
                 ),
                 fill_x(),
                 if media_cap {
-                    tag_outline("MEDIA SESSION", ACID)
+                    tag_outline(t("MEDIA SESSION"), ACID)
                 } else {
-                    tag_outline("CONTROLO PROPOSTO", MUTED)
+                    tag_outline(t("CONTROLO PROPOSTO"), MUTED)
                 },
             ]
             .align_y(Alignment::Center),
@@ -1124,16 +1126,16 @@ pub fn media(app: &App) -> El<'_> {
                 if media_cap {
                     mono("", FAINT)
                 } else {
-                    mono("precisa de media-session no Android", FAINT)
+                    mono(t("precisa de media-session no Android"), FAINT)
                 },
             ]
             .align_y(Alignment::Center),
         ]
         .into(),
         None => column![
-            kicker_c("NO TELEMÓVEL", ACID),
+            kicker_c(t("NO TELEMÓVEL"), ACID),
             gap(space::M),
-            deck("Nada a tocar no telemóvel."),
+            deck(t("Nada a tocar no telemóvel.")),
         ]
         .into(),
     };
@@ -1176,24 +1178,24 @@ pub fn media(app: &App) -> El<'_> {
         );
     }
     if app.players.is_empty() {
-        players = players.push(deck_s("Nenhum leitor MPRIS aberto."));
+        players = players.push(deck_s(t("Nenhum leitor MPRIS aberto.")));
     }
 
     column![
         opener(
             "08",
-            "MULTIMÉDIA",
-            "O QUE ESTÁ A TOCAR.",
-            "Primeiro o telemóvel; depois cada leitor deste PC."
+            t("MULTIMÉDIA"),
+            t("O QUE ESTÁ A TOCAR."),
+            t("Primeiro o telemóvel; depois cada leitor deste PC.")
         ),
         phone,
         gap(space::GUTTER),
         row![
-            kicker("ESTE PC"),
+            kicker(t("ESTE PC")),
             hgap(space::M),
-            text("Leitores").font(SANS_SEMI).size(14).color(PAPER),
+            text(t("Leitores")).font(SANS_SEMI).size(14).color(PAPER),
             fill_x(),
-            kicker(format!("MPRIS · {} ABERTOS", app.players.len())),
+            kicker(tr!("MPRIS · {} ABERTOS", app.players.len())),
         ]
         .align_y(Alignment::Center),
         gap(space::S),
@@ -1208,24 +1210,23 @@ pub fn media(app: &App) -> El<'_> {
 
 pub fn settings(app: &App) -> El<'_> {
     let s = app.settings.as_ref();
-    let langs = row![
-        chip("PT-PT", true, Message::Nav(Section::Definicoes)),
-        container(mono("EN · ES · FR · DE — numa fase própria", FAINT))
-            .padding(Padding::from([6, 12])),
-    ]
-    .align_y(Alignment::Center);
+    let current = hyprlink_gui::i18n::get();
+    let mut langs = row![].spacing(space::S).align_y(Alignment::Center);
+    for l in Lang::ALL {
+        langs = langs.push(chip(l.label(), l == current, Message::SetLang(l)));
+    }
 
     let content = column![
-        subhead("A", "Ficheiros"),
+        subhead("A", t("Ficheiros")),
         column![
             row![
                 column![
-                    text("Pasta de destino")
+                    text(t("Pasta de destino"))
                         .font(SANS_MEDIUM)
                         .size(size::BODY)
                         .color(PAPER),
                     gap(3.0),
-                    mono("onde chegam os ficheiros do telemóvel", MUTED).size(11),
+                    mono(t("onde chegam os ficheiros do telemóvel"), MUTED).size(11),
                 ]
                 .width(Length::Fill),
             ],
@@ -1240,7 +1241,7 @@ pub fn settings(app: &App) -> El<'_> {
                     .style(theme::input),
                 hgap(space::S),
                 btn(
-                    "GUARDAR",
+                    t("GUARDAR"),
                     theme::primary,
                     (s.map(|s| s.downloads_dir.as_str()) != Some(app.downloads_input.as_str()))
                         .then_some(Message::DownloadsSave)
@@ -1251,50 +1252,50 @@ pub fn settings(app: &App) -> El<'_> {
         .padding(Padding::from([12, 0])),
         rule(),
         gap(space::XXL),
-        subhead("B", "Daemon"),
+        subhead("B", t("Daemon")),
         kv(
-            "ESTADO",
+            t("ESTADO"),
             row![
                 square(ACID, 6.0),
                 hgap(space::S),
-                kicker_c("A ESCUTAR", ACID)
+                kicker_c(t("A ESCUTAR"), ACID)
             ]
             .align_y(Alignment::Center)
         ),
         kv_text(
-            "VERSÃO",
+            t("VERSÃO"),
             s.map(|s| format!("hyprlinkd {}", s.daemon_version))
                 .unwrap_or_else(|| fmt::DASH.into())
         ),
         kv_text(
-            "SOCKET",
+            t("SOCKET"),
             s.map(|s| s.socket.clone())
                 .unwrap_or_else(|| fmt::DASH.into())
         ),
-        kv_text("PROTOCOLO", "hyprlink/1 · QUIC · mTLS · :7443"),
+        kv_text(t("PROTOCOLO"), "hyprlink/1 · QUIC · mTLS · :7443"),
         gap(space::L),
         btn(
-            "REINICIAR DAEMON",
+            t("REINICIAR DAEMON"),
             theme::danger,
             Some(Message::Do(Command2::RestartDaemon))
         ),
         gap(space::XXL),
-        subhead("C", "Arranque"),
-        kv_text("COM O HYPRLAND", "exec-once = hyprlink-gui --hidden"),
-        kv_text("DAEMON", "systemctl --user enable --now hyprlinkd"),
-        kv_text("TRAY", "fechar a janela deixa a app no tray"),
+        subhead("C", t("Arranque")),
+        kv_text(t("COM O HYPRLAND"), "exec-once = hyprlink-gui --hidden"),
+        kv_text(t("DAEMON"), "systemctl --user enable --now hyprlinkd"),
+        kv_text(t("TRAY"), "fechar a janela deixa a app no tray"),
         gap(space::XXL),
-        subhead("D", "Idioma"),
+        subhead("D", t("Idioma")),
         langs,
         gap(space::XXL),
-        subhead("E", "Sobre"),
-        kv_text("GUI", format!("hyprlink-gui {}", env!("CARGO_PKG_VERSION"))),
+        subhead("E", t("Sobre")),
+        kv_text(t("GUI"), format!("hyprlink-gui {}", env!("CARGO_PKG_VERSION"))),
         kv_text(
-            "TECLAS",
-            "1–9 e 0 para as secções · Esc fecha o emparelhamento"
+            t("TECLAS"),
+            t("1–9 e 0 para as secções · Esc fecha o emparelhamento")
         ),
         kv_text(
-            "TIPOGRAFIA",
+            t("TIPOGRAFIA"),
             "Anton · Instrument Serif · Inter · IBM Plex Mono — OFL"
         ),
     ];
@@ -1302,9 +1303,9 @@ pub fn settings(app: &App) -> El<'_> {
     column![
         opener(
             "00",
-            "DEFINIÇÕES",
-            "AS REGRAS DA CASA.",
-            "Poucas, e todas reversíveis."
+            t("DEFINIÇÕES"),
+            t("AS REGRAS DA CASA."),
+            t("Poucas, e todas reversíveis.")
         ),
         container(content).max_width(860),
     ]
