@@ -17,6 +17,7 @@
 //!   (pactl info) e se o GStreamer tem `pipewiresrc` — as falhas de ambiente
 //!   (sem pipewire-pulse, sem gst-plugin-pipewire) deixam de ser silêncio.
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
@@ -110,10 +111,25 @@ fn pipeline_str(sink: Option<&str>) -> String {
 /// Para o tap em andamento, se houver (chamado por `audio.tap_stop` e
 /// também antes de iniciar um novo tap, pra nunca ter dois ao mesmo tempo).
 pub fn stop(handle: &TapHandle, hud: &Arc<Mutex<HudState>>) {
+    // Nova geração: qualquer supervisão em curso (inclusive uma que esteja
+    // em backoff, com o handle vazio) vê que já não é a dona e sai.
+    GERACAO.fetch_add(1, Ordering::SeqCst);
     if let Some(pipeline) = handle.lock().unwrap().take() {
         let _ = pipeline.set_state(gst::State::Null);
+    }
+    if hud.lock().unwrap().modules.audio_tap_active {
         state::set_audio_tap_active(hud, false);
     }
+}
+
+/// Geração do tap: sobe a cada `stop()`. Uma supervisão só reconstrói o
+/// pipeline enquanto a geração for a mesma com que arrancou — sem isto, um
+/// `stop()` durante o backoff (handle vazio) não parava nada e o tap voltava
+/// sozinho, e um `start()` nesse intervalo deixava duas supervisões vivas.
+static GERACAO: AtomicU64 = AtomicU64::new(0);
+
+fn ainda_dono(geracao: u64) -> bool {
+    GERACAO.load(Ordering::SeqCst) == geracao
 }
 
 /// Como `stop()`, mas só mata o pipeline se ele ainda for exatamente o
@@ -138,6 +154,9 @@ enum TapEnd {
     ConnectionLost,
     /// O pipeline morreu (saída sumiu, PipeWire reiniciou) — tentar de novo.
     PipelineDied(String),
+    /// Erro de ambiente que não passa sozinho (falta o `pipewiresrc`, por
+    /// exemplo) — tentar de novo de 15 em 15 s só enchia o log.
+    Fatal(String),
 }
 
 /// Inicia o tap: envia PCM cru (16-bit LE, 48kHz, estéreo) via QUIC DATAGRAM
@@ -154,6 +173,7 @@ pub async fn start(
     hud: Arc<Mutex<HudState>>,
 ) {
     stop(&handle, &hud);
+    let geracao = GERACAO.load(Ordering::SeqCst);
 
     if let Err(e) = gst::init() {
         push_log(
@@ -179,10 +199,17 @@ pub async fn start(
     }
 
     match sink.as_deref() {
-        Some(name) => push_log(&hud, format!("[+] audio tap iniciado · captura fixa de {name}")),
+        Some(name) => push_log(
+            &hud,
+            format!("[+] audio tap iniciado · captura fixa de {name}"),
+        ),
         None => {
-            let atual = default_sink_name().unwrap_or_else(|| "desconhecida (a seguir a padrão)".to_string());
-            push_log(&hud, format!("[+] audio tap iniciado · a seguir a saída padrão (agora: {atual})"));
+            let atual = default_sink_name()
+                .unwrap_or_else(|| "desconhecida (a seguir a padrão)".to_string());
+            push_log(
+                &hud,
+                format!("[+] audio tap iniciado · a seguir a saída padrão (agora: {atual})"),
+            );
         }
     }
     state::set_audio_tap_active(&hud, true);
@@ -191,18 +218,38 @@ pub async fn start(
     let mut backoff = std::time::Duration::from_secs(1);
     loop {
         let sessao = std::time::Instant::now();
-        let fim = run_once(&connection, sink.as_deref(), &handle, &hud, chunk_size).await;
+        let fim = run_once(
+            &connection,
+            sink.as_deref(),
+            &handle,
+            &hud,
+            chunk_size,
+            geracao,
+        )
+        .await;
         match fim {
             TapEnd::Stopped => return,
+            TapEnd::Fatal(motivo) => {
+                push_log(&hud, format!("[!] audio tap: {motivo} — tap parado"));
+                if ainda_dono(geracao) {
+                    stop(&handle, &hud);
+                }
+                return;
+            }
             TapEnd::ConnectionLost => {
-                push_log(&hud, "[i] audio tap: conexão terminada, a encerrar o tap".to_string());
-                stop(&handle, &hud);
+                push_log(
+                    &hud,
+                    "[i] audio tap: conexão terminada, a encerrar o tap".to_string(),
+                );
+                if ainda_dono(geracao) {
+                    stop(&handle, &hud);
+                }
                 return;
             }
             TapEnd::PipelineDied(motivo) => {
-                // O stop() do utilizador durante o backoff desliga o estado —
-                // aí não se volta a construir nada.
-                if !hud.lock().unwrap().modules.audio_tap_active {
+                // Um stop() (ou um start() novo) entretanto: esta supervisão
+                // já não é a dona — não se volta a construir nada.
+                if !ainda_dono(geracao) {
                     return;
                 }
                 if sessao.elapsed() > std::time::Duration::from_secs(30) {
@@ -210,9 +257,15 @@ pub async fn start(
                 }
                 push_log(
                     &hud,
-                    format!("[i] audio tap: pipeline morreu ({motivo}) — a retomar em {:?}", backoff),
+                    format!(
+                        "[i] audio tap: pipeline morreu ({motivo}) — a retomar em {:?}",
+                        backoff
+                    ),
                 );
                 tokio::time::sleep(backoff).await;
+                if !ainda_dono(geracao) {
+                    return;
+                }
                 backoff = (backoff * 2).min(std::time::Duration::from_secs(15));
             }
         }
@@ -227,20 +280,23 @@ async fn run_once(
     handle: &TapHandle,
     hud: &Arc<Mutex<HudState>>,
     chunk_size: usize,
+    geracao: u64,
 ) -> TapEnd {
+    // Montar o pipeline só falha por ambiente (elemento em falta) — não
+    // passa com o tempo, por isso é fatal e não entra no backoff.
     let pipeline = match gst::parse::launch(&pipeline_str(sink)) {
         Ok(el) => match el.downcast::<gst::Pipeline>() {
             Ok(p) => p,
-            Err(_) => return TapEnd::PipelineDied("pipeline inesperado".into()),
+            Err(_) => return TapEnd::Fatal("pipeline inesperado".into()),
         },
-        Err(e) => return TapEnd::PipelineDied(format!("falha ao montar: {e}")),
+        Err(e) => return TapEnd::Fatal(format!("falha ao montar o pipeline: {e}")),
     };
 
     let Some(sink_el) = pipeline.by_name("hyprlink_tap") else {
-        return TapEnd::PipelineDied("appsink não encontrado".into());
+        return TapEnd::Fatal("appsink não encontrado".into());
     };
     let Ok(appsink) = sink_el.downcast::<AppSink>() else {
-        return TapEnd::PipelineDied("appsink com tipo inesperado".into());
+        return TapEnd::Fatal("appsink com tipo inesperado".into());
     };
 
     // Mesmo fix que o mic.rs já precisou (GstSystemClock é singleton do
@@ -250,8 +306,17 @@ async fn run_once(
     if pipeline.set_state(gst::State::Playing).is_err() {
         return TapEnd::PipelineDied("não foi possível iniciar o pipeline".into());
     }
-    // A sessão morta anterior (se houver) sai do handle; esta entra.
-    *handle.lock().unwrap() = Some(pipeline.clone());
+    // A sessão morta anterior (se houver) sai do handle; esta entra — mas só
+    // se ninguém chamou stop() enquanto o pipeline arrancava.
+    {
+        let mut guard = handle.lock().unwrap();
+        if !ainda_dono(geracao) {
+            drop(guard);
+            let _ = pipeline.set_state(gst::State::Null);
+            return TapEnd::Stopped;
+        }
+        *guard = Some(pipeline.clone());
+    }
 
     // Bus: logar erros e DERRUBAR o pipeline (Null desbloqueia o
     // pull_sample da thread de captura, que decide o desfecho pelo handle).
@@ -308,8 +373,12 @@ async fn run_once(
         let fim = 'capture: loop {
             match appsink.pull_sample() {
                 Ok(sample) => {
-                    let Some(buffer) = sample.buffer() else { continue };
-                    let Ok(map) = buffer.map_readable() else { continue };
+                    let Some(buffer) = sample.buffer() else {
+                        continue;
+                    };
+                    let Ok(map) = buffer.map_readable() else {
+                        continue;
+                    };
                     let data = map.as_slice();
                     push_audio_vu(&hud_thread, peak_percent(data));
 
@@ -388,13 +457,34 @@ mod tests {
     #[test]
     fn pipeline_variants() {
         let normal = pipeline_str(None);
-        assert!(!normal.contains("target-object"), "normal não pode fixar: {normal}");
+        assert!(
+            !normal.contains("target-object"),
+            "normal não pode fixar: {normal}"
+        );
         assert!(normal.contains("stream.capture.sink=true"));
         assert!(normal.contains("channels=2"));
 
         let coluna = pipeline_str(Some("hyprlink-speaker"));
         assert!(coluna.contains("target-object=\"hyprlink-speaker\""));
         assert!(coluna.contains("stream.capture.sink=true"));
+    }
+
+    /// O bug do backoff: com o pipeline morto o handle está vazio, e o
+    /// stop() antigo não fazia nada — o estado ficava "ativo" e a supervisão
+    /// voltava a ligar o tap. Agora o stop() muda a geração e limpa o estado
+    /// mesmo com o handle vazio.
+    #[test]
+    fn stop_com_handle_vazio_desliga_e_tira_a_dona() {
+        let hud = HudState::new("127.0.0.1:7443".into(), "AA".into(), "00".into());
+        let handle: TapHandle = Arc::new(Mutex::new(None));
+        state::set_audio_tap_active(&hud, true);
+        let geracao = GERACAO.load(Ordering::SeqCst);
+        assert!(ainda_dono(geracao));
+
+        stop(&handle, &hud);
+
+        assert!(!ainda_dono(geracao));
+        assert!(!hud.lock().unwrap().modules.audio_tap_active);
     }
 
     /// Não roda em CI — precisa de PipeWire real. `--ignored`: confirma que

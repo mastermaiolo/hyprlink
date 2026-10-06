@@ -261,7 +261,8 @@ async fn handle(line: &str, ctl: &Ctl) -> String {
                 )
                 .await;
                 if ok {
-                    "ok headset ativo: o som do PC toca no telemóvel e o mic dele é a entrada do PC".to_string()
+                    "ok headset ativo: o som do PC toca no telemóvel e o mic dele é a entrada do PC"
+                        .to_string()
                 } else {
                     "erro: ver painel do daemon".to_string()
                 }

@@ -176,13 +176,14 @@ pub async fn enable(
         format!("[+] coluna: telemóvel é agora a saída de som do PC (antes: {prev})"),
     );
 
-    crate::tap::start(
+    // spawn, não await: o tap tem supervisão própria e só regressa quando
+    // acaba — esperar por ele aqui pendurava o pedido (e o mic do headset).
+    tokio::spawn(crate::tap::start(
         connection,
         Some(PHONE_SINK_NAME.to_string()),
         tap.clone(),
         hud.clone(),
-    )
-    .await;
+    ));
     true
 }
 
