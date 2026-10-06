@@ -61,6 +61,17 @@ pub enum Cap {
     MediaSession,
 }
 
+/// The phone link as a whole — drives the LINK wordmark colour.
+/// Mirrors the daemon's `ConnState` (Pairing/Connecting → `Connecting`).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum LinkPhase {
+    #[default]
+    Disconnected,
+    Connecting,
+    Connected,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Device {
     pub id: DeviceId,
@@ -263,6 +274,7 @@ pub enum Event {
     Pairing(Option<PairingTicket>),
     Notice(Notice),
     Phone(PhoneStatus),
+    Link(LinkPhase),
     More(Event2),
 }
 
@@ -588,6 +600,12 @@ pub enum Command2 {
     },
     /// Proposed: needs a media-session channel on Android.
     PhoneMedia(MediaAction),
+    /// Headset (C1): the phone becomes the PC's full-duplex headset —
+    /// speaker mode (PC audio plays on the phone) + the phone mic as PC
+    /// input, one toggle. Composition of `SetSpeakerMode(true)` +
+    /// `SetMic(true)`; the disconnect cleanup (speaker OFF + mic stop)
+    /// já existe no daemon.
+    SetHeadset(bool),
     SetDownloadsDir(String),
     RestartDaemon,
 }

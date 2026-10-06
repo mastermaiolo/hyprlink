@@ -240,6 +240,25 @@ tap ativo por conexão) e sem garantia de entrega/ordem — datagramas perdidos
 viram só silêncio momentâneo, não erro. Requer que os dois lados tenham
 habilitado a extensão de datagram na conexão QUIC (ver nota no framing).
 
+**Adaptação ao roteamento (daemon, 2026-10-05)**: o tap normal captura
+**sem** `target-object` — só `stream.capture.sink=true` — e é o WirePlumber
+quem liga a captura ao monitor da saída padrão e a **segue** (auscultadores
+ligados, Bluetooth a entrar/sair, troca manual de saída: nada quebra). O
+nome explícito fica só para o modo coluna (determinismo do sink virtual). Se
+o pipeline morrer (saída desapareceu, PipeWire reiniciou), a supervisão
+reconstrói com backoff 1s→15s (renovado se a sessão durou >30s) — o tap
+deixou de ser "para de vez" no primeiro erro. O arranque do tap loga uma
+linha de diagnóstico (`pactl info`, `pipewiresrc` presente, saída padrão)
+— ambientes sem pipewire-pulse ou sem gst-plugin-pipewire deixam de falhar
+em silêncio.
+
+**Modo headset (Pista C1, 2026-10-05)**: composição daemon-side de coluna +
+mic — `Command2::SetHeadset(bool)` no IPC e `hyprlinkctl headset on|off`.
+Sem mudanças de wire: é `speaker.rs` + pedido de mic (`webcam.mic_start`).
+O lado Android passa a capturar o mic com `AudioSource.VOICE_COMMUNICATION`
+(AEC da plataforma — ver prompt `prompt_ai_studio_2026-10-05_headset_aec.md`;
+com fallback para `MIC` se a rota não entregar 48 kHz efetivos).
+
 ### phone_audio
 
 Inverso do `audio.*` acima — aqui é o **daemon quem pergunta/comanda** e o

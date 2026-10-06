@@ -414,6 +414,10 @@ impl More {
     pub fn send(&mut self, cmd: Command2, out: &mut Vec<Event>, t: f32) {
         use packets as p;
         match cmd {
+            // Intercepado no mock.rs (composição SetMic + SetSpeakerMode,
+            // ver `Command2::SetHeadset` lá) — aqui nunca chega, mas o
+            // match tem de cobrir a variante.
+            Command2::SetHeadset(_) => {}
             Command2::SetBatteryAlerts(a) => {
                 self.alerts = a;
                 Self::more(out, Event2::BatteryAlerts(a));

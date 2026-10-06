@@ -49,6 +49,9 @@ pub struct Simulator {
     notifications: u32,
     ram: f32,
     more: super::mock_more::More,
+    phase: Option<LinkPhase>,
+    /// HYPRLINK_LINK = offline | connecting | cycle (design demos).
+    script: String,
 }
 
 impl Default for Simulator {
@@ -149,6 +152,8 @@ impl Simulator {
             notifications: 3,
             ram: 5.1,
             more: super::mock_more::More::new(),
+            phase: None,
+            script: std::env::var("HYPRLINK_LINK").unwrap_or_default(),
         }
     }
 
@@ -170,6 +175,12 @@ impl Simulator {
 impl Transport for Simulator {
     fn send(&mut self, command: Command) {
         match command {
+            // Headset (C1) = composição de mic + coluna: reutiliza os dois
+            // braços de baixo em vez de duplicar a lógica do simulador.
+            Command::More(Command2::SetHeadset(on)) => {
+                self.send(Command::SetMic(on));
+                self.send(Command::SetSpeakerMode(on));
+            }
             Command::More(c) => {
                 let t = self.t;
                 self.more.send(c, &mut self.outbox, t);
@@ -349,6 +360,41 @@ impl Transport for Simulator {
             }
         }
 
+        // Link phase: connecting → connected at start, or a scripted demo.
+        let want = match self.script.as_str() {
+            "offline" => LinkPhase::Disconnected,
+            "connecting" => LinkPhase::Connecting,
+            "cycle" => match t % 14.0 {
+                x if x < 7.0 => LinkPhase::Connected,
+                x if x < 10.0 => LinkPhase::Disconnected,
+                _ => LinkPhase::Connecting,
+            },
+            _ if t < 1.0 => LinkPhase::Connecting,
+            _ => LinkPhase::Connected,
+        };
+        if self.phase != Some(want) {
+            self.phase = Some(want);
+            if let Some(d) = self.devices.iter_mut().find(|d| d.id == 1) {
+                d.state = match want {
+                    LinkPhase::Connected => LinkState::Linked,
+                    LinkPhase::Connecting => LinkState::Idle,
+                    LinkPhase::Disconnected => LinkState::Offline,
+                };
+                if want != LinkPhase::Connected {
+                    d.latency_ms = None;
+                    d.rssi = None;
+                }
+            }
+            self.outbox.push(Event::Link(want));
+            self.outbox.push(Event::Devices(self.devices.clone()));
+            self.packet(
+                Dir::Rx,
+                packets::CORE_HELLO,
+                if want == LinkPhase::Connected { 96 } else { 0 },
+                format!("{want:?}").to_lowercase(),
+            );
+        }
+
         // Telemetry (4 Hz).
         self.acc[0] += dt;
         if self.acc[0] > 0.25 {
@@ -399,7 +445,7 @@ impl Transport for Simulator {
             let lat = self.latency;
             let rssi = self.rssi as i32;
             for d in &mut self.devices {
-                if d.id == 1 {
+                if d.id == 1 && d.state == LinkState::Linked {
                     d.latency_ms = Some(lat);
                     d.rssi = Some(rssi);
                     if (t as u32) % 45 == 0 {

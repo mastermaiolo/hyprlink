@@ -249,6 +249,41 @@ async fn handle(line: &str, ctl: &Ctl) -> String {
             _ => "erro: uso: speaker on|off".to_string(),
         },
 
+        // Headset (C1): coluna + mic num comando — composição das duas peças.
+        "headset" => match rest.first().copied() {
+            Some("on") => {
+                let ok = crate::speaker::enable_headset(
+                    &ctl.active,
+                    &ctl.tap,
+                    &ctl.hud,
+                    &ctl.config,
+                    &ctl.speaker,
+                )
+                .await;
+                if ok {
+                    "ok headset ativo: o som do PC toca no telemóvel e o mic dele é a entrada do PC".to_string()
+                } else {
+                    "erro: ver painel do daemon".to_string()
+                }
+            }
+            Some("off") => {
+                let ok = crate::speaker::disable_headset(
+                    &ctl.active,
+                    &ctl.tap,
+                    &ctl.hud,
+                    &ctl.config,
+                    &ctl.speaker,
+                )
+                .await;
+                if ok {
+                    "ok headset desligado, som de volta às colunas".to_string()
+                } else {
+                    "erro: headset não estava ativo".to_string()
+                }
+            }
+            _ => "erro: uso: headset on|off".to_string(),
+        },
+
         "mic" => match rest.first().copied() {
             Some("on") => {
                 let ok = crate::mic::request_start(&ctl.active).await;
@@ -350,7 +385,7 @@ async fn handle(line: &str, ctl: &Ctl) -> String {
 
         "" => "erro: comando vazio".to_string(),
         _ => format!(
-            "erro: comando desconhecido: {cmd} (ping, status, send, dispatch, lock, tap, speaker, mic, notif, url, phone-url, phone-app, phone-media)"
+            "erro: comando desconhecido: {cmd} (ping, status, send, dispatch, lock, tap, speaker, headset, mic, notif, url, phone-url, phone-app, phone-media)"
         ),
     }
 }

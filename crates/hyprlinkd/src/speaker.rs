@@ -222,6 +222,42 @@ pub async fn disable(
     true
 }
 
+/// Modo headset (Pista C1): o telemóvel como headset full-duplex do PC —
+/// coluna (o som do PC toca no telemóvel) + microfone (a voz sobe pro PC),
+/// num toggle só. É composição das duas peças que já existem; a limpeza na
+/// desconexão (coluna OFF + mic stop) já acontece nos pontos de cleanup do
+/// `server.rs`. A ordem importa:
+/// - ON: coluna primeiro (o som muda de dono de uma vez), depois o pedido
+///   de mic (o telemóvel decide se aceita, como sempre).
+/// - OFF: coluna primeiro (o som volta pras colunas imediatamente),
+///   depois o pedido de mic off.
+pub async fn enable_headset(
+    active: &crate::active::ActiveConn,
+    tap: &TapHandle,
+    hud: &Arc<Mutex<HudState>>,
+    config: &SharedConfig,
+    handle: &SpeakerHandle,
+) -> bool {
+    let coluna = enable(active, tap, hud, config, handle).await;
+    let mic = crate::mic::request_start(active).await;
+    if coluna && !mic {
+        push_log(hud, "[i] headset: coluna ativa, mas o pedido de microfone não chegou ao telemóvel (sem conexão? ele recusou?)".to_string());
+    }
+    coluna
+}
+
+pub async fn disable_headset(
+    active: &crate::active::ActiveConn,
+    tap: &TapHandle,
+    hud: &Arc<Mutex<HudState>>,
+    config: &SharedConfig,
+    handle: &SpeakerHandle,
+) -> bool {
+    let coluna = disable(tap, hud, config, handle).await;
+    let _ = crate::mic::request_stop(active).await;
+    coluna
+}
+
 /// Arranque do daemon: limpa o que uma sessão anterior pode ter deixado
 /// (crash com o modo ativo) — módulo órfão fora, default devolvido ao dono
 /// salvo em config. Síncrono e antes da GUI/subir o servidor: tem de

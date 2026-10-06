@@ -566,6 +566,10 @@ async fn project_slow(b: Arc<Bridge>, hub: Hub) {
         n += 1;
         hub.publish(Event::Devices(b.devices()));
         hub.publish(Event::Pairing(b.pairing_ticket()));
+        // Rede de segurança: os `state::set_*` já publicam a fase quando muda.
+        hub.publish(Event::Link(crate::state::link_phase(
+            &b.ctx.hud.lock().unwrap().conn,
+        )));
         hub.publish(Event::SpeakerMode(crate::speaker::is_active(
             &b.ctx.speaker,
         )));
@@ -1054,8 +1058,38 @@ async fn execute_more(b: &Arc<Bridge>, c: Command2) {
                 ciborium::Value::Text("action".into()),
                 ciborium::Value::Text(action_str.into()),
             )]));
-            if crate::active::push(&ctx.active, "phone.media", body).await.is_none() {
+            if crate::active::push(&ctx.active, "phone.media", body)
+                .await
+                .is_none()
+            {
                 b.fail(Op::Media, ErrorKind::Offline);
+            }
+        }
+        // Headset (Pista C1): coluna + mic num toggle — composição das duas
+        // peças existentes; a limpeza na desconexão já está nos pontos de
+        // cleanup do server.rs (speaker OFF + mic stop).
+        Command2::SetHeadset(on) => {
+            let ok = if on {
+                crate::speaker::enable_headset(
+                    &ctx.active,
+                    &ctx.tap,
+                    &b.ctx.hud,
+                    &ctx.config,
+                    &ctx.speaker,
+                )
+                .await
+            } else {
+                crate::speaker::disable_headset(
+                    &ctx.active,
+                    &ctx.tap,
+                    &b.ctx.hud,
+                    &ctx.config,
+                    &ctx.speaker,
+                )
+                .await
+            };
+            if !ok {
+                b.fail(Op::Speaker, ErrorKind::Offline);
             }
         }
         Command2::SetDownloadsDir(dir) => {

@@ -10,6 +10,7 @@
 //!   hyprlinkctl lock                            # exec hyprlock
 //!   hyprlinkctl tap on|off                       # ouvir o PC no telemóvel
 //!   hyprlinkctl speaker on|off                   # telemóvel como coluna
+//!   hyprlinkctl headset on|off                    # headset completo: coluna + mic
 //!   hyprlinkctl mic on|off                       # microfone do telemóvel
 //!   hyprlinkctl notif "Título" "corpo opcional"  # notificação no telemóvel
 //!   hyprlinkctl url https://exemplo.com         # abrir URL no PC
@@ -41,7 +42,7 @@ pub const ONLY_HERE: &[&str] = &[
 ];
 
 /// Subcomandos que existem nas duas metades: sem `--json` vêm para aqui.
-pub const SHARED: &[&str] = &["status", "ping", "mic", "tap", "speaker"];
+pub const SHARED: &[&str] = &["status", "ping", "mic", "tap", "speaker", "headset"];
 
 pub fn run(args: Vec<String>) -> ! {
     if args.is_empty() {

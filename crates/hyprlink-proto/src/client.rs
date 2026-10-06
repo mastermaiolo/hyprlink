@@ -135,6 +135,7 @@ pub fn op_of(c: &Command) -> Option<Op> {
             }
             C2::SendFile(_) | C2::CancelTransfer(_) | C2::OpenDownloads => Op::Files,
             C2::Media { .. } | C2::PhoneMedia(_) => Op::Media,
+            C2::SetHeadset(_) => Op::Speaker,
             C2::DismissNotification(_)
             | C2::DismissAllNotifications
             | C2::SetBatteryAlerts(_)
