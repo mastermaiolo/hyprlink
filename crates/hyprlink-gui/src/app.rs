@@ -605,11 +605,11 @@ impl App {
             mirror: self.mirror_on,
             pairing: self.pairing.is_some(),
             phase: self.phase,
+            lang: hyprlink_gui::i18n::get(),
         };
         if snap == self.tray_snap {
             return Task::none();
         }
-            lang: hyprlink_gui::i18n::get(),
         self.tray_snap = snap.clone();
         Task::future(async move {
             link.0.update(move |t| t.snap = snap).await;
