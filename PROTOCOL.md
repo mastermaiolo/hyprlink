@@ -167,7 +167,7 @@ mesma lógica do guard de texto). Do lado P→D, o uni-stream é roteado pelo
 
 ### media
 `media.command` (P→D one-way, `{command}`: play_pause/play/pause/next/previous)
-`media.state` (D→P push, `{player, status, title?, artist?, album?}`, status: Playing/Paused/Stopped)
+`media.state` (D→P push, `{player, status, title?, artist?, album?, position_ms?, length_ms?}`, status: Playing/Paused/Stopped). `position_ms`/`length_ms` (uint, ms) são opcionais: ausentes = desconhecido (nunca 0). Só se reenvia quando há salto (seek, faixa nova, pausa/retoma) — o telemóvel avança a barra sozinho.
 
 ### notification
 | type | dir | body |

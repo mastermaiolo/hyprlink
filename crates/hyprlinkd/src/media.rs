@@ -172,6 +172,21 @@ struct NowPlaying {
     title: Option<String>,
     artist: Option<String>,
     album: Option<String>,
+    /// Posição / duração em ms; `None` = o player não as dá (nunca 0).
+    position_ms: Option<u64>,
+    length_ms: Option<u64>,
+}
+
+/// Tolerância (ms) entre a posição esperada e a lida antes de contar como salto.
+const SEEK_TOLERANCE_MS: u64 = 3_000;
+
+/// `true` se a posição lida não bate com a esperada (seek, retoma, faixa nova).
+fn position_jumped(expected: Option<u64>, actual: Option<u64>) -> bool {
+    match (expected, actual) {
+        (Some(e), Some(a)) => e.abs_diff(a) > SEEK_TOLERANCE_MS,
+        (None, None) => false,
+        _ => true,
+    }
 }
 
 async fn snapshot(conn: &Connection) -> Option<NowPlaying> {
@@ -193,6 +208,22 @@ async fn snapshot(conn: &Connection) -> Option<NowPlaying> {
         title: metadata_str(&meta, "xesam:title"),
         artist: metadata_first_str_in_array(&meta, "xesam:artist"),
         album: metadata_str(&meta, "xesam:album"),
+        position_ms: proxy
+            .get_property::<i64>("Position")
+            .await
+            .ok()
+            .and_then(|us| u64::try_from(us).ok())
+            .map(|us| us / 1000),
+        length_ms: meta
+            .get("mpris:length")
+            .and_then(|v| {
+                i64::try_from(v.clone())
+                    .ok()
+                    .or_else(|| u64::try_from(v.clone()).ok().map(|u| u as i64))
+            })
+            .and_then(|us| u64::try_from(us).ok())
+            .filter(|us| *us > 0)
+            .map(|us| us / 1000),
     })
 }
 
@@ -210,6 +241,12 @@ fn to_body(np: &NowPlaying) -> Value {
     if let Some(a) = &np.album {
         map.push((Value::Text("album".into()), Value::Text(a.clone())));
     }
+    if let Some(p) = np.position_ms {
+        map.push((Value::Text("position_ms".into()), Value::Integer(p.into())));
+    }
+    if let Some(l) = np.length_ms {
+        map.push((Value::Text("length_ms".into()), Value::Integer(l.into())));
+    }
     Value::Map(map)
 }
 
@@ -221,12 +258,24 @@ pub async fn poll_and_push(
     dbus: Option<Connection>,
 ) {
     let mut last_key: Option<(String, String, Option<String>)> = None;
+    // Onde a posição devia estar agora, se o player seguiu a tocar normalmente.
+    let mut expected: Option<(u64, std::time::Instant, bool)> = None;
     loop {
         if let Some(conn) = &dbus {
             match snapshot(conn).await {
                 Some(np) => {
                     let key = (np.player.clone(), np.status.clone(), np.title.clone());
-                    if last_key.as_ref() != Some(&key) {
+                    let playing = np.status == "Playing";
+                    let projected = expected.map(|(p, at, was_playing)| {
+                        if was_playing {
+                            p + at.elapsed().as_millis() as u64
+                        } else {
+                            p
+                        }
+                    });
+                    let jumped = last_key.is_some() && position_jumped(projected, np.position_ms);
+                    expected = np.position_ms.map(|p| (p, std::time::Instant::now(), playing));
+                    if last_key.as_ref() != Some(&key) || jumped {
                         last_key = Some(key);
                         let label = match (&np.title, &np.artist) {
                             (Some(t), Some(a)) => format!("{a} — {t}"),
@@ -239,6 +288,7 @@ pub async fn poll_and_push(
                 }
                 None if last_key.is_some() => {
                     last_key = None;
+                    expected = None;
                     state::set_media_status(&hud, None);
                 }
                 None => {}
@@ -251,6 +301,38 @@ pub async fn poll_and_push(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn np(pos: Option<u64>, len: Option<u64>) -> NowPlaying {
+        NowPlaying {
+            player: "spotify".into(),
+            status: "Playing".into(),
+            title: Some("t".into()),
+            artist: None,
+            album: None,
+            position_ms: pos,
+            length_ms: len,
+        }
+    }
+
+    fn has(v: &Value, k: &str) -> bool {
+        matches!(v, Value::Map(m) if m.iter().any(|(a, _)| matches!(a, Value::Text(t) if t == k)))
+    }
+
+    #[test]
+    fn corpo_leva_posicao_so_quando_conhecida() {
+        let com = to_body(&np(Some(42_000), Some(200_000)));
+        assert!(has(&com, "position_ms") && has(&com, "length_ms"));
+        let sem = to_body(&np(None, None));
+        assert!(!has(&sem, "position_ms") && !has(&sem, "length_ms"));
+    }
+
+    #[test]
+    fn salto_so_com_seek() {
+        assert!(!position_jumped(Some(10_000), Some(11_500)));
+        assert!(position_jumped(Some(10_000), Some(60_000)));
+        assert!(position_jumped(None, Some(1_000)));
+        assert!(!position_jumped(None, None));
+    }
 
     /// Não roda em CI (depende de D-Bus de sessão real com um player MPRIS
     /// tocando) — `cargo test -- --ignored manual_snapshot` pra checar à
