@@ -11,12 +11,25 @@ certificados autoassinados, fingerprint pinning), com o protocolo de controlo
 serializado em **CBOR**. Sem servidor intermediário: o telemóvel fala
 diretamente com o PC.
 
-## Estrutura do projeto
+## Onde está o quê
 
 ```
-├── app android hyprlink/     App Android (Kotlin/Compose), feito no Google AI Studio
-├── hyprlink-daemon/          Daemon desktop em Rust (Linux/Hyprland)
-└── PROTOCOL.md               Especificação completa do protocolo (fonte de verdade)
+├── crates/
+│   ├── hyprlinkd/            Daemon (Rust, binário hyprlink-daemon) — sem janela
+│   ├── hyprlink-gui/         GUI do PC (iced, com tray próprio)
+│   ├── hyprlink-proto/       Contrato entre daemon, GUI e hyprlinkctl (+ textos em fmt.rs)
+│   └── hyprlinkctl/          Linha de comandos, para scripts e atalhos
+├── app android hyprlink/     App Android (Kotlin/Compose), feita no Google AI Studio
+├── android-design-kit/       Kit de design da app: tokens, mockups e prompts
+│   └── prompts/              Prompts por aplicar (ordem em ORDEM.md); os feitos em prompts/Done/
+├── docs/
+│   ├── prompts-ai-studio/    Prompts soltos para o AI Studio (aplicados em aplicados/)
+│   ├── testes/               Relatórios do teste real e o prompt do Claude Code
+│   └── historico/            Planos e materiais antigos, só para consulta
+├── contrib/                  Waybar, .desktop, script de instalação
+├── scripts/                  gui-capture.sh (capturas da GUI para comparar)
+├── PLANO_COMPLETAR.md        Estado e plano (a secção do topo é a mais recente)
+└── PROTOCOL.md               Especificação do protocolo (fonte de verdade)
 ```
 
 ## Estado atual
@@ -24,7 +37,7 @@ diretamente com o PC.
 | Módulo | Estado |
 |---|---|
 | Conectividade (QUIC/mTLS, pareamento por QR) | ✅ |
-| GUI do daemon (painel flutuante, vidro fosco) | ✅ |
+| GUI do PC (iced, separada do daemon) | ✅ |
 | Clipboard bidirecional | ✅ |
 | Hyprland (workspaces, janelas, dispatch, eventos ao vivo) | ✅ |
 | Bateria (PC ↔ telemóvel) | ✅ |
@@ -38,26 +51,26 @@ diretamente com o PC.
 Detalhes de cada fase, decisões de arquitetura e o roteiro completo estão no
 histórico de commits e em `PROTOCOL.md`.
 
-## Daemon desktop (Rust)
+## Correr no PC
 
-Requisitos: Linux com Hyprland (Wayland), Rust estável, `wl-clipboard`
-instalado, kernel com o módulo `uinput` carregado.
+Requisitos: Linux com Hyprland (Wayland), Rust estável, `wl-clipboard`,
+GStreamer com `gst-plugin-pipewire`, e o módulo `uinput` carregado.
 
 ```bash
-cd hyprlink-daemon
-cargo run
+# terminal 1 — o daemon (mostra o QR de emparelhamento no terminal)
+cargo run --release -p hyprlinkd
+# terminal 2 — a GUI
+cargo run --release -p hyprlink-gui
 ```
 
-Na primeira execução gera um certificado próprio e mostra um QR Code no
-terminal — aponte a câmara do app pra parear. A GUI (janela flutuante,
-transparente) abre junto; pra ficar bonita de verdade com o vidro fosco, o
-teu Hyprland precisa ter blur ligado (`decoration { blur { enabled = true } }`)
-— qualquer janela transparente já é borrada pelo compositor, não precisa de
-regra nenhuma específica pro HyprLink.
+Na primeira execução o daemon gera um certificado próprio. A GUI fala com ele
+pelo socket `$XDG_RUNTIME_DIR/hyprlink.sock`; `HYPRLINK_MOCK=1` abre-a com um
+daemon simulado, sem telemóvel.
 
 Stack: [`quinn`](https://github.com/quinn-rs/quinn) (QUIC), `rustls` (TLS),
-`ciborium` (CBOR), [`iced`](https://github.com/iced-rs/iced) (GUI), `zbus`
-(D-Bus — MPRIS e notificações), `uinput` (touchpad/teclado remoto).
+`ciborium` (CBOR), [`iced`](https://github.com/iced-rs/iced) (GUI), `ksni`
+(tray), `zbus` (D-Bus — MPRIS e notificações), `uinput` (touchpad/teclado),
+GStreamer/PipeWire (áudio e câmara).
 
 ## App Android
 
