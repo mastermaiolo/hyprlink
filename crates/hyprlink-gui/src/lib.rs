@@ -4,8 +4,9 @@
 //! stay identical to the ones in the design repository.
 
 pub mod instance;
+pub mod langcfg;
 
-pub use hyprlink_proto::{fmt, host, link, snapshot};
+pub use hyprlink_proto::{fmt, host, i18n, link, snapshot};
 
 use link::Transport;
 

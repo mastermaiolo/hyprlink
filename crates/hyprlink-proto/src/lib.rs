@@ -18,6 +18,8 @@ pub mod client;
 #[cfg(feature = "fmt")]
 pub mod fmt;
 pub mod host;
+#[cfg(feature = "fmt")]
+pub mod i18n;
 pub mod ipc;
 pub mod link;
 pub mod snapshot;
