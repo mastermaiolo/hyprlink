@@ -889,15 +889,28 @@ pub fn share(app: &App) -> El<'_> {
     .width(fill_portion(1));
 
     // ── files ──
+    let linked = app.primary().is_some();
     let drop = container(
         column![
-            headline("LARGA AQUI.", size::H2 + 14.0),
+            headline(t("LARGA AQUI."), size::H2 + 14.0),
             gap(space::XS),
-            deck_s("Um ficheiro largado na janela vai para o telemóvel."),
+            deck_s(t("Um ficheiro largado na janela vai para o telemóvel.")),
             gap(space::L),
+            btn(
+                t("ESCOLHER FICHEIROS…"),
+                theme::primary,
+                linked.then_some(Message::PickFiles)
+            ),
+            gap(space::XS),
+            if linked {
+                deck_s(t("Escolhe um ou vários ficheiros, de qualquer formato."))
+            } else {
+                mono(t("precisa de um telemóvel ligado"), FAINT)
+            },
+            gap(space::M),
             row![
                 text_input(
-                    "ou escreve o caminho: ~/Música/OMNIS_v3.wav",
+                    t("ou escreve o caminho: ~/Música/OMNIS_v3.wav"),
                     &app.send_path
                 )
                 .on_input(Message::SendPath)

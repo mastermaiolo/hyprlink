@@ -315,6 +315,10 @@ pub enum Message {
     SendPath(String),
     SendFile,
     FileDropped(std::path::PathBuf),
+    /// Botão «ESCOLHER FICHEIROS…»: abre o seletor do portal XDG.
+    PickFiles,
+    /// Resultado do seletor: `None` = cancelado; `Some(vazio)` = o portal não abriu.
+    FilesPicked(Option<Vec<std::path::PathBuf>>),
     DownloadsInput(String),
     RenameInput(DeviceId, String),
     RenameSave(DeviceId),
@@ -725,10 +729,7 @@ impl App {
                 let s = fmt::notice(&n, |id| {
                     self.devices.iter().find(|d| d.id == id).map(fmt::name)
                 });
-                self.toasts.push((s, self.t));
-                if self.toasts.len() > 3 {
-                    self.toasts.remove(0);
-                }
+                self.toast(s);
             }
         }
     }
@@ -775,6 +776,30 @@ impl App {
 
     fn more(&mut self, c: Command2) {
         self.link.send(Command::More(c));
+    }
+
+    fn toast(&mut self, s: String) {
+        self.toasts.push((s, self.t));
+        if self.toasts.len() > 3 {
+            self.toasts.remove(0);
+        }
+    }
+
+    /// Ponto único de envio de ficheiros (largados na janela ou escolhidos):
+    /// um `SendFile` por ficheiro, pela ordem recebida; as pastas ficam de fora
+    /// (o daemon só aceita ficheiros regulares) e avisa-se uma vez.
+    fn send_paths(&mut self, paths: Vec<std::path::PathBuf>) {
+        let plan = plan_send(paths);
+        for f in plan.files {
+            self.more(Command2::SendFile(f));
+        }
+        if plan.folders > 0 {
+            self.toast(tr!(
+                "{} pasta(s) ignorada(s) — só se enviam ficheiros.",
+                plan.folders
+            ));
+        }
+        self.section = Section::Partilha;
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -999,10 +1024,19 @@ impl App {
                     self.send_path.clear();
                 }
             }
-            Message::FileDropped(path) => {
-                self.more(Command2::SendFile(path.display().to_string()));
-                self.section = Section::Partilha;
+            Message::FileDropped(path) => self.send_paths(vec![path]),
+            Message::PickFiles => {
+                if !file_chooser_portal_present() {
+                    self.toast(no_picker().to_string());
+                    return Task::none();
+                }
+                return Task::perform(pick_files(), Message::FilesPicked);
             }
+            Message::FilesPicked(None) => {}
+            Message::FilesPicked(Some(paths)) if paths.is_empty() => {
+                self.toast(no_picker().to_string());
+            }
+            Message::FilesPicked(Some(paths)) => self.send_paths(paths),
             Message::RenameInput(id, s) => {
                 self.rename_for = Some(id);
                 self.rename_input = s;
@@ -1449,3 +1483,106 @@ impl App {
 }
 
 use iced::Color;
+
+fn no_picker() -> &'static str {
+    t("Sem seletor de ficheiros — instala xdg-desktop-portal-gtk, ou larga o ficheiro aqui.")
+}
+
+/// Caminhos a enviar e número de pastas deixadas de fora.
+#[derive(Debug, PartialEq, Eq)]
+struct SendPlan {
+    files: Vec<String>,
+    folders: usize,
+}
+
+/// Ignora diretórios, mantém a ordem e não deduplica (o mesmo ficheiro duas
+/// vezes envia-se duas vezes).
+fn plan_send(paths: Vec<std::path::PathBuf>) -> SendPlan {
+    let mut plan = SendPlan {
+        files: Vec::new(),
+        folders: 0,
+    };
+    for p in paths {
+        if p.is_dir() {
+            plan.folders += 1;
+        } else {
+            plan.files.push(p.display().to_string());
+        }
+    }
+    plan
+}
+
+/// Há algum backend de portal que declare `FileChooser`? (`gtk.portal`,
+/// `kde.portal`…; o `hyprland.portal` não declara.) O `rfd` devolve `None`
+/// tanto ao cancelar como quando não há portal, por isso verifica-se antes.
+fn file_chooser_portal_present() -> bool {
+    let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+    let data = std::env::var("XDG_DATA_DIRS").unwrap_or_default();
+    let data = if data.is_empty() {
+        "/usr/local/share:/usr/share".to_string()
+    } else {
+        data
+    };
+    for d in data.split(':').filter(|d| !d.is_empty()) {
+        dirs.push(std::path::Path::new(d).join("xdg-desktop-portal/portals"));
+    }
+    dirs.iter().any(|d| {
+        std::fs::read_dir(d).is_ok_and(|rd| {
+            rd.flatten().any(|e| {
+                std::fs::read_to_string(e.path())
+                    .is_ok_and(|c| c.contains("org.freedesktop.impl.portal.FileChooser"))
+            })
+        })
+    })
+}
+
+/// Pasta inicial do seletor: Transferências/Documentos se existirem.
+fn picker_start_dir() -> Option<std::path::PathBuf> {
+    let home = std::path::PathBuf::from(std::env::var_os("HOME")?);
+    ["Transferências", "Downloads", "Documentos", "Documents"]
+        .iter()
+        .map(|d| home.join(d))
+        .find(|d| d.is_dir())
+}
+
+/// Seletor por portal, vários ficheiros, sem filtro. Cancelar dá `None`; um
+/// portal que falha logo ao abrir (< 300 ms, impossível para uma pessoa a
+/// escolher e cancelar) dá `Some(vazio)` para a GUI avisar.
+async fn pick_files() -> Option<Vec<std::path::PathBuf>> {
+    let t0 = Instant::now();
+    let mut dlg = rfd::AsyncFileDialog::new().set_title(t("Escolher ficheiros para o telemóvel"));
+    if let Some(d) = picker_start_dir() {
+        dlg = dlg.set_directory(d);
+    }
+    match dlg.pick_files().await {
+        Some(v) => Some(v.into_iter().map(|f| f.path().to_path_buf()).collect()),
+        None if t0.elapsed() < Duration::from_millis(300) => Some(Vec::new()),
+        None => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn plan_send_skips_folders_keeps_order_and_repeats() {
+        let dir = std::env::temp_dir().join(format!("hyprlink-plan-{}", std::process::id()));
+        let sub = dir.join("pasta");
+        std::fs::create_dir_all(&sub).unwrap();
+        let a = dir.join("a.wav");
+        let b = dir.join("b.bin");
+        std::fs::write(&a, b"a").unwrap();
+        std::fs::write(&b, b"b").unwrap();
+
+        let plan = plan_send(vec![b.clone(), sub.clone(), a.clone(), b.clone()]);
+        let s = |p: &PathBuf| p.display().to_string();
+        assert_eq!(plan.files, vec![s(&b), s(&a), s(&b)]);
+        assert_eq!(plan.folders, 1);
+
+        let none = plan_send(Vec::new());
+        assert_eq!((none.files.len(), none.folders), (0, 0));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

@@ -19,6 +19,7 @@ ksni = "0.3.6"
 tokio = { version = "1", features = ["net", "io-util"] }
 serde_json.workspace = true
 serde.workspace = true
+rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "tokio"] }
 
 # Lints tolerados (herdados do desenho original):
 #   - collapsible_if: app.rs, atalhos de teclado em ifs aninhados;
