@@ -33,8 +33,13 @@ para o `hyprlinkctl` (campos do JSON pela ordem de leitura) e para o plugin do N
 
 ## Correr
 
+Esta pasta é a **única fonte** da GUI (o antigo repositório de design em `~/Projectos/iced/hyprlink-gui`
+está arquivado). Na raiz do workspace:
+
 ```sh
-cargo run --release
+cargo run -p hyprlinkd                    # o daemon (terminal 1)
+cargo run -p hyprlink-gui --release       # a GUI, liga-se a $XDG_RUNTIME_DIR/hyprlink.sock
+HYPRLINK_MOCK=1 cargo run -p hyprlink-gui # sem daemon: simulador, para desenho e capturas
 ```
 
 A app corre como `iced::daemon`: fechar a janela deixa-a no **system tray** (StatusNotifierItem,
@@ -49,27 +54,44 @@ O ícone segue o link: `Passive` sem telemóvel (o tray do Noctalia esconde-o po
 Menu: Abrir · Ping · Enviar clipboard · Microfone ✓ · Espelho ✓ · Sair. A tooltip mostra
 telemóvel · bateria · rede · latência.
 
+## LINK = estado da ligação
+
+A palavra **LINK** do logótipo (e o quadrado ao lado, o ponto do masthead e o núcleo do ícone do tray)
+segue `LinkPhase`, que o daemon envia em `Event::Link`:
+
+| Fase | Cor | Etiqueta |
+|---|---|---|
+| `Connected` | verde `#2BE07A` (`LINK_UP`) | ■ LIGADO |
+| `Connecting` | âmbar dourado `#F4B731` (`LINK_WAIT`), a respirar (ciclo de 1,6 s) | ■ A LIGAR… |
+| `Disconnected` | vermelho `#FF3355` (`LINK_DOWN` = `HOT`) | ■ DESLIGADO |
+
+![Estados do LINK](docs/screenshots/link-estados.png)
+
+No simulador: `HYPRLINK_LINK=offline|connecting|cycle cargo run` (por omissão liga em menos de 1 s).
+O JSON v1 do `hyprlinkctl` tem o campo `link` (`"connected"`, `"connecting"`, `"disconnected"`).
+
 ## hyprlinkctl
 
-CLI para scripts, keybinds e plugins de shell:
+CLI para scripts, keybinds e plugins de shell (crate `crates/hyprlinkctl`), fala com o daemon pelo mesmo
+socket:
 
 ```sh
-cargo install --path .            # instala hyprlink-gui e hyprlinkctl em ~/.cargo/bin
+cargo install --path crates/hyprlinkctl
 hyprlinkctl status
 hyprlinkctl watch --json          # uma linha JSON a cada 500 ms (--interval MS)
 hyprlinkctl mic on|off|toggle     # tap …, speaker …, mirror start|stop|toggle, ws N, ping, clipboard, pair, open
 ```
 
-Nesta versão fala com o daemon **simulado** (os toggles persistem em
-`$XDG_RUNTIME_DIR/hyprlink-mock.json`). Contra o `hyprlinkd` real muda só o `Backend`.
-O formato do JSON está em `src/snapshot.rs` (`v = 1`): desconhecido é `null`, nunca um 0 falso; a rede do
-telemóvel vem estruturada e os tamanhos em bytes — quem mostra é que formata. `cargo test` verifica a forma.
+O formato do JSON está em `crates/hyprlink-proto/src/snapshot.rs` (`v = 1`): desconhecido é `null`, nunca
+um 0 falso; a rede do telemóvel vem estruturada e os tamanhos em bytes — quem mostra é que formata.
+`cargo test -p hyprlink-proto` verifica a forma.
 
 ## Contrato com o daemon
 
-`src/link/mod.rs` é o futuro `hyprlink-proto`: só dados (regra 2). Todo o texto para humanos está em
-`src/fmt.rs`; os nomes de pacotes (`módulo.ação`) estão em `src/link/packets.rs`, separados em reais e
-propostos.
+`crates/hyprlink-proto/src/link/mod.rs`: só dados (regra 2). Todo o texto para humanos está em
+`crates/hyprlink-proto/src/fmt.rs`; os nomes de pacotes (`módulo.ação`) estão em `link/packets.rs`
+(reais, confirmados, propostos). O socket local está em `hyprlink-proto/src/ipc.rs` (envelope) e
+`client.rs` (o `Transport` da GUI e a sessão do `hyprlinkctl`).
 
 ## Plugin do Noctalia v5
 
@@ -83,7 +105,7 @@ e acrescentar o widget à barra (Definições → Barra → Adicionar widget →
 Serviço com `runStream(hyprlinkctl watch --json)`, widget nativo (papéis da paleta) e um painel
 "edição de bolso" com estilo HYPRLINK (Anton + ácido) ou Shell.
 
-Variáveis úteis para desenvolvimento/capturas:
+Variáveis úteis para desenvolvimento/capturas (com `HYPRLINK_MOCK=1`; `scripts/gui-capture.sh` faz as capturas):
 
 ```sh
 HYPRLINK_SECTION=4  HYPRLINK_DEMO=webcam   cargo run   # Câmara ligada, rede testada
@@ -104,47 +126,26 @@ windowrulev2 = size 1480 940, class:^(dev.hyprlink.gui)$
 ## Estrutura
 
 ```
-src/
-  main.rs        arranque (iced::daemon), fontes embutidas
-  lib.rs         partilhado com o hyprlinkctl: link, host, snapshot
-  tray.rs        StatusNotifierItem (ksni): estado, tooltip, menu, ícone desenhado em código
-  host.rs        "Este PC": CPU, memória, bateria, uptime a partir de /proc e /sys
-  snapshot.rs    o JSON estável para plugins de shell
-  bin/hyprlinkctl.rs  a CLI
-  theme.rs       design system: cores, tipografia, escala, estilos de widgets
+crates/hyprlink-gui/src/
+  main.rs        arranque (iced::daemon), fontes embutidas, instância única
+  lib.rs         transport() (socket real ou simulador), instance
+  instance.rs    um segundo arranque só foca a janela
+  app.rs         estado, mensagens, update, subscrições, moldura (rail, masthead, LINK, ticker, toasts)
+  theme.rs       design system: cores (LINK_UP/WAIT/DOWN), tipografia, escala, estilos de widgets
   ui.rs          blocos editoriais (kicker, headline, deck, stat, kv, setting…)
   graphics.rs    canvas: sparkline, medidor LED, diagrama do link, telemóvel, escala RSSI, ticker
   views.rs       Capa, Dispositivos, Secretária, Áudio, Sensores & Presença, Diário + emparelhamento
   pages.rs       Câmara & Ecrã, Notificações, Partilha, Multimédia, Definições + blocos novos
-                 (bateria, atalhos, trackpad, volumes do telemóvel, misturador)
-  app.rs         estado, mensagens, update, subscrições, moldura (rail, masthead, ticker, toasts)
-  link/mod.rs    o contrato com o daemon: Command, Event, trait Transport
-  link/mock.rs   daemon simulado (valores que derivam, picos, respostas a comandos)
-  link/mock_more.rs  dados simulados das páginas novas
-  link/packets.rs    nomes de pacotes: reais, a confirmar, propostos
+  tray.rs        StatusNotifierItem (ksni): estado, tooltip, menu, ícone desenhado em código
+crates/hyprlink-proto/src/
+  link/mod.rs    o contrato: Command, Event, LinkPhase, trait Transport
+  link/mock.rs, mock_more.rs   daemon simulado (feature `mock`, ligada por omissão)
+  link/packets.rs              nomes de pacotes
+  fmt.rs · host.rs · snapshot.rs · ipc.rs · client.rs
 ```
 
-### Ligar ao daemon real
-
-A GUI só conhece o trait `Transport`:
-
-```rust
-pub trait Transport {
-    fn send(&mut self, command: Command);
-    fn poll(&mut self, dt: Duration) -> Vec<Event>;
-}
-```
-
-Para ligar ao `hyprlinkd`, implementa-o sobre o socket de controlo (por exemplo CBOR
-sobre `$XDG_RUNTIME_DIR/hyprlink.sock`) e troca uma linha em `App::boot`:
-
-```rust
-link: Box::new(link::mock::Simulator::new()),   // → Box::new(link::daemon::Socket::connect()?)
-```
-
-Os `Command` mapeiam 1:1 para os pacotes já existentes (`webcam.mic_*`, `audio.tap_*`,
-`hyprland.workspace.switch`, `hyprland.mirror.*`, `kdeconnect.pair`…). O sink
-`hyprlink-speaker` aparece marcado como **POR IMPLEMENTAR** até existir no daemon.
+O daemon publica a fase da ligação (`Event::Link`) a partir de `ConnState`
+(`crates/hyprlinkd/src/state.rs`); o LINK muda de cor com ela.
 
 ## Design system
 

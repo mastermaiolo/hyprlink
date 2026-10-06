@@ -60,6 +60,8 @@ pub struct Snapshot {
     pub v: u8,
     /// "up" | "mock" | "down"
     pub daemon: String,
+    /// "connected" | "connecting" | "disconnected" — the LINK colour.
+    pub link: crate::link::LinkPhase,
     // ── the phone ──
     pub device: Option<DeviceBrief>,
     pub phone: Option<PhoneStatus>,
@@ -118,6 +120,7 @@ impl Snapshot {
                 }
             }
             Event::Phone(p) => self.phone = Some(p.clone()),
+            Event::Link(p) => self.link = *p,
             Event::Telemetry {
                 latency_ms,
                 up_kbps,
@@ -185,6 +188,7 @@ mod tests {
         let t = |p: &str| v.pointer(p).unwrap_or_else(|| panic!("falta {p}")).clone();
         assert_eq!(t("/v"), 1);
         assert!(t("/daemon").is_string());
+        assert!(t("/link").is_string());
         assert!(t("/device/name").is_string());
         assert!(t("/device/state").is_string());
         assert!(t("/device/battery").is_number() || t("/device/battery").is_null());

@@ -22,8 +22,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 hyprlink-proto = { path = ".", features = ["mock"] }
 serde_json.workspace = true
 
-# Os ficheiros vêm do repositório de design e mantêm-se iguais aos de lá
-# (scripts/sync-gui.sh); estes lints corrigem-se na origem.
+# Lints tolerados (herdados do desenho original):
 #   - large_enum_variant: Event::Phone (~280 B); o wire não muda e os eventos
 #     são descodificados um a um.
 [lints.clippy]

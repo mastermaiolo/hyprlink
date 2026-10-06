@@ -23,6 +23,7 @@ pub enum StateKey {
     Rssi,
     Pairing,
     Phone,
+    Link,
     BatteryHistory,
     BatteryAlerts,
     ActiveWindow,
@@ -53,6 +54,7 @@ pub fn key(e: &Event) -> Option<StateKey> {
         Event::Rssi(_) => K::Rssi,
         Event::Pairing(_) => K::Pairing,
         Event::Phone(_) => K::Phone,
+        Event::Link(_) => K::Link,
         Event::Packet(_) | Event::Notice(_) => return None,
         Event::More(m) => match m {
             Event2::BatteryHistory(_) => K::BatteryHistory,

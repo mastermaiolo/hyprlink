@@ -35,6 +35,7 @@ pub struct Snapshot {
     pub mic: bool,
     pub mirror: bool,
     pub pairing: bool,
+    pub phase: crate::link::LinkPhase,
 }
 
 pub struct HyprTray {
@@ -72,25 +73,28 @@ impl ksni::Tray for HyprTray {
     }
 
     fn status(&self) -> Status {
+        use crate::link::LinkPhase::*;
         if self.snap.pairing {
             Status::NeedsAttention
-        } else if self.snap.device.is_some() {
-            Status::Active
         } else {
-            Status::Passive
+            match self.snap.phase {
+                Connected | Connecting => Status::Active,
+                Disconnected => Status::Passive,
+            }
         }
     }
 
     fn icon_pixmap(&self) -> Vec<Icon> {
-        icons(if self.snap.device.is_some() {
-            Core::Linked
-        } else {
-            Core::Idle
+        use crate::link::LinkPhase::*;
+        icons(match self.snap.phase {
+            Connected => Core::Linked,
+            Connecting => Core::Connecting,
+            Disconnected => Core::Down,
         })
     }
 
     fn attention_icon_pixmap(&self) -> Vec<Icon> {
-        icons(Core::Attention)
+        icons(Core::Connecting)
     }
 
     fn tool_tip(&self) -> ToolTip {
@@ -105,7 +109,10 @@ impl ksni::Tray for HyprTray {
                 s.network,
                 s.latency_ms
             ),
-            None => "Nenhum telemóvel ligado".into(),
+            None => match s.phase {
+                crate::link::LinkPhase::Connecting => "A ligar ao telemóvel…".into(),
+                _ => "Nenhum telemóvel ligado".into(),
+            },
         };
         ToolTip {
             title: "HYPRLINK".into(),
@@ -224,8 +231,8 @@ fn worker() -> impl iced::futures::Stream<Item = Message> {
 #[derive(Clone, Copy)]
 enum Core {
     Linked,
-    Idle,
-    Attention,
+    Connecting,
+    Down,
 }
 
 /// The brand mark, rasterised at tray sizes: two squares joined by a dotted
@@ -247,9 +254,11 @@ fn mark(n: i32, core: Core) -> Icon {
         }
     };
     const PAPER: (u8, u8, u8) = (0xED, 0xEB, 0xE4);
-    const ACID: (u8, u8, u8) = (0xD4, 0xFF, 0x3A);
-    const HOT: (u8, u8, u8) = (0xFF, 0x33, 0x55);
-    const GREY: (u8, u8, u8) = (0x6A, 0x69, 0x65);
+    // Same three link colours as the LINK wordmark (theme::LINK_*).
+    const UP: (u8, u8, u8) = (0x2B, 0xE0, 0x7A);
+    const WAIT: (u8, u8, u8) = (0xF4, 0xB7, 0x31);
+    const DOWN: (u8, u8, u8) = (0xFF, 0x33, 0x55);
+    const GREY: (u8, u8, u8) = (0x80, 0x7F, 0x7A); // theme::MUTED
 
     let q = ((n as f32) * 0.32).round() as i32; // square size
     let m = ((n as f32) * 0.04).round().max(1.0) as i32; // margin
@@ -276,9 +285,9 @@ fn mark(n: i32, core: Core) -> Icon {
         }
     }
     let c = match core {
-        Core::Linked => ACID,
-        Core::Idle => GREY,
-        Core::Attention => HOT,
+        Core::Linked => UP,
+        Core::Connecting => WAIT,
+        Core::Down => DOWN,
     };
     let inset = stroke + (q / 5).max(1);
     for y in top + inset..top + q - inset {
@@ -294,7 +303,7 @@ fn mark(n: i32, core: Core) -> Icon {
             put(
                 x,
                 mid - stroke / 2 + d,
-                if matches!(core, Core::Idle) {
+                if matches!(core, Core::Down) {
                     GREY
                 } else {
                     PAPER

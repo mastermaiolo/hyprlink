@@ -24,6 +24,15 @@ pub fn state(s: LinkState) -> &'static str {
     }
 }
 
+pub fn phase(p: crate::link::LinkPhase) -> &'static str {
+    use crate::link::LinkPhase::*;
+    match p {
+        Connected => "LIGADO",
+        Connecting => "A LIGAR…",
+        Disconnected => "DESLIGADO",
+    }
+}
+
 pub fn cap(c: Cap) -> &'static str {
     match c {
         Cap::Workspaces => "workspaces",

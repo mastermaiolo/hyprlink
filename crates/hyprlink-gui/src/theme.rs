@@ -33,7 +33,7 @@ pub const LINE_STRONG: Color = color!(0x2C2C2C);
 /// Primary text: warm newsprint white, never pure #FFF.
 pub const PAPER: Color = color!(0xEDEBE4);
 pub const SUB: Color = color!(0xA3A19A);
-pub const MUTED: Color = color!(0x6A6965);
+pub const MUTED: Color = color!(0x807F7A); // ≥4.5:1 em VOID e INK_0..2 (era 0x6A6965, 3.8:1)
 pub const FAINT: Color = color!(0x3D3C3A);
 
 /// The accent. Used sparingly: active state, live values, the one thing to look at.
@@ -41,6 +41,12 @@ pub const ACID: Color = color!(0xD4FF3A);
 pub const ACID_DIM: Color = color!(0x5B6B1E);
 /// Alarm / recording / live-on-air.
 pub const HOT: Color = color!(0xFF3355);
+
+/// Link state. Reserved for the LINK wordmark and its echoes (masthead dot,
+/// tray core, plugin header). Never used for anything else.
+pub const LINK_UP: Color = color!(0x2BE07A); // ligado — verde
+pub const LINK_WAIT: Color = color!(0xF4B731); // a ligar — âmbar dourado
+pub const LINK_DOWN: Color = HOT; // desligado — vermelho
 /// Inbound traffic only.
 pub const COLD: Color = color!(0x5FD4E8);
 
@@ -305,7 +311,7 @@ pub fn ghost(_: &Theme, status: button::Status) -> button::Style {
         button::Status::Hovered => (INK_2, ACID, alpha(ACID, 0.7)),
         button::Status::Pressed => (INK_1, ACID, ACID),
         button::Status::Disabled => (Color::TRANSPARENT, FAINT, LINE),
-        button::Status::Active => (Color::TRANSPARENT, PAPER, LINE_STRONG),
+        button::Status::Active => (Color::TRANSPARENT, PAPER, MUTED), // borda de controlo ≥3:1
     };
     button::Style {
         background: Some(bg.into()),
@@ -338,9 +344,9 @@ pub fn chip_style(selected: bool) -> impl Fn(&Theme, button::Status) -> button::
         let (bg, fg, line) = if selected {
             (PAPER, VOID, PAPER)
         } else if hovered {
-            (INK_2, PAPER, LINE_STRONG)
+            (INK_2, PAPER, SUB)
         } else {
-            (Color::TRANSPARENT, SUB, LINE_STRONG)
+            (Color::TRANSPARENT, SUB, MUTED)
         };
         button::Style {
             background: Some(bg.into()),
@@ -436,7 +442,7 @@ pub fn switch_style(_: &Theme, status: toggler::Status) -> toggler::Style {
         } else if hovered {
             alpha(ACID, 0.6)
         } else {
-            LINE_STRONG
+            MUTED
         },
         foreground: knob.into(),
         foreground_border_width: 0.0,
@@ -454,7 +460,7 @@ pub fn fader(_: &Theme, status: slider::Status) -> slider::Style {
     };
     slider::Style {
         rail: slider::Rail {
-            backgrounds: (ACID.into(), LINE_STRONG.into()),
+            backgrounds: (ACID.into(), MUTED.into()),
             width: 2.0,
             border: NO_BORDER,
         },
@@ -473,14 +479,14 @@ pub fn fader(_: &Theme, status: slider::Status) -> slider::Style {
 pub fn input(_: &Theme, status: text_input::Status) -> text_input::Style {
     let line = match status {
         text_input::Status::Focused { .. } => ACID,
-        text_input::Status::Hovered => LINE_STRONG,
-        _ => LINE,
+        text_input::Status::Hovered => SUB,
+        _ => MUTED,
     };
     text_input::Style {
         background: INK_0.into(),
         border: hairline(line),
         icon: MUTED,
-        placeholder: FAINT,
+        placeholder: MUTED,
         value: PAPER,
         selection: alpha(ACID, 0.35),
     }

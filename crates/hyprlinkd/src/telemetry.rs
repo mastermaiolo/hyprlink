@@ -22,8 +22,16 @@ use crate::state::HudState;
 /// softirq steal …` → (idle_total, busy_total). Para calcular a percentagem
 /// entre duas amostras.
 fn cpu_sample() -> Option<(u64, u64)> {
-    let line = std::fs::read_to_string("/proc/stat").ok()?.lines().next()?.to_string();
-    let nums: Vec<u64> = line.split_whitespace().skip(1).filter_map(|n| n.parse().ok()).collect();
+    let line = std::fs::read_to_string("/proc/stat")
+        .ok()?
+        .lines()
+        .next()?
+        .to_string();
+    let nums: Vec<u64> = line
+        .split_whitespace()
+        .skip(1)
+        .filter_map(|n| n.parse().ok())
+        .collect();
     if nums.len() < 5 {
         return None;
     }
@@ -36,9 +44,12 @@ fn cpu_sample() -> Option<(u64, u64)> {
 fn ram_sample() -> Option<(u64, u64)> {
     let info = std::fs::read_to_string("/proc/meminfo").ok()?;
     let get_kb = |key: &str| {
-        info.lines().find(|l| l.starts_with(key))?
-            .split_whitespace().nth(1)?
-            .parse::<u64>().ok()
+        info.lines()
+            .find(|l| l.starts_with(key))?
+            .split_whitespace()
+            .nth(1)?
+            .parse::<u64>()
+            .ok()
             .map(|kb| kb * 1024)
     };
     let total = get_kb("MemTotal:")?;
@@ -52,8 +63,12 @@ fn ram_sample() -> Option<(u64, u64)> {
 fn cpu_temp() -> Option<f32> {
     for entry in std::fs::read_dir("/sys/class/thermal").ok()? {
         let path = entry.ok()?.path().join("temp");
-        let Ok(raw) = std::fs::read_to_string(&path) else { continue };
-        let Ok(millic) = raw.trim().parse::<i64>() else { continue };
+        let Ok(raw) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(millic) = raw.trim().parse::<i64>() else {
+            continue;
+        };
         let c = millic as f32 / 1000.0;
         if (0.0..120.0).contains(&c) {
             return Some(c);
@@ -63,7 +78,12 @@ fn cpu_temp() -> Option<f32> {
 }
 
 fn uptime_secs() -> Option<u64> {
-    std::fs::read_to_string("/proc/uptime").ok()?.split_whitespace().next()?.parse().ok()
+    std::fs::read_to_string("/proc/uptime")
+        .ok()?
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()
 }
 
 fn hostname() -> String {
@@ -150,7 +170,9 @@ mod tests {
             kv("hostname", Value::Text("pc".into())),
             kv("cpu_pct", Value::Float(12.5)),
         ];
-        let Value::Map(m) = Value::Map(pairs) else { unreachable!() };
+        let Value::Map(m) = Value::Map(pairs) else {
+            unreachable!()
+        };
         assert_eq!(m.len(), 2);
         assert_eq!(m[0].0.as_text(), Some("hostname"));
         assert_eq!(m[1].1.as_float(), Some(12.5));

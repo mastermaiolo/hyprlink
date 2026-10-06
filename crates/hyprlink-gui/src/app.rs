@@ -234,6 +234,9 @@ pub struct App {
     pub players: Vec<Player>,
     pub settings: Option<Settings>,
     pub downloads_input: String,
+
+    /// The phone link as a whole: drives the LINK wordmark.
+    pub phase: link::LinkPhase,
 }
 
 #[derive(Debug, Clone)]
@@ -471,6 +474,8 @@ impl App {
             players: Vec::new(),
             settings: None,
             downloads_input: String::new(),
+            // Until the daemon says otherwise, we are trying.
+            phase: link::LinkPhase::Connecting,
         };
 
         // Warm the simulation so graphs open full rather than empty.
@@ -573,6 +578,7 @@ impl App {
             mic: self.mic_on,
             mirror: self.mirror_on,
             pairing: self.pairing.is_some(),
+            phase: self.phase,
         };
         if snap == self.tray_snap {
             return Task::none();
@@ -678,6 +684,7 @@ impl App {
             }
             Event::Phone(p) => self.phone = Some(p),
             Event::More(e) => self.apply_more(e),
+            Event::Link(p) => self.phase = p,
             Event::Notice(n) => {
                 let s = fmt::notice(&n, |id| {
                     self.devices.iter().find(|d| d.id == id).map(fmt::name)
@@ -713,6 +720,19 @@ impl App {
                     self.downloads_input = s.downloads_dir.clone();
                 }
                 self.settings = Some(s);
+            }
+        }
+    }
+
+    /// LINK colour: green connected, golden amber while trying (breathing),
+    /// red when down. The only place these three colours are chosen.
+    pub fn link_color(&self) -> Color {
+        match self.phase {
+            link::LinkPhase::Connected => LINK_UP,
+            link::LinkPhase::Disconnected => LINK_DOWN,
+            link::LinkPhase::Connecting => {
+                let breath = 0.5 + 0.5 * (self.t * std::f32::consts::TAU / 1.6).sin();
+                alpha(LINK_WAIT, 0.45 + 0.55 * breath)
             }
         }
     }
@@ -1019,10 +1039,18 @@ impl App {
     fn rail(&self) -> El<'_> {
         let mark = column![
             headline("HYPR", 52.0),
-            row![headline("LINK", 52.0), hgap(6.0), square(ACID, 11.0)].align_y(Alignment::End),
+            row![
+                headline("LINK", 52.0).color(self.link_color()),
+                hgap(6.0),
+                square(self.link_color(), 11.0)
+            ]
+            .align_y(Alignment::End),
             gap(space::M),
             kicker("EDIÇÃO 0.1 — OUT 2026"),
             kicker("ANDROID ⇄ HYPRLAND"),
+            gap(space::S),
+            // Colour never carries meaning alone: the state is also spelled out.
+            kicker_c(format!("■ {}", fmt::phase(self.phase)), self.link_color()),
         ];
 
         let mut nav = column![].spacing(2);
@@ -1197,7 +1225,7 @@ impl App {
         let now = chrono::Local::now();
         let dev: El = match self.primary() {
             Some(d) => row![
-                square(ACID, 7.0),
+                square(self.link_color(), 7.0),
                 hgap(8.0),
                 ui::t(fmt::name(d), MONO_SEMI, 11.5, PAPER),
                 hgap(space::M),
@@ -1212,9 +1240,19 @@ impl App {
             ]
             .align_y(Alignment::Center)
             .into(),
-            None => row![square(HOT, 7.0), hgap(8.0), ui::mono("SEM LIGAÇÃO", HOT)]
-                .align_y(Alignment::Center)
-                .into(),
+            None => row![
+                square(self.link_color(), 7.0),
+                hgap(8.0),
+                ui::mono(
+                    match self.phase {
+                        link::LinkPhase::Connecting => "A LIGAR AO TELEMÓVEL…",
+                        _ => "SEM LIGAÇÃO",
+                    },
+                    self.link_color()
+                )
+            ]
+            .align_y(Alignment::Center)
+            .into(),
         };
         container(
             row![

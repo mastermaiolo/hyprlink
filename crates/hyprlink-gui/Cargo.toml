@@ -20,11 +20,10 @@ tokio = { version = "1", features = ["net", "io-util"] }
 serde_json.workspace = true
 serde.workspace = true
 
-# Os ficheiros de design (theme.rs, app.rs, views.rs…) mantêm-se iguais aos
-# do repositório de origem; estes lints corrigem-se lá, não aqui.
+# Lints tolerados (herdados do desenho original):
 #   - collapsible_if: app.rs, atalhos de teclado em ifs aninhados;
 #   - if_same_then_else: theme.rs `card()`, ramos selected/hovered com a
-#     mesma cor de propósito (theme.rs não se toca — regra 1).
+#     mesma cor de propósito.
 [lints.clippy]
 collapsible_if = "allow"
 if_same_then_else = "allow"

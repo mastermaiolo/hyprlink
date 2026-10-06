@@ -11,9 +11,8 @@
 //! - `fmt` (feature `fmt`): os textos pt-PT — só para quem desenha.
 //! - `link::mock` (feature `mock`): o daemon simulado.
 //!
-//! Os ficheiros vêm de `~/Projectos/iced/hyprlink-gui/src` (repositório de
-//! design) e mantêm-se iguais aos de lá, salvo os `cfg` de feature; ver
-//! `scripts/sync-gui.sh`.
+//! Desde 2026-10-06 este crate e o `hyprlink-gui` são a única fonte do
+//! contrato e da GUI (o antigo repositório de design está arquivado).
 
 pub mod client;
 #[cfg(feature = "fmt")]

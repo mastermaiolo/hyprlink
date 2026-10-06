@@ -5,6 +5,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use hyprlink_proto::link::LinkPhase;
+
 const MAX_LOG_LINES: usize = 200;
 /// Histórico de CLIP/NOTIF fica só em memória por ora (reseta ao reiniciar
 /// o daemon) — persistência em disco com retenção configurável é Fase C.
@@ -200,6 +202,7 @@ pub fn push_log(state: &Arc<Mutex<HudState>>, line: impl Into<String>) {
 
 pub fn set_connecting(state: &Arc<Mutex<HudState>>) {
     state.lock().unwrap().conn = ConnState::Connecting;
+    publish_link(LinkPhase::Connecting);
 }
 
 pub fn set_connected(state: &Arc<Mutex<HudState>>, device_name: String, fingerprint_hex: String) {
@@ -207,10 +210,26 @@ pub fn set_connected(state: &Arc<Mutex<HudState>>, device_name: String, fingerpr
         device_name,
         fingerprint_hex,
     };
+    publish_link(LinkPhase::Connected);
 }
 
 pub fn set_pairing(state: &Arc<Mutex<HudState>>) {
     state.lock().unwrap().conn = ConnState::Pairing;
+    publish_link(LinkPhase::Disconnected);
+}
+
+/// A fase do link como os clientes do socket a veem (a cor do LINK na GUI,
+/// o campo `link` do JSON v1). O hub só difunde quando muda.
+pub fn link_phase(conn: &ConnState) -> LinkPhase {
+    match conn {
+        ConnState::Connected { .. } => LinkPhase::Connected,
+        ConnState::Connecting => LinkPhase::Connecting,
+        ConnState::Pairing => LinkPhase::Disconnected,
+    }
+}
+
+fn publish_link(phase: LinkPhase) {
+    crate::hub::global().publish(hyprlink_proto::link::Event::Link(phase));
 }
 
 pub const DIR_PHONE_TO_PC: &str = "telemóvel → PC";
@@ -627,5 +646,21 @@ mod tests {
         assert_eq!(active_notif_keys(&h), vec!["k1"]);
         // O histórico (GUI antiga) guarda tudo.
         assert_eq!(h.lock().unwrap().modules.notif_history.len(), 3);
+    }
+}
+
+#[cfg(test)]
+mod link_phase_tests {
+    use super::*;
+
+    #[test]
+    fn conn_state_maps_to_link_phase() {
+        assert_eq!(link_phase(&ConnState::Pairing), LinkPhase::Disconnected);
+        assert_eq!(link_phase(&ConnState::Connecting), LinkPhase::Connecting);
+        let up = ConnState::Connected {
+            device_name: "Poco F4".into(),
+            fingerprint_hex: "9f2c".into(),
+        };
+        assert_eq!(link_phase(&up), LinkPhase::Connected);
     }
 }
