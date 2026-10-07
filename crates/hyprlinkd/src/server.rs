@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use ciborium::Value;
+use hyprlink_proto::link::NotifAction;
 use quinn::crypto::rustls::QuicServerConfig;
 use rustls::pki_types::CertificateDer;
 
@@ -740,7 +741,7 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                 let app = body_get_str(b, "app").unwrap_or("HyprLink").to_string();
                 let title = body_get_str(b, "title").unwrap_or("").to_string();
                 let text = body_get_str(b, "text").unwrap_or("").to_string();
-                let actions: Vec<(i64, String)> = crate::protocol::body_get(b, "actions")
+                let parsed: Vec<(i64, String, bool)> = crate::protocol::body_get(b, "actions")
                     .and_then(|v| v.as_array())
                     .map(|arr| {
                         arr.iter()
@@ -751,15 +752,31 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                                 let label = crate::protocol::body_get(item, "label")?
                                     .as_text()?
                                     .to_string();
-                                Some((idx, label))
+                                let is_reply = crate::protocol::body_get_bool(item, "is_reply")
+                                    .unwrap_or(false);
+                                Some((idx, label, is_reply))
                             })
                             .collect()
                     })
                     .unwrap_or_default();
+                let actions: Vec<(i64, String)> = parsed
+                    .iter()
+                    .map(|(idx, label, _)| (*idx, label.clone()))
+                    .collect();
+                let known: Vec<NotifAction> = parsed
+                    .into_iter()
+                    .filter_map(|(idx, label, is_reply)| {
+                        Some(NotifAction {
+                            idx: u32::try_from(idx).ok()?,
+                            label,
+                            is_reply,
+                        })
+                    })
+                    .collect();
                 // `replay: true` = já estava na barra do telemóvel quando ele ligou:
                 // entra na lista de ativas, mas não gera balão no PC nem conta como nova.
                 if crate::protocol::body_get_bool(b, "replay").unwrap_or(false) {
-                    state::register_active_notif(hud, key, app, title, text);
+                    state::register_active_notif(hud, key, app, title, text, known);
                 } else {
                     state::push_notif_entry(
                         hud,
@@ -767,6 +784,7 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                         app.clone(),
                         title.clone(),
                         text.clone(),
+                        known,
                     );
                     state::push_log(hud, format!("[i] notification.post · {app}: {title}"));
                     notif::post(&app, &title, &text, &key, &actions, &ctx.notif, &ctx.dbus).await;

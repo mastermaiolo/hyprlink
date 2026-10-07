@@ -25,8 +25,8 @@
 mod legacy;
 
 use hyprlink_proto::fmt;
-use hyprlink_proto::i18n::{self, Lang};
 use hyprlink_proto::host::Probe;
+use hyprlink_proto::i18n::{self, Lang};
 #[cfg(feature = "mock")]
 use hyprlink_proto::link::mock::Simulator;
 use hyprlink_proto::link::{Codec, Command, MirrorConfig, Transport};
@@ -474,6 +474,9 @@ mod lang_tests {
         let (rest, l) = take_lang(v(&["status"]));
         assert_eq!(rest, v(&["status"]));
         assert_eq!(l, Ok(None));
-        assert_eq!(take_lang(v(&["--lang", "klingon"])).1, Err("klingon".into()));
+        assert_eq!(
+            take_lang(v(&["--lang", "klingon"])).1,
+            Err("klingon".into())
+        );
     }
 }

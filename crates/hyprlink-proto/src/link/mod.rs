@@ -555,6 +555,17 @@ pub struct PhoneNotification {
     pub text: Option<String>,
     /// Unix seconds.
     pub at: u64,
+    /// Ações do botão da notificação (`notification.post.actions`).
+    #[serde(default)]
+    pub actions: Vec<NotifAction>,
+}
+
+/// Ação de uma notificação do telemóvel; `is_reply` = pede texto.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct NotifAction {
+    pub idx: u32,
+    pub label: String,
+    pub is_reply: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -677,6 +688,14 @@ pub enum Command2 {
     /// Esvazia o histórico de ficheiros. Não apaga nada do disco nem cancela
     /// o envio/receção em curso.
     ClearFileHistory,
+    /// Responde com texto a uma notificação ativa (`notification.reply`).
+    /// Recusado se a ação `idx` não for de resposta ou se o texto for vazio
+    /// ou passar de 2000 caracteres.
+    ReplyNotification {
+        key: String,
+        idx: u32,
+        text: String,
+    },
 }
 
 /// Events for the new pages.

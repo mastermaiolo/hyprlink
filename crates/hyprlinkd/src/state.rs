@@ -4,7 +4,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use hyprlink_proto::link::LinkPhase;
+use hyprlink_proto::link::{LinkPhase, NotifAction};
 
 const MAX_LOG_LINES: usize = 200;
 /// Histórico de CLIP/NOTIF fica só em memória por ora (reseta ao reiniciar
@@ -68,6 +68,8 @@ pub struct NotifEntry {
     pub app: String,
     pub title: String,
     pub text: String,
+    /// Botões da notificação, com a marca de «pede texto».
+    pub actions: Vec<NotifAction>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -281,6 +283,7 @@ pub fn push_notif_entry(
     app: String,
     title: String,
     text: String,
+    actions: Vec<NotifAction>,
 ) {
     let mut s = state.lock().unwrap();
     s.modules.notif_count += 1;
@@ -290,6 +293,7 @@ pub fn push_notif_entry(
         app,
         title,
         text,
+        actions,
     };
     s.modules.notif_history.push_front(entry.clone());
     s.modules.notif_history.truncate(MAX_HISTORY);
@@ -310,6 +314,7 @@ pub fn register_active_notif(
     app: String,
     title: String,
     text: String,
+    actions: Vec<NotifAction>,
 ) {
     let mut s = state.lock().unwrap();
     let entry = NotifEntry {
@@ -318,6 +323,7 @@ pub fn register_active_notif(
         app,
         title,
         text,
+        actions,
     };
     if !entry.key.is_empty() {
         s.modules.notif_active.retain(|n| n.key != entry.key);
@@ -666,10 +672,17 @@ mod tests {
     #[test]
     fn active_notifications_follow_the_phone() {
         let h = hud();
-        push_notif_entry(&h, "k1".into(), "app".into(), "a".into(), "".into());
-        push_notif_entry(&h, "k2".into(), "app".into(), "b".into(), "".into());
+        push_notif_entry(&h, "k1".into(), "app".into(), "a".into(), "".into(), vec![]);
+        push_notif_entry(&h, "k2".into(), "app".into(), "b".into(), "".into(), vec![]);
         // Atualização da mesma chave substitui, não duplica.
-        push_notif_entry(&h, "k1".into(), "app".into(), "a2".into(), "".into());
+        push_notif_entry(
+            &h,
+            "k1".into(),
+            "app".into(),
+            "a2".into(),
+            "".into(),
+            vec![],
+        );
         assert_eq!(active_notif_keys(&h), vec!["k1", "k2"]);
         assert!(remove_active_notif(&h, "k2"));
         assert!(!remove_active_notif(&h, "k2"));
@@ -681,10 +694,10 @@ mod tests {
     #[test]
     fn replayed_notifications_are_active_but_not_events() {
         let h = hud();
-        register_active_notif(&h, "r1".into(), "app".into(), "a".into(), "".into());
-        register_active_notif(&h, "r2".into(), "app".into(), "b".into(), "".into());
+        register_active_notif(&h, "r1".into(), "app".into(), "a".into(), "".into(), vec![]);
+        register_active_notif(&h, "r2".into(), "app".into(), "b".into(), "".into(), vec![]);
         // O mesmo `replay` duas vezes não duplica.
-        register_active_notif(&h, "r1".into(), "app".into(), "a".into(), "".into());
+        register_active_notif(&h, "r1".into(), "app".into(), "a".into(), "".into(), vec![]);
         assert_eq!(active_notif_keys(&h), vec!["r1", "r2"]);
         {
             let s = h.lock().unwrap();

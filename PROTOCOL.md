@@ -201,7 +201,7 @@ o que o PC faz. Estado para a GUI: `Event2::Gestures {rules, last}` no socket lo
 | `notification.dismissed` | P→D one-way | `{key}` |
 | `notification.send` | D→P push | `{title, body, app_name}` |
 | `notification.action` | D→P push | `{key, idx (ou action)}` |
-| `notification.reply` | D→P push | `{key, idx, text}` |
+| `notification.reply` | D→P push | `{key, idx, text}` — resposta com texto, enviada pela página Notificações da GUI (`Command2::ReplyNotification`). O daemon só envia se `key` estiver nas ativas, se a ação `idx` tiver `is_reply: true` e se `text` não for vazio nem passar de 2000 caracteres; senão recusa e regista o motivo no Diário. |
 | `notification.dismiss` | D→P push | `{key}` |
 
 ### share

@@ -8,8 +8,8 @@
 use crate::app::{App, CamMode, Message};
 use crate::graphics::CameraFrame;
 use crate::link::{
-    CamCodec, Cap, Command2, Dir, MediaAction, Origin, PhoneStream, Ringer, TrackpadConfig,
-    TransferState,
+    CamCodec, Cap, Command2, Dir, MediaAction, Origin, PhoneNotification, PhoneStream, Ringer,
+    TrackpadConfig, TransferState,
 };
 use crate::theme::{self, *};
 use crate::ui::*;
@@ -79,7 +79,11 @@ pub fn battery_block(app: &App) -> El<'_> {
     if let Some(v) = low {
         low_row = low_row.push(
             column![
-                row![kicker(t("LIMIAR")), fill_x(), kicker_c(format!("{v}%"), ACID)],
+                row![
+                    kicker(t("LIMIAR")),
+                    fill_x(),
+                    kicker_c(format!("{v}%"), ACID)
+                ],
                 gap(space::S),
                 slider(5.0..=50.0, v as f32, Message::LowLevel)
                     .step(5.0_f32)
@@ -329,7 +333,9 @@ fn camera_body(app: &App) -> El<'_> {
         None => column![
             headline(t("PARADA"), size::D3).color(MUTED),
             gap(space::S),
-            deck_s(t("Escolhe o formato e liga. Aparece no PC como /dev/video42.")),
+            deck_s(t(
+                "Escolhe o formato e liga. Aparece no PC como /dev/video42."
+            )),
         ]
         .into(),
     };
@@ -376,8 +382,16 @@ fn camera_body(app: &App) -> El<'_> {
             format!("{}×{}", cfg.width, cfg.height),
             res.into()
         ),
-        setting(t("Imagens por segundo"), t("o telemóvel pode baixar"), fps.into()),
-        setting(t("Codec"), t("H.265 poupa débito; o telemóvel volta a H.264 se não tiver encoder HEVC"), codecs.into()),
+        setting(
+            t("Imagens por segundo"),
+            t("o telemóvel pode baixar"),
+            fps.into()
+        ),
+        setting(
+            t("Codec"),
+            t("H.265 poupa débito; o telemóvel volta a H.264 se não tiver encoder HEVC"),
+            codecs.into()
+        ),
         gap(space::XL),
         subhead("B", t("Rede")),
         net,
@@ -557,9 +571,13 @@ pub fn mixer(app: &App) -> El<'_> {
                     })
                     .width(48),
                 hgap(space::S),
-                container(chip(if muted { t("MUDO") } else { t("SOM") }, muted, on_mute))
-                    .width(64)
-                    .align_x(Alignment::End),
+                container(chip(
+                    if muted { t("MUDO") } else { t("SOM") },
+                    muted,
+                    on_mute
+                ))
+                .width(64)
+                .align_x(Alignment::End),
             ]
             .align_y(Alignment::Center)
             .padding(Padding::from([10, 0])),
@@ -574,7 +592,10 @@ pub fn mixer(app: &App) -> El<'_> {
         let right: El = if s.default {
             tag(t("PREDEFINIDA"), PAPER, VOID)
         } else {
-            small_btn(t("USAR ESTA"), Some(Message::Do(Command2::SetDefaultSink(id))))
+            small_btn(
+                t("USAR ESTA"),
+                Some(Message::Do(Command2::SetDefaultSink(id))),
+            )
         };
         sinks = sinks.push(vol_row(
             s.description.clone(),
@@ -628,6 +649,38 @@ pub fn mixer(app: &App) -> El<'_> {
 }
 
 // ═════════════════════════ 06 NOTIFICAÇÕES ═════════════════════════
+
+/// Campo de resposta + «RESPONDER» (Enter envia) para as notificações que
+/// têm uma ação de resposta; as outras não mostram nada.
+fn reply_row<'a>(app: &'a App, x: &'a PhoneNotification) -> Option<El<'a>> {
+    let idx = x.actions.iter().find(|a| a.is_reply)?.idx;
+    let draft = app
+        .reply_drafts
+        .get(&x.key)
+        .map(String::as_str)
+        .unwrap_or("");
+    let send = Message::ReplySend(x.key.clone(), idx);
+    let key = x.key.clone();
+    Some(
+        row![
+            text_input(t("responder…"), draft)
+                .on_input(move |s| Message::ReplyInput(key.clone(), s))
+                .on_submit(send.clone())
+                .font(MONO)
+                .size(12)
+                .padding(Padding::from([8, 12]))
+                .style(theme::input),
+            hgap(space::S),
+            btn(
+                t("RESPONDER"),
+                theme::primary,
+                (!draft.trim().is_empty()).then_some(send)
+            ),
+        ]
+        .align_y(Alignment::Center)
+        .into(),
+    )
+}
 
 pub fn notifications(app: &App) -> El<'_> {
     let n = app.notifs.len();
@@ -727,6 +780,8 @@ pub fn notifications(app: &App) -> El<'_> {
                     headline(x.title.to_uppercase(), size::D3),
                     gap(space::S),
                     deck(x.text.clone().unwrap_or_default()),
+                    gap(space::M),
+                    reply_row(app, x).unwrap_or_else(|| gap(0.0).into()),
                     gap(space::XL),
                     rule_c(PAPER, 1.0),
                 ]
@@ -751,6 +806,10 @@ pub fn notifications(app: &App) -> El<'_> {
                             .size(size::BODY)
                             .color(SUB)
                             .line_height(LineHeight::Relative(1.45)),
+                        match reply_row(app, x) {
+                            Some(r) => El::from(column![gap(space::S), r]),
+                            None => gap(0.0),
+                        },
                     ]
                     .width(Length::Fill),
                     dismiss,
@@ -784,13 +843,16 @@ pub fn notifications(app: &App) -> El<'_> {
     }
 
     let toolbar = row![
-        text_input(t("procurar no título, no texto ou na app…"), &app.notif_query)
-            .on_input(Message::NotifQuery)
-            .font(MONO)
-            .size(12)
-            .padding(Padding::from([8, 12]))
-            .width(360)
-            .style(theme::input),
+        text_input(
+            t("procurar no título, no texto ou na app…"),
+            &app.notif_query
+        )
+        .on_input(Message::NotifQuery)
+        .font(MONO)
+        .size(12)
+        .padding(Padding::from([8, 12]))
+        .width(360)
+        .style(theme::input),
         fill_x(),
         btn(
             t("DISPENSAR TODAS"),
@@ -975,7 +1037,10 @@ pub fn share(app: &App) -> El<'_> {
                         kicker(format!("{:.0} %", p * 100.0))
                     ],
                     gap(space::S),
-                    text(xfer.name.as_str()).font(SANS_SEMI).size(16).color(PAPER),
+                    text(xfer.name.as_str())
+                        .font(SANS_SEMI)
+                        .size(16)
+                        .color(PAPER),
                     gap(space::M),
                     bar(p, ACID, 3.0),
                     gap(space::S),
@@ -1128,7 +1193,11 @@ pub fn media(app: &App) -> El<'_> {
                 kicker_c(
                     tr!(
                         "{} NO TELEMÓVEL{}",
-                        if np.playing { t("A TOCAR") } else { t("EM PAUSA") },
+                        if np.playing {
+                            t("A TOCAR")
+                        } else {
+                            t("EM PAUSA")
+                        },
                         np.app
                             .as_ref()
                             .map(|a| format!(" · {}", a.to_uppercase()))
@@ -1329,7 +1398,10 @@ pub fn settings(app: &App) -> El<'_> {
         langs,
         gap(space::XXL),
         subhead("E", t("Sobre")),
-        kv_text(t("GUI"), format!("hyprlink-gui {}", env!("CARGO_PKG_VERSION"))),
+        kv_text(
+            t("GUI"),
+            format!("hyprlink-gui {}", env!("CARGO_PKG_VERSION"))
+        ),
         kv_text(
             t("TECLAS"),
             t("1–9 e 0 para as secções · Esc fecha o emparelhamento")

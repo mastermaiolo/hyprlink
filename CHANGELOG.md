@@ -40,6 +40,11 @@ a app Android tem versões próprias (`versionName`).
   disco livre e GPU do PC no telemóvel.
 - Wake-on-LAN: o daemon envia o MAC do PC para o telemóvel o poder acordar.
 
+### Paridade com a app Android
+- **Responder a notificações** a partir do PC: a página Notificações mostra um
+  campo de texto e «Responder» (Enter envia) nas notificações com ação de
+  resposta; o daemon valida e envia `notification.reply`.
+
 ### PC
 - `hyprlink-daemon` sem janela; a **GUI** (`hyprlink-gui`, iced) é um processo
   à parte que fala com o daemon pelo socket `$XDG_RUNTIME_DIR/hyprlink.sock`,

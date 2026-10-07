@@ -236,6 +236,8 @@ pub struct App {
     pub sinks: Vec<Sink>,
     pub apps: Vec<AppStream>,
     pub notifs: Vec<PhoneNotification>,
+    /// Rascunho de resposta por notificação (chave do Android).
+    pub reply_drafts: std::collections::HashMap<String, String>,
     pub notif_app: Option<String>,
     pub notif_query: String,
     pub clips: Vec<ClipEntry>,
@@ -310,6 +312,10 @@ pub enum Message {
     Trackpad(TrackpadConfig),
     NotifApp(Option<String>),
     NotifQuery(String),
+    /// Texto da resposta a uma notificação (chave, texto).
+    ReplyInput(String, String),
+    /// Envia a resposta (chave, índice da ação de resposta).
+    ReplySend(String, u32),
     ClipQuery(String),
     SendPath(String),
     SendFile,
@@ -467,6 +473,7 @@ impl App {
             sinks: Vec::new(),
             apps: Vec::new(),
             notifs: Vec::new(),
+            reply_drafts: std::collections::HashMap::new(),
             notif_app: None,
             notif_query: String::new(),
             clips: Vec::new(),
@@ -1030,6 +1037,16 @@ impl App {
                 self.more(Command2::RenameDevice(id, n));
                 self.rename_for = None;
                 self.rename_input.clear();
+            }
+            Message::ReplyInput(key, s) => {
+                self.reply_drafts.insert(key, s);
+            }
+            Message::ReplySend(key, idx) => {
+                let text = self.reply_drafts.get(&key).cloned().unwrap_or_default();
+                if !text.trim().is_empty() {
+                    self.reply_drafts.remove(&key);
+                    self.more(Command2::ReplyNotification { key, idx, text });
+                }
             }
             Message::DownloadsInput(s) => self.downloads_input = s,
             Message::DownloadsSave => {

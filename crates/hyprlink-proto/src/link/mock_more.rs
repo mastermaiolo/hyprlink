@@ -43,6 +43,7 @@ impl More {
                 title: title.into(),
                 text: text.map(Into::into),
                 at: now - ago,
+                actions: Vec::new(),
             };
         let c = |id: u64, origin: Origin, text: &str, ago: u64, pinned: bool| ClipEntry {
             id,
@@ -180,13 +181,27 @@ impl More {
                 },
             ],
             notifs: vec![
-                n(
-                    "0|org.thoughtcrime.securesms|3",
-                    "Signal",
-                    "Rita",
-                    Some("Já chegaste? Estou à porta do Maus Hábitos."),
-                    120,
-                ),
+                PhoneNotification {
+                    actions: vec![
+                        NotifAction {
+                            idx: 0,
+                            label: "Marcar como lida".into(),
+                            is_reply: false,
+                        },
+                        NotifAction {
+                            idx: 1,
+                            label: "Responder".into(),
+                            is_reply: true,
+                        },
+                    ],
+                    ..n(
+                        "0|org.thoughtcrime.securesms|3",
+                        "Signal",
+                        "Rita",
+                        Some("Já chegaste? Estou à porta do Maus Hábitos."),
+                        120,
+                    )
+                },
                 n(
                     "0|com.google.android.gm|11",
                     "Gmail",
@@ -564,6 +579,16 @@ impl More {
                 self.notifs.retain(|n| n.key != key);
                 Self::packet(out, t, Dir::Tx, p::NOTIF_DISMISS, 48, key);
                 Self::more(out, Event2::Notifications(self.notifs.clone()));
+            }
+            Command2::ReplyNotification { key, idx, text } => {
+                let ok = self.notifs.iter().any(|n| {
+                    n.key == key
+                        && n.actions.iter().any(|a| a.idx == idx && a.is_reply)
+                        && !text.trim().is_empty()
+                });
+                if ok {
+                    Self::packet(out, t, Dir::Tx, p::NOTIF_REPLY, 48 + text.len(), key);
+                }
             }
             Command2::DismissAllNotifications => {
                 self.notifs.clear();

@@ -322,6 +322,7 @@ impl Bridge {
                 title: n.title.clone(),
                 text: (!n.text.is_empty()).then(|| n.text.clone()),
                 at: n.at_unix,
+                actions: n.actions.clone(),
             })
             .collect()
     }
@@ -1009,6 +1010,25 @@ async fn execute_more(b: &Arc<Bridge>, c: Command2) {
                 }
             })
             .await
+        }
+        Command2::ReplyNotification { key, idx, text } => {
+            let active = ctx.hud.lock().unwrap().modules.notif_active.clone();
+            match crate::notif::reply_body(&active, &key, idx, &text) {
+                Ok(body) => {
+                    if crate::active::push(&ctx.active, "notification.reply", Some(body))
+                        .await
+                        .is_some()
+                    {
+                        state::push_log(&ctx.hud, format!("[i] resposta enviada · {key}"));
+                    } else {
+                        state::push_log(
+                            &ctx.hud,
+                            "[!] resposta não enviada · sem telemóvel ligado",
+                        );
+                    }
+                }
+                Err(why) => state::push_log(&ctx.hud, format!("[!] resposta recusada · {why}")),
+            }
         }
         Command2::DismissNotification(key) => dismiss_notification(b, key).await,
         Command2::DismissAllNotifications => {

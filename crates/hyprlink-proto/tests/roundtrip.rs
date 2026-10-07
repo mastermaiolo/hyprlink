@@ -173,6 +173,11 @@ fn all_commands2() -> Vec<Command2> {
         SetDownloadsDir("~/Transferências/HyprLink".into()),
         RenameDevice(7, "Poco F4".into()),
         RestartDaemon,
+        ReplyNotification {
+            key: "0|org.thoughtcrime.securesms|3".into(),
+            idx: 1,
+            text: "Já vou, 5 min".into(),
+        },
         SetGesture("swipe_left_3".into(), false),
         ClearFileHistory,
     ]
