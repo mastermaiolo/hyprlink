@@ -150,6 +150,29 @@ pub fn spawn_background_tasks(ctx: Ctx) {
         ctx.clip_img.clone(),
         ctx.hud.clone(),
     ));
+    // Botão do rato preso (telemóvel adormeceu a meio de um arrastar): solta-o.
+    {
+        let (input, hud) = (ctx.input.clone(), ctx.hud.clone());
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
+            loop {
+                tick.tick().await;
+                let (input, hud) = (input.clone(), hud.clone());
+                // O dispositivo é um Mutex síncrono: fora do executor.
+                let released = tokio::task::spawn_blocking(move || {
+                    let r = input.watchdog_tick();
+                    (r, hud)
+                })
+                .await;
+                if let Ok((true, hud)) = released {
+                    state::push_log(
+                        &hud,
+                        "[!] input: botão do rato solto (30 s sem atividade)".to_string(),
+                    );
+                }
+            }
+        });
+    }
     tokio::spawn(hypr::watch_events(ctx.active.clone(), ctx.hud.clone()));
     tokio::spawn(battery::poll_and_push(ctx.active.clone(), ctx.hud.clone()));
     tokio::spawn(media::poll_and_push(
@@ -198,6 +221,8 @@ pub async fn run(endpoint: quinn::Endpoint, pairing: Arc<Mutex<PairingStore>>, c
                 // conexão — não fica a informação velha na GUI/ctl.
                 state::set_phone_status(&ctx.hud, Default::default());
                 state::clear_active_notifs(&ctx.hud);
+                // Botão do rato premido pelo telemóvel: solta-se com a ligação.
+                ctx.input.release_all();
                 // Modo coluna sem telemóvel = PC mudo: devolve o som às
                 // colunas na hora (não espera pelo próximo arranque).
                 crate::speaker::disable(&ctx.tap, &ctx.hud, &ctx.config, &ctx.speaker).await;
@@ -359,6 +384,8 @@ async fn handle_connection(
     // não fica a informação velha na GUI/ctl.
     state::set_phone_status(&ctx.hud, Default::default());
     state::clear_active_notifs(&ctx.hud);
+    // Botão do rato premido pelo telemóvel: solta-se com a ligação.
+    ctx.input.release_all();
     // Modo coluna sem telemóvel = PC mudo: devolve o som às colunas na
     // hora (não espera pelo próximo arranque).
     crate::speaker::disable(&ctx.tap, &ctx.hud, &ctx.config, &ctx.speaker).await;
@@ -787,6 +814,16 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                     (dx as f32 * t.scroll_speed * sign) as i32,
                     (dy as f32 * t.scroll_speed * sign) as i32,
                 );
+            }
+        }
+        // Premir/largar um botão (arrastar, selecionar uma área): ver `input.rs`.
+        "input.button" => {
+            if let (Some(button), Some(st)) = (
+                body.and_then(|b| body_get_str(b, "button")),
+                body.and_then(|b| body_get_str(b, "state")),
+            ) && !ctx.input.button(button, st)
+            {
+                state::push_log(hud, format!("[!] input.button inválido: {button}/{st}"));
             }
         }
         "input.click" => {

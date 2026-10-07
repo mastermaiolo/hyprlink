@@ -153,6 +153,12 @@ mesma lógica do guard de texto). Do lado P→D, o uni-stream é roteado pelo
 ### input (P→D, fire-and-forget)
 `input.move {dx,dy}` · `input.scroll {dx,dy}` · `input.click {button}` (left/right/middle)
 · `input.type {text}` · `input.key {key}` (ex: "Return", "BackSpace", "Escape", "Tab")
+· `input.button {button, state}` — premir/largar um botão do rato (arrastar, seleção de
+área do `pc.action screenshot_area`, arrastar janelas e texto): `button` = `left`/`right`/
+`middle`, `state` = `"down"`/`"up"`; um pedido com outro valor é ignorado (fica no Diário).
+Uso: `down`, vários `input.move`, `up`. **Nunca fica preso**: `up` solta **todos** os botões
+premidos; a ligação do telemóvel a cair solta tudo; e 30 s sem `input.move` nem `up` com um
+botão premido também (watchdog). `input.click` continua a ser o clique completo.
 
 ### gesture (P→D, one-way)
 `gesture {name, dir?}` — o telemóvel diz que o utilizador fez um gesto; o PC faz o que
