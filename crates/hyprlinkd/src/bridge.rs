@@ -616,15 +616,7 @@ async fn project_slow(b: Arc<Bridge>, hub: Hub) {
             low: alerts.low.then_some(alerts.low_pct),
             full: alerts.full,
         })));
-        hub.publish(Event::More(Event2::Shortcuts(
-            config::shortcuts(&b.ctx.config)
-                .into_iter()
-                .map(|s| Shortcut {
-                    label: s.name,
-                    dispatch: s.command,
-                })
-                .collect(),
-        )));
+        hub.publish(shortcuts_event(&b.ctx.config));
         hub.publish(gestures_event(&b.ctx.config));
         let t = config::track_settings(&b.ctx.config);
         hub.publish(Event::More(Event2::Trackpad(TrackpadConfig {
@@ -852,6 +844,18 @@ async fn execute(b: &Arc<Bridge>, c: Command) {
     }
 }
 
+fn shortcuts_event(config: &config::SharedConfig) -> Event {
+    Event::More(Event2::Shortcuts(
+        config::shortcuts(config)
+            .into_iter()
+            .map(|s| Shortcut {
+                label: s.name,
+                dispatch: s.command,
+            })
+            .collect(),
+    ))
+}
+
 async fn execute_more(b: &Arc<Bridge>, c: Command2) {
     let hub = hub::global();
     let ctx = &b.ctx;
@@ -871,15 +875,23 @@ async fn execute_more(b: &Arc<Bridge>, c: Command2) {
                 b.fail(Op::Dispatch, ErrorKind::Refused);
             }
         }
-        Command2::SetShortcuts(list) => config::set_shortcuts(
-            &ctx.config,
-            list.into_iter()
+        Command2::SetShortcuts(list) => {
+            let list: Vec<config::Shortcut> = list
+                .into_iter()
                 .map(|s| config::Shortcut {
                     name: s.label,
                     command: s.dispatch,
                 })
-                .collect(),
-        ),
+                .collect();
+            match config::validate_shortcuts(list) {
+                Ok(list) => config::set_shortcuts(&ctx.config, list),
+                Err(why) => {
+                    state::push_log(&ctx.hud, format!("[!] atalhos recusados · {why}"));
+                }
+            }
+            // Devolve a lista guardada (a nova, ou a antiga se foi recusada).
+            hub.publish(shortcuts_event(&ctx.config));
+        }
         Command2::SetGesture(name, on) => {
             if config::set_gesture_on(&ctx.config, &name, on) {
                 hub.publish(gestures_event(&ctx.config));
@@ -1142,6 +1154,7 @@ async fn execute_more(b: &Arc<Bridge>, c: Command2) {
             if !ok {
                 b.fail(Op::Speaker, ErrorKind::Offline);
             }
+            hub.publish(Event::SpeakerMode(crate::speaker::is_active(&ctx.speaker)));
         }
         Command2::SetDownloadsDir(dir) => {
             config::set_download_dir(&ctx.config, std::path::Path::new(&dir));

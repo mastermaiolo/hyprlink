@@ -132,9 +132,28 @@ pub fn shortcuts(app: &App) -> El<'_> {
             .on_press(Message::Do(Command2::RunDispatch(s.dispatch.clone()))),
         );
     }
+    let editor: El<'_> = if app.sc_edit {
+        shortcuts_editor(app)
+    } else {
+        gap(0.0)
+    };
     column![
         subhead("C", t("Atalhos")),
         grid.wrap().vertical_spacing(space::S),
+        gap(space::M),
+        row![
+            fill_x(),
+            btn(
+                if app.sc_edit {
+                    t("CONCLUÍDO")
+                } else {
+                    t("EDITAR ATALHOS")
+                },
+                theme::ghost,
+                Some(Message::ShortcutsEdit(!app.sc_edit))
+            ),
+        ],
+        editor,
         gap(space::L),
         row![
             text_input(
@@ -159,6 +178,102 @@ pub fn shortcuts(app: &App) -> El<'_> {
         mono(t("os atalhos também aparecem no telemóvel"), FAINT),
     ]
     .into()
+}
+
+/// Editor de atalhos: uma linha por atalho (nome + comando, GUARDAR e
+/// REMOVER) e uma linha para um novo.
+fn shortcuts_editor(app: &App) -> El<'_> {
+    let field = |placeholder: &'static str,
+                 value: &str,
+                 max: usize,
+                 on_input: Box<dyn Fn(String) -> Message + 'static>,
+                 submit: Option<Message>|
+     -> El<'static> {
+        let over = value.chars().count() > max;
+        let mut input = text_input(placeholder, value)
+            .on_input(on_input)
+            .font(MONO)
+            .size(12)
+            .padding(Padding::from([8, 12]))
+            .style(theme::input);
+        if let Some(m) = submit {
+            input = input.on_submit(m);
+        }
+        column![
+            input,
+            if over {
+                El::from(mono(tr!("máx. {} caracteres", max), ACID).size(10.5))
+            } else {
+                gap(0.0)
+            }
+        ]
+        .into()
+    };
+    let name_max = crate::link::SHORTCUT_NAME_MAX;
+    let cmd_max = crate::link::SHORTCUT_COMMAND_MAX;
+    let mut rows = column![].spacing(space::S);
+    for i in 0..app.shortcuts.len() {
+        let (name, command) = app.shortcut_draft(i);
+        let saved = &app.shortcuts[i];
+        let changed = name != saved.label || command != saved.dispatch;
+        let valid = crate::app::shortcut_valid(&name, &command);
+        let save = (changed && valid).then_some(Message::ShortcutSave(i));
+        rows = rows.push(
+            row![
+                container(field(
+                    t("nome"),
+                    &name,
+                    name_max,
+                    Box::new(move |s| Message::ShortcutName(i, s)),
+                    save.clone(),
+                ))
+                .width(Length::FillPortion(2)),
+                hgap(space::S),
+                container(field(
+                    t("comando"),
+                    &command,
+                    cmd_max,
+                    Box::new(move |s| Message::ShortcutCommand(i, s)),
+                    save.clone(),
+                ))
+                .width(Length::FillPortion(3)),
+                hgap(space::S),
+                btn(t("GUARDAR"), theme::primary, save),
+                hgap(space::S),
+                btn(t("REMOVER"), theme::ghost, Some(Message::ShortcutRemove(i))),
+            ]
+            .align_y(Alignment::Start),
+        );
+    }
+    let (new_name, new_cmd) = &app.sc_new;
+    let can_add = crate::app::shortcut_valid(new_name, new_cmd)
+        && app.shortcuts.len() < crate::link::SHORTCUTS_MAX;
+    let add = can_add.then_some(Message::ShortcutAdd);
+    rows = rows.push(
+        row![
+            container(field(
+                t("novo atalho"),
+                new_name,
+                name_max,
+                Box::new(Message::ShortcutNewName),
+                add.clone(),
+            ))
+            .width(Length::FillPortion(2)),
+            hgap(space::S),
+            container(field(
+                t("comando"),
+                new_cmd,
+                cmd_max,
+                Box::new(Message::ShortcutNewCommand),
+                add.clone(),
+            ))
+            .width(Length::FillPortion(3)),
+            hgap(space::S),
+            btn(t("ADICIONAR"), theme::primary, add),
+        ]
+        .align_y(Alignment::Start),
+    );
+    column![gap(space::M), rule(), gap(space::M), rows].into()
 }
 
 pub fn trackpad(app: &App) -> El<'_> {

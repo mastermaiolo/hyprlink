@@ -178,6 +178,14 @@ fica no Diário (`[i] gesture … (desligado)`) e **conta como «último gesto r
 GUI mesmo assim. `volume` sem `dir` válido é ignorado. A app só **emite**; nunca decide
 o que o PC faz. Estado para a GUI: `Event2::Gestures {rules, last}` no socket local.
 
+### atalhos (só IPC GUI ↔ daemon, sem pacote no wire)
+`Command2::SetShortcuts(Vec<Shortcut{label, dispatch}>)` substitui a lista
+guardada em `config.json` (`shortcuts`); a página Secretária da GUI adiciona,
+edita e remove. O daemon apara espaços e **recusa a lista toda** (regista o
+motivo no Diário e devolve a lista guardada em `Event2::Shortcuts`) se houver
+nome ou comando vazios, nome com mais de 40 caracteres, comando com mais de 200
+ou mais de 32 atalhos. Os atalhos não são enviados ao telemóvel.
+
 ### hypr
 | type | dir | body |
 |---|---|---|
@@ -301,6 +309,8 @@ em silêncio.
 **Modo headset (Pista C1, 2026-10-05)**: composição daemon-side de coluna +
 mic — `Command2::SetHeadset(bool)` no IPC e `hyprlinkctl headset on|off`.
 Sem mudanças de wire: é `speaker.rs` + pedido de mic (`webcam.mic_start`).
+`SetHeadset` **não** é substituível por `SetSpeakerMode` (esse só liga a coluna,
+sem pedir o mic): a GUI liga-o ao interruptor «Modo auricular» da página Áudio.
 O lado Android passa a capturar o mic com `AudioSource.VOICE_COMMUNICATION`
 (AEC da plataforma — ver prompt `prompt_ai_studio_2026-10-05_headset_aec.md`;
 com fallback para `MIC` se a rota não entregar 48 kHz efetivos).

@@ -719,4 +719,14 @@ pub const TABLE: &[(&str, &str)] = &[
     // ── responder a notificações ──
     ("responder…", "responder…"),
     ("RESPONDER", "RESPONDER"),
+    // ── editar atalhos e modo auricular ──
+    ("EDITAR ATALHOS", "EDITAR ATAJOS"),
+    ("REMOVER", "QUITAR"),
+    ("ADICIONAR", "AÑADIR"),
+    ("nome", "nombre"),
+    ("comando", "comando"),
+    ("novo atalho", "nuevo atajo"),
+    ("máx. {} caracteres", "máx. {} caracteres"),
+    ("Modo auricular", "Modo auricular"),
+    ("o telemóvel é o headset do PC: coluna e microfone num só interruptor", "el teléfono es el auricular del PC: altavoz y micrófono en un solo interruptor"),
 ];

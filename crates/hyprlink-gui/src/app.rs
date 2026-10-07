@@ -225,6 +225,11 @@ pub struct App {
     pub alerts: BatteryAlerts,
     pub active_window: Option<ActiveWindow>,
     pub shortcuts: Vec<Shortcut>,
+    /// Página Secretária: modo de edição dos atalhos, rascunhos por posição
+    /// (só as linhas alteradas) e o rascunho do atalho novo.
+    pub sc_edit: bool,
+    pub sc_drafts: std::collections::HashMap<usize, (String, String)>,
+    pub sc_new: (String, String),
     pub trackpad: TrackpadConfig,
     pub dispatch_input: String,
     pub cam_mode: CamMode,
@@ -312,6 +317,16 @@ pub enum Message {
     Trackpad(TrackpadConfig),
     NotifApp(Option<String>),
     NotifQuery(String),
+    ShortcutsEdit(bool),
+    ShortcutName(usize, String),
+    ShortcutCommand(usize, String),
+    ShortcutSave(usize),
+    ShortcutRemove(usize),
+    ShortcutNewName(String),
+    ShortcutNewCommand(String),
+    ShortcutAdd,
+    /// Modo auricular: coluna + microfone do telemóvel num só interruptor.
+    Headset(bool),
     /// Texto da resposta a uma notificação (chave, texto).
     ReplyInput(String, String),
     /// Envia a resposta (chave, índice da ação de resposta).
@@ -451,6 +466,9 @@ impl App {
             },
             active_window: None,
             shortcuts: Vec::new(),
+            sc_edit: false,
+            sc_drafts: std::collections::HashMap::new(),
+            sc_new: (String::new(), String::new()),
             trackpad: TrackpadConfig {
                 sensitivity: 1.0,
                 scroll: 1.0,
@@ -720,7 +738,14 @@ impl App {
             Event2::BatteryHistory(h) => self.battery_hist = h,
             Event2::BatteryAlerts(a) => self.alerts = a,
             Event2::ActiveWindow(w) => self.active_window = w,
-            Event2::Shortcuts(s) => self.shortcuts = s,
+            Event2::Shortcuts(s) => {
+                // Se a lista mudou de tamanho (remover, adicionar, outro
+                // cliente), os rascunhos por posição deixam de valer.
+                if s.len() != self.shortcuts.len() {
+                    self.sc_drafts.clear();
+                }
+                self.shortcuts = s;
+            }
             Event2::Gestures { rules, last } => {
                 self.gestures = rules;
                 self.last_gesture = last;
@@ -761,6 +786,16 @@ impl App {
 
     fn more(&mut self, c: Command2) {
         self.link.send(Command::More(c));
+    }
+
+    /// Nome e comando que a linha `i` mostra: o rascunho, ou o guardado.
+    pub fn shortcut_draft(&self, i: usize) -> (String, String) {
+        self.sc_drafts.get(&i).cloned().unwrap_or_else(|| {
+            self.shortcuts
+                .get(i)
+                .map(|s| (s.label.clone(), s.dispatch.clone()))
+                .unwrap_or_default()
+        })
     }
 
     fn toast(&mut self, s: String) {
@@ -1037,6 +1072,61 @@ impl App {
                 self.more(Command2::RenameDevice(id, n));
                 self.rename_for = None;
                 self.rename_input.clear();
+            }
+            Message::ShortcutsEdit(on) => {
+                self.sc_edit = on;
+                self.sc_drafts.clear();
+                self.sc_new = (String::new(), String::new());
+            }
+            Message::ShortcutName(i, s) => {
+                let cur = self.shortcut_draft(i);
+                self.sc_drafts.insert(i, (s, cur.1));
+            }
+            Message::ShortcutCommand(i, s) => {
+                let cur = self.shortcut_draft(i);
+                self.sc_drafts.insert(i, (cur.0, s));
+            }
+            Message::ShortcutSave(i) => {
+                let (name, command) = self.shortcut_draft(i);
+                if shortcut_valid(&name, &command) && i < self.shortcuts.len() {
+                    let mut list = self.shortcuts.clone();
+                    list[i] = Shortcut {
+                        label: name.trim().into(),
+                        dispatch: command.trim().into(),
+                    };
+                    self.sc_drafts.remove(&i);
+                    self.more(Command2::SetShortcuts(list));
+                }
+            }
+            Message::ShortcutRemove(i) => {
+                if i < self.shortcuts.len() {
+                    let mut list = self.shortcuts.clone();
+                    list.remove(i);
+                    self.sc_drafts.clear();
+                    self.more(Command2::SetShortcuts(list));
+                }
+            }
+            Message::ShortcutNewName(s) => self.sc_new.0 = s,
+            Message::ShortcutNewCommand(s) => self.sc_new.1 = s,
+            Message::ShortcutAdd => {
+                let (name, command) = self.sc_new.clone();
+                if shortcut_valid(&name, &command)
+                    && self.shortcuts.len() < crate::link::SHORTCUTS_MAX
+                {
+                    let mut list = self.shortcuts.clone();
+                    list.push(Shortcut {
+                        label: name.trim().into(),
+                        dispatch: command.trim().into(),
+                    });
+                    self.sc_new = (String::new(), String::new());
+                    self.more(Command2::SetShortcuts(list));
+                }
+            }
+            Message::Headset(b) => {
+                self.speaker = b;
+                self.mic_on = b;
+                self.mic_clicked = Some(Instant::now());
+                self.more(Command2::SetHeadset(b));
             }
             Message::ReplyInput(key, s) => {
                 self.reply_drafts.insert(key, s);
@@ -1586,4 +1676,14 @@ mod tests {
         assert_eq!((none.files.len(), none.folders), (0, 0));
         let _ = std::fs::remove_dir_all(&dir);
     }
+}
+
+/// Mesmos limites do daemon (`config::validate_shortcuts`): nada vazio, nome
+/// até 40 e comando até 200 caracteres.
+pub fn shortcut_valid(name: &str, command: &str) -> bool {
+    let (n, c) = (name.trim(), command.trim());
+    !n.is_empty()
+        && !c.is_empty()
+        && n.chars().count() <= crate::link::SHORTCUT_NAME_MAX
+        && c.chars().count() <= crate::link::SHORTCUT_COMMAND_MAX
 }

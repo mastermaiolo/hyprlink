@@ -423,6 +423,12 @@ pub struct GestureLast {
 }
 
 /// A user-defined `hyprctl dispatch`, also offered on the phone.
+/// Limites de um atalho (nome visível e comando do `hyprctl dispatch`); a GUI
+/// avisa antes e o daemon recusa o que passar.
+pub const SHORTCUT_NAME_MAX: usize = 40;
+pub const SHORTCUT_COMMAND_MAX: usize = 200;
+pub const SHORTCUTS_MAX: usize = 32;
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Shortcut {
     pub label: String,

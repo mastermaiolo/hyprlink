@@ -668,4 +668,14 @@ pub const TABLE: &[(&str, &str)] = &[
     // ── responder a notificações ──
     ("responder…", "回复…"),
     ("RESPONDER", "回复"),
+    // ── editar atalhos e modo auricular ──
+    ("EDITAR ATALHOS", "编辑快捷方式"),
+    ("REMOVER", "删除"),
+    ("ADICIONAR", "添加"),
+    ("nome", "名称"),
+    ("comando", "命令"),
+    ("novo atalho", "新快捷方式"),
+    ("máx. {} caracteres", "最多 {} 个字符"),
+    ("Modo auricular", "耳机模式"),
+    ("o telemóvel é o headset do PC: coluna e microfone num só interruptor", "手机作为电脑的耳机：扬声器和麦克风一个开关"),
 ];

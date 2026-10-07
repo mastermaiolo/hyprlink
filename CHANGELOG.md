@@ -50,6 +50,9 @@ a app Android tem versões próprias (`versionName`).
 - **Bateria do PC** no telemóvel com `charging` (a carregar de facto) e
   `plugged` (fio ligado) separados, e `present:false` sem bateria; empurrada
   quando muda e de 5 em 5 minutos, só com o telemóvel ligado.
+- **Atalhos editáveis** na página Secretária (adicionar, editar, remover) e
+  **Modo auricular** (coluna + microfone) na página Áudio; o daemon valida
+  os atalhos (vazios, 40/200 caracteres, máximo de 32).
 
 ### PC
 - `hyprlink-daemon` sem janela; a **GUI** (`hyprlink-gui`, iced) é um processo

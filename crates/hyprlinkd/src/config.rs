@@ -273,6 +273,32 @@ pub fn set_speaker_prev_sink(config: &SharedConfig, sink: Option<&str>) {
     c.save();
 }
 
+/// Valida e normaliza (aparar espaços) uma lista de atalhos vinda da GUI.
+/// O erro é a frase para o Diário.
+pub fn validate_shortcuts(list: Vec<Shortcut>) -> Result<Vec<Shortcut>, &'static str> {
+    use hyprlink_proto::link::{SHORTCUT_COMMAND_MAX, SHORTCUT_NAME_MAX, SHORTCUTS_MAX};
+    if list.len() > SHORTCUTS_MAX {
+        return Err("demasiados atalhos");
+    }
+    list.into_iter()
+        .map(|s| {
+            let name = s.name.trim().to_string();
+            let command = s.command.trim().to_string();
+            if name.is_empty() {
+                Err("nome vazio")
+            } else if command.is_empty() {
+                Err("comando vazio")
+            } else if name.chars().count() > SHORTCUT_NAME_MAX {
+                Err("nome demasiado comprido")
+            } else if command.chars().count() > SHORTCUT_COMMAND_MAX {
+                Err("comando demasiado comprido")
+            } else {
+                Ok(Shortcut { name, command })
+            }
+        })
+        .collect()
+}
+
 pub fn set_shortcuts(config: &SharedConfig, shortcuts: Vec<Shortcut>) {
     let mut c = config.lock().unwrap();
     c.shortcuts = shortcuts;
@@ -294,6 +320,39 @@ pub fn set_track_settings(config: &SharedConfig, track: TrackSettings) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sc(name: &str, command: &str) -> Shortcut {
+        Shortcut {
+            name: name.into(),
+            command: command.into(),
+        }
+    }
+
+    #[test]
+    fn atalhos_validos_sao_aparados() {
+        let ok = validate_shortcuts(vec![sc("  Terminal ", " exec kitty\n")]).unwrap();
+        assert_eq!(
+            (ok[0].name.as_str(), ok[0].command.as_str()),
+            ("Terminal", "exec kitty")
+        );
+        assert!(
+            validate_shortcuts(vec![]).unwrap().is_empty(),
+            "esvaziar a lista é válido"
+        );
+    }
+
+    #[test]
+    fn atalhos_invalidos_sao_recusados() {
+        assert!(validate_shortcuts(vec![sc("  ", "exec kitty")]).is_err());
+        assert!(validate_shortcuts(vec![sc("Terminal", " ")]).is_err());
+        assert!(validate_shortcuts(vec![sc(&"n".repeat(41), "x")]).is_err());
+        assert!(validate_shortcuts(vec![sc(&"é".repeat(40), "x")]).is_ok());
+        assert!(validate_shortcuts(vec![sc("a", &"c".repeat(201))]).is_err());
+        let muitos = (0..33).map(|i| sc(&format!("a{i}"), "x")).collect();
+        assert!(validate_shortcuts(muitos).is_err());
+        // Um inválido recusa a lista toda.
+        assert!(validate_shortcuts(vec![sc("ok", "x"), sc("", "x")]).is_err());
+    }
 
     fn cfg(json: &str) -> AppConfig {
         serde_json::from_str(json).expect("config")

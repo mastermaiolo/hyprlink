@@ -1629,6 +1629,12 @@ pub fn audio(app: &App) -> El<'_> {
         ),
         crate::pages::phone_audio(app),
         gap(space::XXL),
+        setting(
+            t("Modo auricular"),
+            t("o telemóvel é o headset do PC: coluna e microfone num só interruptor"),
+            switch(app.speaker && app.mic_on, Message::Headset),
+        ),
+        gap(space::XXL),
         row![mic, hgap(space::XL), tap],
         gap(space::GUTTER),
         crate::pages::mixer(app),
