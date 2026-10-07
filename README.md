@@ -46,8 +46,8 @@ The link is direct on your local network over **QUIC + mTLS** (mutual authentica
 | Notifications (mirror, actions, dismiss) | ✅ |
 | File transfer (send queue, history, open folder) | ✅ |
 | Telemetry on the phone (CPU, RAM, temperature, GPU, disk) | 🚧 temperature/GPU still to validate |
-| Mouse buttons and drag (`input.button`) | 🚧 daemon ready; Android app pending |
-| Phone gestures (`gesture`) | 🚧 daemon and GUI ready; Android app pending |
+| Mouse buttons and drag (`input.button`) | 🚧 daemon and Android app ready; still to test on a phone |
+| Phone gestures (`gesture`) | 🚧 daemon, GUI and Android app ready; still to test on a phone |
 | Audio (mixer, hear the PC on the phone, virtual microphone) | 🚧 |
 | Webcam (phone as PC camera/microphone; H.264 and H.265) | 🚧 |
 

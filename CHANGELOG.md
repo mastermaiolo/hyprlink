@@ -51,8 +51,8 @@ a app Android tem versões próprias (`versionName`).
 
 ### Problemas conhecidos
 - Alfa: o protocolo pode mudar entre versões.
-- Gestos e botões do rato estão prontos no daemon e na GUI, mas ainda não na
-  app Android.
+- Gestos e botões do rato estão prontos no daemon, na GUI e na app Android,
+  mas ainda por testar num telemóvel.
 - Temperatura e GPU na telemetria ainda por validar em mais hardware.
 - Espelho do ecrã do telemóvel no PC e bloqueio por presença (afastamento do
   telemóvel): propostos, ainda não compilados no daemon.

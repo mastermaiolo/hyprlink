@@ -46,8 +46,8 @@ A ligação é direta na rede local via **QUIC + mTLS** (autenticação mútua p
 | Notificações (espelhar, ações, dispensar) | ✅ |
 | Transferência de ficheiros (fila de envios, histórico, abrir pasta) | ✅ |
 | Telemetria no telemóvel (CPU, RAM, temperatura, GPU, disco) | 🚧 temperatura/GPU por validar |
-| Botões do rato e arrastar (`input.button`) | 🚧 daemon pronto; falta a app Android |
-| Gestos no telemóvel (`gesture`) | 🚧 daemon e GUI prontos; falta a app Android |
+| Botões do rato e arrastar (`input.button`) | 🚧 daemon e app Android prontos; por testar no telemóvel |
+| Gestos no telemóvel (`gesture`) | 🚧 daemon, GUI e app Android prontos; por testar no telemóvel |
 | Áudio (mixer, ouvir o PC no telemóvel, microfone virtual) | 🚧 |
 | Webcam (telemóvel como câmara/microfone do PC; H.264 e H.265) | 🚧 |
 
