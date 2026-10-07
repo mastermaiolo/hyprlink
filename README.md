@@ -11,6 +11,15 @@ certificados autoassinados, fingerprint pinning), com o protocolo de controlo
 serializado em **CBOR**. Sem servidor intermediário: o telemóvel fala
 diretamente com o PC.
 
+> **Versão alfa (0.1.0).** Funciona no dia a dia de quem o desenvolve, mas o
+> protocolo ainda pode mudar entre versões e há módulos incompletos (ver
+> [Estado atual](#estado-atual)). Use por sua conta e risco; relatórios de
+> erros são bem-vindos.
+
+![GUI do PC: Capa, Dispositivos, Secretária, Espelho, Áudio, Sensores, Presença e Diário](crates/hyprlink-gui/docs/screenshots/contact-sheet.png)
+
+*English summary at the [end of this file](#english).*
+
 ## Onde está o quê
 
 ```
@@ -19,7 +28,7 @@ diretamente com o PC.
 │   ├── hyprlink-gui/         GUI do PC (iced, com tray próprio)
 │   ├── hyprlink-proto/       Contrato entre daemon, GUI e hyprlinkctl (+ textos em fmt.rs)
 │   └── hyprlinkctl/          Linha de comandos, para scripts e atalhos
-├── app android hyprlink/     App Android (Kotlin/Compose), feita no Google AI Studio
+├── app android hyprlink/     App Android (Kotlin/Compose), com origem no Google AI Studio
 ├── android-design-kit/       Kit de design da app: tokens, mockups e prompts
 │   └── prompts/              Prompts por aplicar (ordem em ORDEM.md); os feitos em prompts/Done/
 ├── docs/
@@ -27,7 +36,7 @@ diretamente com o PC.
 │   ├── testes/               Relatórios do teste real e o prompt do Claude Code
 │   └── historico/            Planos e materiais antigos, só para consulta
 ├── contrib/                  Waybar, .desktop, script de instalação
-├── scripts/                  gui-capture.sh (capturas da GUI para comparar)
+├── scripts/                  hyprlink-start.sh / hyprlink-stop.sh (daemon + GUI), gui-capture.sh
 ├── PLANO_COMPLETAR.md        Estado e plano (a secção do topo é a mais recente)
 └── PROTOCOL.md               Especificação do protocolo (fonte de verdade)
 ```
@@ -37,30 +46,84 @@ diretamente com o PC.
 | Módulo | Estado |
 |---|---|
 | Conectividade (QUIC/mTLS, pareamento por QR) | ✅ |
-| GUI do PC (iced, separada do daemon) | ✅ |
+| GUI do PC (iced, separada do daemon, tray próprio) | ✅ |
 | Clipboard bidirecional | ✅ |
 | Hyprland (workspaces, janelas, dispatch, eventos ao vivo) | ✅ |
 | Bateria (PC ↔ telemóvel) | ✅ |
-| Mídia (MPRIS — controlo e now-playing) | ✅ |
-| Touchpad / teclado remoto | ✅ |
+| Mídia (MPRIS: controlo, now-playing, capa e notificação no telemóvel) | ✅ |
+| Touchpad / teclado remoto (escrita ao vivo, Enter, atalhos) | ✅ |
+| Ações rápidas (bloquear, suspender, captura de ecrã/área, volume, mídia) | ✅ |
 | Notificações (espelhar, ações, dispensar) | ✅ |
-| Transferência de ficheiros | 🚧 |
+| Transferência de ficheiros (fila de envios, histórico, abrir pasta) | ✅ |
+| Telemetria no telemóvel (CPU, RAM, temperatura, GPU, disco) | 🚧 temperatura/GPU a validar |
+| Botões do rato e arrastar (`input.button`) | 🚧 daemon pronto; falta a app |
+| Gestos no telemóvel (`gesture`) | 🚧 daemon e GUI prontos; falta a app |
 | Áudio (mixer, ouvir o PC no telemóvel, microfone virtual) | 🚧 |
-| Webcam (telemóvel como câmara/microfone do PC) | 🚧 |
+| Webcam (telemóvel como câmara/microfone do PC; H.264 e H.265) | 🚧 |
 
 Detalhes de cada fase, decisões de arquitetura e o roteiro completo estão no
 histórico de commits e em `PROTOCOL.md`.
 
-## Correr no PC
+## Requisitos
 
-Requisitos: Linux com Hyprland (Wayland), Rust estável, `wl-clipboard`,
-GStreamer com `gst-plugin-pipewire`, e o módulo `uinput` carregado.
+Testado em **Arch Linux / CachyOS** com **Hyprland** (Wayland). Outras
+distribuições devem funcionar, mas os nomes de pacotes abaixo são os do Arch.
+
+| Para quê | Pacotes (Arch) |
+|---|---|
+| Base | `hyprland`, `pipewire`, `wireplumber`, `libpulse` (`pactl`), `wl-clipboard` |
+| Áudio e câmara (GStreamer) | `gst-plugins-base-libs`, `gst-plugins-good`, `gst-plugins-bad-libs` (H.265), `gst-libav` (descodificação H.264/H.265), `gst-plugin-pipewire` |
+| Webcam virtual | `v4l2loopback-dkms` (o daemon carrega-o em `/dev/video42` via `pkexec`) |
+| Seletor de ficheiros da GUI | `xdg-desktop-portal` + `xdg-desktop-portal-gtk` |
+| Ações rápidas, opcional | bloqueio: `noctalia`, `hyprlock` ou `loginctl`; capturas: `grimblast` ou `grim` + `slurp` |
+| Compilar | `rust`, `clang`, `lld`, `pkgconf` |
+
+O touchpad e o teclado remotos escrevem em `/dev/uinput`: o utilizador da
+sessão precisa de permissão de escrita (confirme com `getfacl /dev/uinput`).
+
+## Instalar (Arch / CachyOS)
+
+O pacote é um **PKGBUILD local** em `packaging/arch/` (ainda não está no AUR):
 
 ```bash
-# terminal 1 — o daemon (mostra o QR de emparelhamento no terminal)
-cargo run --release -p hyprlinkd
-# terminal 2 — a GUI
-cargo run --release -p hyprlink-gui
+git clone https://github.com/mastermaiolo/hyprlink.git
+cd hyprlink/packaging/arch
+makepkg -si
+systemctl --user enable --now hyprlink    # o daemon, como serviço de utilizador
+hyprlink-gui                              # a GUI (também no menu de aplicações)
+```
+
+Instala `hyprlink-daemon`, `hyprlink-gui` e `hyprlinkctl` em `/usr/bin`, o
+serviço systemd de utilizador e o atalho `.desktop`.
+
+## Emparelhar o telemóvel
+
+1. Instale a app Android (APK das [releases](https://github.com/mastermaiolo/hyprlink/releases);
+   no telemóvel é preciso permitir «Instalar apps desconhecidas»).
+2. Com o daemon a correr, abra a GUI em **Dispositivos → Emparelhar novo**
+   (ou veja o QR no terminal, se correu o daemon à mão).
+3. Na app, leia o QR. Ele leva a impressão digital SHA-256 do certificado do
+   PC, o endereço `<IP-DO-PC>:7443` e um token que muda a cada arranque do
+   daemon e depois de cada emparelhamento.
+4. A partir daí a ligação é retomada sozinha sempre que os dois estiverem na
+   mesma rede.
+
+**Rede:** PC e telemóvel têm de estar na mesma LAN. O daemon escuta numa só
+porta, **7443/UDP** (QUIC). Se tiver firewall, abra essa porta só para a
+rede local.
+
+A identidade do PC (certificado e chave) fica em `~/.config/hyprlink/`;
+apagar essa pasta obriga a emparelhar de novo.
+
+## Correr a partir do código (desenvolvimento)
+
+```bash
+# o mais simples: arranca o daemon e a GUI (usa os binários de target/release)
+scripts/hyprlink-start.sh            # --restart para reiniciar; hyprlink-stop.sh para parar
+
+# ou à mão, em dois terminais
+cargo run --release -p hyprlinkd     # o daemon (mostra o QR de emparelhamento)
+cargo run --release -p hyprlink-gui  # a GUI
 ```
 
 Na primeira execução o daemon gera um certificado próprio. A GUI fala com ele
@@ -94,9 +157,12 @@ Opcional, nada disto está ligado por omissão: `mold` (`paru -S mold`, depois
 
 ## App Android
 
-Em `app android hyprlink/` — projeto Kotlin/Jetpack Compose gerado e mantido
-no [Google AI Studio](https://ai.studio). Abra a pasta no Android Studio para
-compilar, ou continue editando no AI Studio.
+Em `app android hyprlink/` — projeto Kotlin/Jetpack Compose que nasceu no
+[Google AI Studio](https://ai.studio) e é hoje evoluído a partir do
+`android-design-kit/` (design, mockups e prompts por ordem em `ORDEM.md`).
+Abra a pasta no Android Studio para compilar. O pacote de release assinado
+usa variáveis de ambiente (`KEYSTORE_PATH`, `STORE_PASSWORD`, `KEY_PASSWORD`);
+nunca guarde a keystore nem as palavras-passe no repositório.
 
 ## Protocolo
 
@@ -107,4 +173,36 @@ fonte de verdade real).
 
 ## Licença
 
-MIT — veja [`LICENSE`](LICENSE).
+**GPL-3.0-or-later** — veja [`LICENSE`](LICENSE).
+
+**Relicenciamento:** até à 0.1.0 o código foi publicado sob MIT. Como o
+projeto tem um só autor, a partir da 0.1.0 passa a GPL-3.0-or-later. Quem
+recebeu versões anteriores continua a poder usá-las nos termos da MIT.
+
+As fontes embutidas na GUI e na app (Anton, Instrument Serif, Inter,
+IBM Plex Mono, Noto Sans SC) são SIL Open Font License 1.1; os textos estão
+em `crates/hyprlink-gui/assets/fonts/OFL-*.txt`.
+
+## English
+
+**HyprLink** links an Android phone to a Linux desktop running Hyprland:
+clipboard, notifications, media (MPRIS, with cover art), battery, remote
+touchpad and keyboard, quick actions, file transfer, the phone as a webcam
+(H.264/H.265 via v4l2loopback) and microphone, and live Hyprland control. It
+talks directly over the local network with **QUIC + mutual TLS** (self-signed
+certificates, fingerprint pinning, CBOR protocol): no cloud, no relay server.
+
+**Status: alpha (0.1.0).** The protocol may still change between versions.
+
+- **Requirements:** Arch Linux / CachyOS, Hyprland, PipeWire + WirePlumber,
+  GStreamer (base, good, bad, libav, pipewire), `wl-clipboard`; optional:
+  `v4l2loopback-dkms`, `grimblast` or `grim` + `slurp`, `hyprlock`/`noctalia`.
+- **Install:** `cd packaging/arch && makepkg -si`, then
+  `systemctl --user enable --now hyprlink` and launch `hyprlink-gui`.
+- **Pairing:** install the Android APK from the releases page, open
+  *Devices → Pair new* in the GUI and scan the QR code. Phone and PC must be
+  on the same LAN; the daemon listens on **7443/UDP** only.
+- **Development:** `scripts/hyprlink-start.sh` starts the daemon and the GUI
+  from `target/release`.
+- **License:** GPL-3.0-or-later (versions before 0.1.0 were MIT). The GUI is
+  available in Portuguese (PT/BR), English, Spanish and Chinese.

@@ -225,7 +225,7 @@ fn all_events() -> Vec<Event> {
         }),
         Event::Pairing(None),
         Event::Pairing(Some(PairingTicket {
-            payload: "3F:8A|<IP-DO-PC>:7443|c1ab918e137fca8c80e72666589d70f0".into(),
+            payload: "3F:8A|192.168.1.100:7443|c1ab918e137fca8c80e72666589d70f0".into(),
             code: None,
             expires_in: None,
         })),
