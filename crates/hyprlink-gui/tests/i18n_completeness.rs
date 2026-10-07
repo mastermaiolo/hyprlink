@@ -158,7 +158,11 @@ fn used_keys() -> BTreeSet<String> {
 #[test]
 fn every_used_text_is_translated_into_en_es_and_zh() {
     let used = used_keys();
-    assert!(used.len() > 300, "o extrator só achou {} chaves", used.len());
+    assert!(
+        used.len() > 300,
+        "o extrator só achou {} chaves",
+        used.len()
+    );
     for lang in [Lang::EnGb, Lang::EsEs, Lang::Zh] {
         let have: HashSet<&str> = table(lang).iter().map(|(k, _)| *k).collect();
         let missing: Vec<&String> = used.iter().filter(|k| !have.contains(k.as_str())).collect();

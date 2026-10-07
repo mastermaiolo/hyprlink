@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use ciborium::Value;
+use hyprlink_proto::link::NotifAction;
 use quinn::crypto::rustls::QuicServerConfig;
 use rustls::pki_types::CertificateDer;
 
@@ -54,6 +55,8 @@ pub struct Ctx {
     /// notificação e cada poll de mídia (a cada 2s, pra sempre) abriam uma
     /// conexão nova, cada uma é uma negociação de socket completa.
     pub dbus: Option<zbus::Connection>,
+    /// Limite de frequência do `shortcut.run` (por ligação; recomeça ao ligar).
+    pub shortcut_limiter: crate::shortcuts::SharedLimiter,
 }
 
 impl Ctx {
@@ -83,6 +86,7 @@ impl Ctx {
             mic: crate::mic::new_handle(),
             pending_mic: crate::mic::new_pending(),
             dbus,
+            shortcut_limiter: crate::shortcuts::new_limiter(),
         }
     }
 }
@@ -348,6 +352,11 @@ async fn handle_connection(
     write_frame(&mut send, &reply.encode()).await?;
     send.finish()?;
 
+    // Atalhos da GUI no telemóvel: a lista (sem comandos) logo a seguir ao
+    // handshake; o limite de frequência recomeça com a ligação.
+    ctx.shortcut_limiter.lock().unwrap().reset();
+    crate::shortcuts::spawn_push_on_connect(ctx.active.clone(), ctx.config.clone());
+
     // Streams seguintes (incluindo mais chamadas na mesma stream de controlo,
     // se o app reabrir uma nova) são despachadas por tipo.
     // Streams unidirecionais (ficheiros, por ora) chegam numa tarefa à
@@ -408,9 +417,15 @@ async fn route_uni_stream(mut recv: quinn::RecvStream, ctx: Ctx) {
         match *pending {
             Some((pending_id, width, height)) if pending_id == id => {
                 *pending = None;
+                state::set_webcam_session(&ctx.hud, Some((id, width, height)));
                 Some((width, height))
             }
-            _ => None,
+            // Reinício local no telemóvel (resolução/codec): reabre o stream
+            // com o id da sessão em curso, sem novo `webcam.start`.
+            _ => match ctx.hud.lock().unwrap().modules.webcam_session {
+                Some((sid, width, height)) if sid == id => Some((width, height)),
+                _ => None,
+            },
         }
     };
     let mic_res = {
@@ -642,6 +657,46 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
             state::push_log(hud, format!("[!] webcam (telemóvel): {message}"));
             webcam::stop(&ctx.webcam, hud);
         }
+        // O telemóvel pede a câmara (pedido/resposta): reutiliza o caminho do
+        // `Command2::StartWebcam`; em caso de sucesso o `webcam.start` normal
+        // segue por outra stream.
+        "webcam.request" => {
+            let connected = ctx.active.lock().unwrap().is_some();
+            let result = webcam::check_request(body, hud, &ctx.pending_webcam, connected);
+            let line = match &result {
+                Ok(_) => "[i] webcam.request · câmara pedida pelo telemóvel".to_string(),
+                Err(e) => format!("[!] webcam.request recusado · {e}"),
+            };
+            state::push_log(hud, line);
+            reply(
+                &mut send,
+                packet.id,
+                "webcam.request_result",
+                Some(webcam::request_result_body(&result)),
+            )
+            .await;
+            let _ = send.finish();
+            if let Ok(p) = result
+                && !webcam::request_start(
+                    &ctx.active,
+                    &ctx.pending_webcam,
+                    p.width,
+                    p.height,
+                    p.fps,
+                    p.codec,
+                )
+                .await
+            {
+                state::push_log(hud, "[!] webcam.request · telemóvel desligou".to_string());
+            }
+        }
+        // Opcional (telemóvel recente): formato efetivo. Um telemóvel antigo
+        // nunca o envia e a GUI cai para o pedido.
+        "webcam.state" => {
+            if let Some(fmt) = webcam::parse_state(body) {
+                webcam::apply_state(fmt, &ctx.webcam, &ctx.pending_webcam, hud);
+            }
+        }
         "webcam.transform" => {
             if let (Some(rotation), Some(mirror)) = (
                 body.and_then(|b| crate::protocol::body_get_i64(b, "rotation")),
@@ -740,7 +795,7 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                 let app = body_get_str(b, "app").unwrap_or("HyprLink").to_string();
                 let title = body_get_str(b, "title").unwrap_or("").to_string();
                 let text = body_get_str(b, "text").unwrap_or("").to_string();
-                let actions: Vec<(i64, String)> = crate::protocol::body_get(b, "actions")
+                let parsed: Vec<(i64, String, bool)> = crate::protocol::body_get(b, "actions")
                     .and_then(|v| v.as_array())
                     .map(|arr| {
                         arr.iter()
@@ -751,15 +806,31 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                                 let label = crate::protocol::body_get(item, "label")?
                                     .as_text()?
                                     .to_string();
-                                Some((idx, label))
+                                let is_reply = crate::protocol::body_get_bool(item, "is_reply")
+                                    .unwrap_or(false);
+                                Some((idx, label, is_reply))
                             })
                             .collect()
                     })
                     .unwrap_or_default();
+                let actions: Vec<(i64, String)> = parsed
+                    .iter()
+                    .map(|(idx, label, _)| (*idx, label.clone()))
+                    .collect();
+                let known: Vec<NotifAction> = parsed
+                    .into_iter()
+                    .filter_map(|(idx, label, is_reply)| {
+                        Some(NotifAction {
+                            idx: u32::try_from(idx).ok()?,
+                            label,
+                            is_reply,
+                        })
+                    })
+                    .collect();
                 // `replay: true` = já estava na barra do telemóvel quando ele ligou:
                 // entra na lista de ativas, mas não gera balão no PC nem conta como nova.
                 if crate::protocol::body_get_bool(b, "replay").unwrap_or(false) {
-                    state::register_active_notif(hud, key, app, title, text);
+                    state::register_active_notif(hud, key, app, title, text, known);
                 } else {
                     state::push_notif_entry(
                         hud,
@@ -767,6 +838,7 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                         app.clone(),
                         title.clone(),
                         text.clone(),
+                        known,
                     );
                     state::push_log(hud, format!("[i] notification.post · {app}: {title}"));
                     notif::post(&app, &title, &text, &key, &actions, &ctx.notif, &ctx.dbus).await;
@@ -782,6 +854,39 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                 // O «último gesto» vai logo para a GUI.
                 crate::hub::global().publish(crate::bridge::gestures_event(&ctx.config));
             }
+        }
+        // Atalho da GUI pedido pelo telemóvel (só a identificação, nunca o
+        // comando): ver `shortcuts.rs`. Responde `shortcut.run_result`.
+        "shortcut.run" => {
+            let id = body
+                .and_then(|b| body_get_str(b, "id"))
+                .unwrap_or("")
+                .to_string();
+            let (config, limiter, hud_c) = (
+                ctx.config.clone(),
+                ctx.shortcut_limiter.clone(),
+                hud.clone(),
+            );
+            let id_c = id.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                crate::shortcuts::run(
+                    &config,
+                    &limiter,
+                    &hud_c,
+                    &id_c,
+                    std::time::Instant::now(),
+                    &crate::hypr::dispatch_checked,
+                )
+            })
+            .await
+            .unwrap_or(Err(crate::shortcuts::ERR_FAILED));
+            reply(
+                &mut send,
+                packet.id,
+                "shortcut.run_result",
+                Some(crate::shortcuts::result_body(&id, result)),
+            )
+            .await;
         }
         "notification.dismissed" => {
             if let Some(key) = body.and_then(|b| body_get_str(b, "key")) {

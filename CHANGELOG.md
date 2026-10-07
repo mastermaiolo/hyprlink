@@ -40,6 +40,25 @@ a app Android tem versões próprias (`versionName`).
   disco livre e GPU do PC no telemóvel.
 - Wake-on-LAN: o daemon envia o MAC do PC para o telemóvel o poder acordar.
 
+### Paridade com a app Android
+- **Responder a notificações** a partir do PC: a página Notificações mostra um
+  campo de texto e «Responder» (Enter envia) nas notificações com ação de
+  resposta; o daemon valida e envia `notification.reply`.
+- **Câmara pedida pelo telemóvel** (`webcam.request` → `webcam.request_result`):
+  o daemon arranca a câmara pelo mesmo caminho da GUI e recusa se já estiver
+  ativa.
+- **Bateria do PC** no telemóvel com `charging` (a carregar de facto) e
+  `plugged` (fio ligado) separados, e `present:false` sem bateria; empurrada
+  quando muda e de 5 em 5 minutos, só com o telemóvel ligado.
+- **Atalhos editáveis** na página Secretária (adicionar, editar, remover) e
+  **Modo auricular** (coluna + microfone) na página Áudio; o daemon valida
+  os atalhos (vazios, 40/200 caracteres, máximo de 32).
+- **Abrir no telemóvel pela GUI** (página Partilha): URL (só http/https) com
+  «Abrir no telemóvel» e nome de pacote com «Abrir app».
+- **Controlos por implementar** (espelhar ecrã, ponte de sensores, regras de
+  presença) ficam desativados na GUI com a nota «em breve», em vez de darem
+  erro ao carregar.
+
 ### PC
 - `hyprlink-daemon` sem janela; a **GUI** (`hyprlink-gui`, iced) é um processo
   à parte que fala com o daemon pelo socket `$XDG_RUNTIME_DIR/hyprlink.sock`,

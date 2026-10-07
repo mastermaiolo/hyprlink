@@ -8,8 +8,8 @@
 use crate::app::{App, CamMode, Message};
 use crate::graphics::CameraFrame;
 use crate::link::{
-    CamCodec, Cap, Command2, Dir, MediaAction, Origin, PhoneStream, Ringer, TrackpadConfig,
-    TransferState,
+    CamCodec, Cap, Command2, Dir, MediaAction, Origin, PhoneNotification, PhoneStream, Ringer,
+    TrackpadConfig, TransferState,
 };
 use crate::theme::{self, *};
 use crate::ui::*;
@@ -79,7 +79,11 @@ pub fn battery_block(app: &App) -> El<'_> {
     if let Some(v) = low {
         low_row = low_row.push(
             column![
-                row![kicker(t("LIMIAR")), fill_x(), kicker_c(format!("{v}%"), ACID)],
+                row![
+                    kicker(t("LIMIAR")),
+                    fill_x(),
+                    kicker_c(format!("{v}%"), ACID)
+                ],
                 gap(space::S),
                 slider(5.0..=50.0, v as f32, Message::LowLevel)
                     .step(5.0_f32)
@@ -128,9 +132,28 @@ pub fn shortcuts(app: &App) -> El<'_> {
             .on_press(Message::Do(Command2::RunDispatch(s.dispatch.clone()))),
         );
     }
+    let editor: El<'_> = if app.sc_edit {
+        shortcuts_editor(app)
+    } else {
+        gap(0.0)
+    };
     column![
         subhead("C", t("Atalhos")),
         grid.wrap().vertical_spacing(space::S),
+        gap(space::M),
+        row![
+            fill_x(),
+            btn(
+                if app.sc_edit {
+                    t("CONCLUÍDO")
+                } else {
+                    t("EDITAR ATALHOS")
+                },
+                theme::ghost,
+                Some(Message::ShortcutsEdit(!app.sc_edit))
+            ),
+        ],
+        editor,
         gap(space::L),
         row![
             text_input(
@@ -155,6 +178,102 @@ pub fn shortcuts(app: &App) -> El<'_> {
         mono(t("os atalhos também aparecem no telemóvel"), FAINT),
     ]
     .into()
+}
+
+/// Editor de atalhos: uma linha por atalho (nome + comando, GUARDAR e
+/// REMOVER) e uma linha para um novo.
+fn shortcuts_editor(app: &App) -> El<'_> {
+    let field = |placeholder: &'static str,
+                 value: &str,
+                 max: usize,
+                 on_input: Box<dyn Fn(String) -> Message + 'static>,
+                 submit: Option<Message>|
+     -> El<'static> {
+        let over = value.chars().count() > max;
+        let mut input = text_input(placeholder, value)
+            .on_input(on_input)
+            .font(MONO)
+            .size(12)
+            .padding(Padding::from([8, 12]))
+            .style(theme::input);
+        if let Some(m) = submit {
+            input = input.on_submit(m);
+        }
+        column![
+            input,
+            if over {
+                El::from(mono(tr!("máx. {} caracteres", max), ACID).size(10.5))
+            } else {
+                gap(0.0)
+            }
+        ]
+        .into()
+    };
+    let name_max = crate::link::SHORTCUT_NAME_MAX;
+    let cmd_max = crate::link::SHORTCUT_COMMAND_MAX;
+    let mut rows = column![].spacing(space::S);
+    for i in 0..app.shortcuts.len() {
+        let (name, command) = app.shortcut_draft(i);
+        let saved = &app.shortcuts[i];
+        let changed = name != saved.label || command != saved.dispatch;
+        let valid = crate::app::shortcut_valid(&name, &command);
+        let save = (changed && valid).then_some(Message::ShortcutSave(i));
+        rows = rows.push(
+            row![
+                container(field(
+                    t("nome"),
+                    &name,
+                    name_max,
+                    Box::new(move |s| Message::ShortcutName(i, s)),
+                    save.clone(),
+                ))
+                .width(Length::FillPortion(2)),
+                hgap(space::S),
+                container(field(
+                    t("comando"),
+                    &command,
+                    cmd_max,
+                    Box::new(move |s| Message::ShortcutCommand(i, s)),
+                    save.clone(),
+                ))
+                .width(Length::FillPortion(3)),
+                hgap(space::S),
+                btn(t("GUARDAR"), theme::primary, save),
+                hgap(space::S),
+                btn(t("REMOVER"), theme::ghost, Some(Message::ShortcutRemove(i))),
+            ]
+            .align_y(Alignment::Start),
+        );
+    }
+    let (new_name, new_cmd) = &app.sc_new;
+    let can_add = crate::app::shortcut_valid(new_name, new_cmd)
+        && app.shortcuts.len() < crate::link::SHORTCUTS_MAX;
+    let add = can_add.then_some(Message::ShortcutAdd);
+    rows = rows.push(
+        row![
+            container(field(
+                t("novo atalho"),
+                new_name,
+                name_max,
+                Box::new(Message::ShortcutNewName),
+                add.clone(),
+            ))
+            .width(Length::FillPortion(2)),
+            hgap(space::S),
+            container(field(
+                t("comando"),
+                new_cmd,
+                cmd_max,
+                Box::new(Message::ShortcutNewCommand),
+                add.clone(),
+            ))
+            .width(Length::FillPortion(3)),
+            hgap(space::S),
+            btn(t("ADICIONAR"), theme::primary, add),
+        ]
+        .align_y(Alignment::Start),
+    );
+    column![gap(space::M), rule(), gap(space::M), rows].into()
 }
 
 pub fn trackpad(app: &App) -> El<'_> {
@@ -273,7 +392,9 @@ pub fn camera(app: &App) -> El<'_> {
 }
 
 fn camera_body(app: &App) -> El<'_> {
-    let cfg = app.webcam_cfg;
+    // Chips e rótulos: o formato EFETIVO quando o telemóvel o reporta,
+    // senão a preferência (`webcam_cfg`).
+    let cfg = app.cam_shown();
     let live = app.webcam.is_some();
     let frame = canvas(CameraFrame {
         t: app.t,
@@ -329,7 +450,9 @@ fn camera_body(app: &App) -> El<'_> {
         None => column![
             headline(t("PARADA"), size::D3).color(MUTED),
             gap(space::S),
-            deck_s(t("Escolhe o formato e liga. Aparece no PC como /dev/video42.")),
+            deck_s(t(
+                "Escolhe o formato e liga. Aparece no PC como /dev/video42."
+            )),
         ]
         .into(),
     };
@@ -371,13 +494,29 @@ fn camera_body(app: &App) -> El<'_> {
         status,
         gap(space::XXL),
         subhead("A", t("Formato")),
+        match app.cam_adjusted_note() {
+            Some(n) => column![
+                deck_s(format!("{} {n}", t("o telemóvel ajustou:"))),
+                gap(space::S)
+            ]
+            .into(),
+            None => El::from(gap(0.0)),
+        },
         setting(
             t("Resolução"),
             format!("{}×{}", cfg.width, cfg.height),
             res.into()
         ),
-        setting(t("Imagens por segundo"), t("o telemóvel pode baixar"), fps.into()),
-        setting(t("Codec"), t("H.265 poupa débito; o telemóvel volta a H.264 se não tiver encoder HEVC"), codecs.into()),
+        setting(
+            t("Imagens por segundo"),
+            t("o telemóvel pode baixar"),
+            fps.into()
+        ),
+        setting(
+            t("Codec"),
+            t("H.265 poupa débito; o telemóvel volta a H.264 se não tiver encoder HEVC"),
+            codecs.into()
+        ),
         gap(space::XL),
         subhead("B", t("Rede")),
         net,
@@ -557,9 +696,13 @@ pub fn mixer(app: &App) -> El<'_> {
                     })
                     .width(48),
                 hgap(space::S),
-                container(chip(if muted { t("MUDO") } else { t("SOM") }, muted, on_mute))
-                    .width(64)
-                    .align_x(Alignment::End),
+                container(chip(
+                    if muted { t("MUDO") } else { t("SOM") },
+                    muted,
+                    on_mute
+                ))
+                .width(64)
+                .align_x(Alignment::End),
             ]
             .align_y(Alignment::Center)
             .padding(Padding::from([10, 0])),
@@ -574,7 +717,10 @@ pub fn mixer(app: &App) -> El<'_> {
         let right: El = if s.default {
             tag(t("PREDEFINIDA"), PAPER, VOID)
         } else {
-            small_btn(t("USAR ESTA"), Some(Message::Do(Command2::SetDefaultSink(id))))
+            small_btn(
+                t("USAR ESTA"),
+                Some(Message::Do(Command2::SetDefaultSink(id))),
+            )
         };
         sinks = sinks.push(vol_row(
             s.description.clone(),
@@ -628,6 +774,38 @@ pub fn mixer(app: &App) -> El<'_> {
 }
 
 // ═════════════════════════ 06 NOTIFICAÇÕES ═════════════════════════
+
+/// Campo de resposta + «RESPONDER» (Enter envia) para as notificações que
+/// têm uma ação de resposta; as outras não mostram nada.
+fn reply_row<'a>(app: &'a App, x: &'a PhoneNotification) -> Option<El<'a>> {
+    let idx = x.actions.iter().find(|a| a.is_reply)?.idx;
+    let draft = app
+        .reply_drafts
+        .get(&x.key)
+        .map(String::as_str)
+        .unwrap_or("");
+    let send = Message::ReplySend(x.key.clone(), idx);
+    let key = x.key.clone();
+    Some(
+        row![
+            text_input(t("responder…"), draft)
+                .on_input(move |s| Message::ReplyInput(key.clone(), s))
+                .on_submit(send.clone())
+                .font(MONO)
+                .size(12)
+                .padding(Padding::from([8, 12]))
+                .style(theme::input),
+            hgap(space::S),
+            btn(
+                t("RESPONDER"),
+                theme::primary,
+                (!draft.trim().is_empty()).then_some(send)
+            ),
+        ]
+        .align_y(Alignment::Center)
+        .into(),
+    )
+}
 
 pub fn notifications(app: &App) -> El<'_> {
     let n = app.notifs.len();
@@ -727,6 +905,8 @@ pub fn notifications(app: &App) -> El<'_> {
                     headline(x.title.to_uppercase(), size::D3),
                     gap(space::S),
                     deck(x.text.clone().unwrap_or_default()),
+                    gap(space::M),
+                    reply_row(app, x).unwrap_or_else(|| gap(0.0)),
                     gap(space::XL),
                     rule_c(PAPER, 1.0),
                 ]
@@ -751,6 +931,10 @@ pub fn notifications(app: &App) -> El<'_> {
                             .size(size::BODY)
                             .color(SUB)
                             .line_height(LineHeight::Relative(1.45)),
+                        match reply_row(app, x) {
+                            Some(r) => El::from(column![gap(space::S), r]),
+                            None => gap(0.0),
+                        },
                     ]
                     .width(Length::Fill),
                     dismiss,
@@ -784,13 +968,16 @@ pub fn notifications(app: &App) -> El<'_> {
     }
 
     let toolbar = row![
-        text_input(t("procurar no título, no texto ou na app…"), &app.notif_query)
-            .on_input(Message::NotifQuery)
-            .font(MONO)
-            .size(12)
-            .padding(Padding::from([8, 12]))
-            .width(360)
-            .style(theme::input),
+        text_input(
+            t("procurar no título, no texto ou na app…"),
+            &app.notif_query
+        )
+        .on_input(Message::NotifQuery)
+        .font(MONO)
+        .size(12)
+        .padding(Padding::from([8, 12]))
+        .width(360)
+        .style(theme::input),
         fill_x(),
         btn(
             t("DISPENSAR TODAS"),
@@ -817,6 +1004,78 @@ pub fn notifications(app: &App) -> El<'_> {
 }
 
 // ═════════════════════════ 07 PARTILHA ═════════════════════════
+
+/// «Abrir no telemóvel»: URL (só http/https) e/ou app (nome do package).
+fn open_on_phone(app: &App) -> El<'_> {
+    let linked = app.primary().is_some();
+    let url = app.phone_url.trim();
+    let url_ok = linked && crate::link::http_url_ok(url);
+    let pkg = app.phone_pkg.trim();
+    let pkg_ok = linked && crate::link::package_ok(pkg);
+    let hint = |on: bool, bad: bool, msg: &'static str| -> El<'static> {
+        if on && bad {
+            El::from(mono(t(msg), HOT).size(10.5))
+        } else {
+            gap(0.0)
+        }
+    };
+    column![
+        subhead("C", t("Abrir no telemóvel")),
+        row![
+            text_input(t("https://…"), &app.phone_url)
+                .on_input(Message::PhoneUrl)
+                .on_submit(Message::PhoneUrlOpen)
+                .font(MONO)
+                .size(12)
+                .padding(Padding::from([9, 12]))
+                .style(theme::input),
+            hgap(space::S),
+            btn(
+                t("ABRIR NO TELEMÓVEL"),
+                theme::primary,
+                url_ok.then_some(Message::PhoneUrlOpen)
+            ),
+        ]
+        .align_y(Alignment::Center),
+        hint(
+            !url.is_empty(),
+            !crate::link::http_url_ok(url),
+            "só http:// ou https://"
+        ),
+        gap(space::M),
+        row![
+            text_input(t("pacote: com.whatsapp"), &app.phone_pkg)
+                .on_input(Message::PhonePkg)
+                .on_submit(Message::PhonePkgOpen)
+                .font(MONO)
+                .size(12)
+                .padding(Padding::from([9, 12]))
+                .style(theme::input),
+            hgap(space::S),
+            btn(
+                t("ABRIR APP"),
+                theme::primary,
+                pkg_ok.then_some(Message::PhonePkgOpen)
+            ),
+        ]
+        .align_y(Alignment::Center),
+        hint(
+            !pkg.is_empty(),
+            !crate::link::package_ok(pkg),
+            "nome de pacote inválido"
+        ),
+        gap(space::S),
+        if linked {
+            mono(
+                t("o telemóvel decide se abre já ou mostra uma notificação"),
+                FAINT,
+            )
+        } else {
+            mono(t("precisa de um telemóvel ligado"), FAINT)
+        },
+    ]
+    .into()
+}
 
 pub fn share(app: &App) -> El<'_> {
     // ── clipboard ──
@@ -899,6 +1158,8 @@ pub fn share(app: &App) -> El<'_> {
         clip_list,
         gap(space::M),
         mono(t("sincroniza sozinha; texto e PNG · clip.rs"), FAINT),
+        gap(space::XXL),
+        open_on_phone(app),
     ]
     .width(fill_portion(1));
 
@@ -975,7 +1236,10 @@ pub fn share(app: &App) -> El<'_> {
                         kicker(format!("{:.0} %", p * 100.0))
                     ],
                     gap(space::S),
-                    text(xfer.name.as_str()).font(SANS_SEMI).size(16).color(PAPER),
+                    text(xfer.name.as_str())
+                        .font(SANS_SEMI)
+                        .size(16)
+                        .color(PAPER),
                     gap(space::M),
                     bar(p, ACID, 3.0),
                     gap(space::S),
@@ -1128,7 +1392,11 @@ pub fn media(app: &App) -> El<'_> {
                 kicker_c(
                     tr!(
                         "{} NO TELEMÓVEL{}",
-                        if np.playing { t("A TOCAR") } else { t("EM PAUSA") },
+                        if np.playing {
+                            t("A TOCAR")
+                        } else {
+                            t("EM PAUSA")
+                        },
                         np.app
                             .as_ref()
                             .map(|a| format!(" · {}", a.to_uppercase()))
@@ -1248,6 +1516,36 @@ pub fn media(app: &App) -> El<'_> {
 
 // ═════════════════════════ ·· DEFINIÇÕES ═════════════════════════
 
+/// O ambiente em uso no daemon (o que detetou e as opções de correção do
+/// `config.json`), só para ver — o mesmo que `hyprlinkctl doctor`.
+fn env_values(app: &App) -> El<'_> {
+    let Some(st) = app.settings.as_ref().filter(|s| !s.env.is_empty()) else {
+        return mono(t("sem dados do daemon"), FAINT).into();
+    };
+    let mut col = column![];
+    for v in &st.env {
+        let label = match v.key.as_str() {
+            "shell" => t("SHELL"),
+            "hypr_dispatch_mode" => t("DISPATCH DO HYPRLAND"),
+            "lock_command" => t("BLOQUEIO"),
+            "screenshot_tool" => t("CAPTURA"),
+            "temp_sensor" => t("TEMPERATURA"),
+            "gpu_source" => t("CARGA DA GPU"),
+            "audio_backend" => t("VOLUME"),
+            "v4l2_device_nr" => t("CÂMARA (/dev/videoN)"),
+            "tap_source" => t("FONTE DO RETORNO"),
+            "aviso" => t("AVISO"),
+            other => other,
+        };
+        col = col.push(kv_text(label, v.value.clone()));
+    }
+    col.push(mono(
+        t("para os forçar: opções no config.json (ver README, «Compatibilidade»)"),
+        FAINT,
+    ))
+    .into()
+}
+
 pub fn settings(app: &App) -> El<'_> {
     let s = app.settings.as_ref();
     let current = hyprlink_gui::i18n::get();
@@ -1325,11 +1623,17 @@ pub fn settings(app: &App) -> El<'_> {
         kv_text(t("DAEMON"), "systemctl --user enable --now hyprlinkd"),
         kv_text(t("TRAY"), t("fechar a janela deixa a app no tray")),
         gap(space::XXL),
-        subhead("D", t("Idioma")),
+        subhead("D", t("Ambiente")),
+        env_values(app),
+        gap(space::XXL),
+        subhead("E", t("Idioma")),
         langs,
         gap(space::XXL),
-        subhead("E", t("Sobre")),
-        kv_text(t("GUI"), format!("hyprlink-gui {}", env!("CARGO_PKG_VERSION"))),
+        subhead("F", t("Sobre")),
+        kv_text(
+            t("GUI"),
+            format!("hyprlink-gui {}", env!("CARGO_PKG_VERSION"))
+        ),
         kv_text(
             t("TECLAS"),
             t("1–9 e 0 para as secções · Esc fecha o emparelhamento")

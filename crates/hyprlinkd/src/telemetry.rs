@@ -21,6 +21,8 @@ use ciborium::Value;
 use crate::active::ActiveConn;
 use crate::config::{self, SharedConfig};
 use crate::state::HudState;
+use hyprlink_env::gpu::{amd_gpu_busy, nvidia_awake, parse_nvidia_smi};
+use hyprlink_env::sensors::read_temp;
 
 const SYS: &str = "/sys";
 /// O disco muda devagar; o `nvidia-smi` é um processo.
@@ -67,113 +69,13 @@ fn ram_sample() -> Option<(u64, u64)> {
     Some((total - avail, total))
 }
 
-/// Temperatura plausível de um `…_input` (milligraus). Zero, negativo ou
-/// absurdo → `None`.
-fn read_temp(path: &Path) -> Option<f32> {
-    let millic = std::fs::read_to_string(path)
-        .ok()?
-        .trim()
-        .parse::<i64>()
-        .ok()?;
-    let c = millic as f32 / 1000.0;
-    (c > 0.0 && c < 120.0).then_some(c)
-}
-
-fn read_trim(path: &Path) -> Option<String> {
-    Some(std::fs::read_to_string(path).ok()?.trim().to_string())
-}
-
-/// Procura o melhor sensor da CPU sob `sys` (a raiz de `/sys`, parametrizada
-/// para os testes). Preferência, da melhor para a pior:
-/// 0 k10temp `Tdie` · 1 k10temp `Tctl` · 2 coretemp `Package id 0` ·
-/// 3 zenpower · 4 hwmon `cpu_thermal`/`soc_thermal` · 5 thermal zone
-/// `x86_pkg_temp`/`cpu*` · 6 outra thermal zone · 7 `acpitz`.
-/// Só devolve sensores com leitura plausível agora. Uma entrada ilegível
-/// salta-se (`continue`), nunca aborta a procura.
-fn find_cpu_sensor(sys: &Path) -> Option<PathBuf> {
-    let mut best: Option<(u8, PathBuf)> = None;
-    let mut consider = |rank: u8, input: PathBuf| {
-        if best.as_ref().is_some_and(|(r, _)| *r <= rank) || read_temp(&input).is_none() {
-            return;
-        }
-        best = Some((rank, input));
-    };
-
-    let mut hwmons: Vec<PathBuf> = std::fs::read_dir(sys.join("class/hwmon"))
-        .into_iter()
-        .flatten()
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .collect();
-    hwmons.sort();
-    for dir in hwmons {
-        let Some(name) = read_trim(&dir.join("name")) else {
-            continue;
-        };
-        let Ok(rd) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in rd {
-            let Ok(entry) = entry else { continue };
-            let file = entry.file_name().to_string_lossy().into_owned();
-            let Some(stem) = file
-                .strip_prefix("temp")
-                .and_then(|r| r.strip_suffix("_label"))
-            else {
-                continue;
-            };
-            let Some(label) = read_trim(&entry.path()) else {
-                continue;
-            };
-            let input = dir.join(format!("temp{stem}_input"));
-            let rank = match (name.as_str(), label.as_str()) {
-                ("k10temp", "Tdie") => 0,
-                ("k10temp", "Tctl") => 1,
-                ("coretemp", "Package id 0") => 2,
-                ("zenpower", "Tdie" | "Tctl") => 3,
-                _ => continue,
-            };
-            consider(rank, input);
-        }
-        // Sem rótulos (k10temp antigo, ARM): `temp1_input` pelo nome do chip.
-        let rank = match name.as_str() {
-            "k10temp" => Some(1),
-            "coretemp" => Some(2),
-            "zenpower" => Some(3),
-            "cpu_thermal" | "soc_thermal" => Some(4),
-            _ => None,
-        };
-        if let Some(rank) = rank {
-            consider(rank, dir.join("temp1_input"));
-        }
-    }
-
-    let mut zones: Vec<PathBuf> = std::fs::read_dir(sys.join("class/thermal"))
-        .into_iter()
-        .flatten()
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .collect();
-    zones.sort();
-    for zone in zones {
-        let Some(kind) = read_trim(&zone.join("type")) else {
-            continue;
-        };
-        let rank = if kind == "x86_pkg_temp" || kind.starts_with("cpu") {
-            5
-        } else if kind == "acpitz" {
-            7
-        } else {
-            6
-        };
-        consider(rank, zone.join("temp"));
-    }
-    best.map(|(_, p)| p)
-}
-
-/// Escolhe o sensor **uma vez** e depois só relê o ficheiro; se a leitura
-/// falhar, refaz a procura.
+/// Escolhe o sensor **uma vez** (o forçado em `temp_sensor` ou o melhor
+/// encontrado, ver `hyprlink_env::sensors`) e depois só relê o ficheiro; se a
+/// leitura falhar, refaz a procura.
 #[derive(Default)]
 struct CpuTemp {
     sensor: Option<PathBuf>,
+    forced: Option<PathBuf>,
     announced: bool,
 }
 
@@ -182,17 +84,18 @@ impl CpuTemp {
         if let Some(t) = self.sensor.as_deref().and_then(read_temp) {
             return Some(t);
         }
-        self.sensor = find_cpu_sensor(sys);
-        match (&self.sensor, self.announced) {
-            (Some(p), false) => {
-                eprintln!("[telemetry] temperatura da CPU: {}", p.display());
-                self.announced = true;
+        let pick = hyprlink_env::sensors::pick(sys, self.forced.as_deref());
+        self.sensor = pick.as_ref().map(|p| p.path.clone());
+        if !self.announced {
+            self.announced = true;
+            match &pick {
+                Some(p) => eprintln!(
+                    "[telemetry] temperatura da CPU: {} ({})",
+                    p.path.display(),
+                    p.why
+                ),
+                None => eprintln!("[telemetry] sem sensor de temperatura da CPU"),
             }
-            (None, false) => {
-                eprintln!("[telemetry] sem sensor de temperatura da CPU");
-                self.announced = true;
-            }
-            _ => {}
         }
         self.sensor.as_deref().and_then(read_temp)
     }
@@ -206,41 +109,6 @@ fn disk_usage(path: &Path) -> Option<(u64, u64)> {
     let free = st.f_bavail.saturating_mul(st.f_frsize);
     let total = st.f_blocks.saturating_mul(st.f_frsize);
     (total > 0).then_some((free, total))
-}
-
-/// `gpu_busy_percent` do amdgpu: um inteiro 0–100.
-fn parse_gpu_busy(raw: &str) -> Option<f32> {
-    let v: f32 = raw.trim().parse().ok()?;
-    (0.0..=100.0).contains(&v).then_some(v)
-}
-
-/// `nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits`:
-/// uma linha por GPU; vence a mais carregada. Linhas vazias ou texto de erro
-/// são ignorados; sem nenhum número → `None`.
-fn parse_nvidia_smi(out: &str) -> Option<f32> {
-    out.lines().filter_map(parse_gpu_busy).reduce(f32::max)
-}
-
-/// Carga de cada placa AMD sob `sys/class/drm/card*/device/gpu_busy_percent`.
-fn amd_gpu_busy(sys: &Path) -> Vec<f32> {
-    let Ok(rd) = std::fs::read_dir(sys.join("class/drm")) else {
-        return Vec::new();
-    };
-    rd.filter_map(|e| e.ok())
-        // `card1`, não `card1-eDP-1`.
-        .filter(|e| {
-            let n = e.file_name().to_string_lossy().into_owned();
-            n.starts_with("card") && !n.contains('-')
-        })
-        .filter_map(|e| {
-            parse_gpu_busy(&std::fs::read_to_string(e.path().join("device/gpu_busy_percent")).ok()?)
-        })
-        .collect()
-}
-
-fn nvidia_smi_exists() -> bool {
-    std::env::var_os("PATH")
-        .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join("nvidia-smi").is_file()))
 }
 
 /// Corre o `nvidia-smi` com tempo limite (bloqueante: chamar em `spawn_blocking`).
@@ -275,45 +143,45 @@ fn nvidia_smi_busy() -> Option<f32> {
     parse_nvidia_smi(&out)
 }
 
-/// Há uma GPU NVIDIA **já acordada**? Lê só `power/runtime_status` de cada
-/// função de vídeo (classe `0x03…`, fabricante `0x10de`) em
-/// `sys/bus/pci/devices` — ler esse ficheiro não acorda a placa, ao contrário
-/// do `nvidia-smi`, que a tira do repouso num portátil híbrido. Sem
-/// `runtime_status` (placa sem gestão de energia em tempo de execução, por
-/// exemplo num desktop) conta como acordada: já está sempre ligada.
-/// Sem nenhuma placa NVIDIA → `false`.
-fn nvidia_awake(sys: &Path) -> bool {
-    let Ok(rd) = std::fs::read_dir(sys.join("bus/pci/devices")) else {
-        return false;
-    };
-    rd.filter_map(|e| e.ok()).any(|e| {
-        let d = e.path();
-        let is_nvidia_video = read_trim(&d.join("vendor")).as_deref() == Some("0x10de")
-            && read_trim(&d.join("class")).is_some_and(|c| c.starts_with("0x03"));
-        is_nvidia_video
-            && read_trim(&d.join("power/runtime_status")).is_none_or(|st| st == "active")
-    })
-}
-
-/// Carga da GPU: AMD pelo sysfs a cada ciclo (barato), NVIDIA pelo
-/// `nvidia-smi` de 6 em 6 s e fora do ciclo, **só com a placa já acordada**
-/// (a menos que a config `gpu_nvidia_wake` o force). Várias GPUs → a mais
-/// carregada.
+/// Carga da GPU, segundo o `GpuPlan` (`hyprlink_env::gpu::plan`): AMD pelo
+/// sysfs a cada ciclo (barato), NVIDIA pelo `nvidia-smi` de 6 em 6 s e fora do
+/// ciclo, **só com a placa já acordada** (a menos que a config
+/// `gpu_nvidia_wake` o force), Intel pelo `intel_gpu_top` só se pedido em
+/// `gpu_source`. Várias GPUs → a mais carregada.
 struct Gpu {
-    nvidia: bool,
+    plan: hyprlink_env::gpu::GpuPlan,
     nvidia_last: Option<f32>,
     nvidia_at: Option<Instant>,
     pending: Option<tokio::task::JoinHandle<Option<f32>>>,
+    intel_last: Option<f32>,
+    intel_at: Option<Instant>,
+    pending_intel: Option<tokio::task::JoinHandle<Option<f32>>>,
     announced: bool,
 }
 
+/// Corre `intel_gpu_top -J -n 1` (bloqueante; chamar em `spawn_blocking`).
+/// Só o `i915`; nunca pede privilégios — sem permissão, dá `None`.
+fn intel_gpu_busy() -> Option<f32> {
+    let runner = hyprlink_env::RealRunner {
+        timeout: Duration::from_secs(4),
+        envs: Vec::new(),
+    };
+    let out = hyprlink_env::Runner::run(&runner, "intel_gpu_top", &["-J", "-n", "1"])?;
+    out.ok
+        .then(|| hyprlink_env::gpu::parse_intel_gpu_top(&out.stdout))
+        .flatten()
+}
+
 impl Gpu {
-    fn new() -> Self {
+    fn new(plan: hyprlink_env::gpu::GpuPlan) -> Self {
         Self {
-            nvidia: nvidia_smi_exists(),
+            plan,
             nvidia_last: None,
             nvidia_at: None,
             pending: None,
+            intel_last: None,
+            intel_at: None,
+            pending_intel: None,
             announced: false,
         }
     }
@@ -321,18 +189,16 @@ impl Gpu {
     /// `wake`: consultar o `nvidia-smi` mesmo com a placa em repouso (pode
     /// acordá-la). Por omissão `false`.
     async fn sample(&mut self, sys: &Path, wake: bool) -> Option<f32> {
-        let amd = amd_gpu_busy(sys);
         if !self.announced {
             self.announced = true;
-            let how = match (amd.is_empty(), self.nvidia) {
-                (false, true) => "amdgpu (sysfs) + nvidia-smi (só com a placa acordada)",
-                (false, false) => "amdgpu (sysfs gpu_busy_percent)",
-                (true, true) => "nvidia-smi (só com a placa acordada)",
-                (true, false) => "nenhum (sem GPU AMD/NVIDIA compatível)",
-            };
-            eprintln!("[telemetry] GPU: {how}");
+            eprintln!("[telemetry] GPU: {}", self.plan.why);
         }
-        if self.nvidia {
+        let amd = if self.plan.amd {
+            amd_gpu_busy(sys)
+        } else {
+            Vec::new()
+        };
+        if self.plan.nvidia {
             if let Some(h) = &self.pending
                 && h.is_finished()
             {
@@ -348,7 +214,23 @@ impl Gpu {
                 self.pending = Some(tokio::task::spawn_blocking(nvidia_smi_busy));
             }
         }
-        amd.into_iter().chain(self.nvidia_last).reduce(f32::max)
+        if self.plan.intel {
+            if let Some(h) = &self.pending_intel
+                && h.is_finished()
+            {
+                self.intel_last = self.pending_intel.take().unwrap().await.ok().flatten();
+            }
+            if self.pending_intel.is_none()
+                && self.intel_at.is_none_or(|t| t.elapsed() >= NVIDIA_EVERY)
+            {
+                self.intel_at = Some(Instant::now());
+                self.pending_intel = Some(tokio::task::spawn_blocking(intel_gpu_busy));
+            }
+        }
+        amd.into_iter()
+            .chain(self.nvidia_last)
+            .chain(self.intel_last)
+            .reduce(f32::max)
     }
 }
 
@@ -425,8 +307,16 @@ pub async fn poll_and_push(active: ActiveConn, _hud: Arc<Mutex<HudState>>, confi
     let mut interval = tokio::time::interval(Duration::from_secs(2));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut last_cpu: Option<(u64, u64)> = None;
-    let mut temp = CpuTemp::default();
-    let mut gpu = Gpu::new();
+    let resolved = crate::envinfo::resolved();
+    let mut temp = CpuTemp {
+        forced: resolved.temp_sensor.clone(),
+        ..CpuTemp::default()
+    };
+    let mut gpu = Gpu::new(hyprlink_env::gpu::plan(
+        sys,
+        resolved.gpu_source,
+        &hyprlink_env::env::on_path,
+    ));
     // Disco: lê de 30 em 30 s e reenvia o último valor entre leituras.
     let mut disk: Option<(u64, u64)> = None;
     let mut disk_at: Option<Instant> = None;
@@ -470,6 +360,11 @@ pub async fn poll_and_push(active: ActiveConn, _hud: Arc<Mutex<HudState>>, confi
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hyprlink_env::gpu::parse_gpu_busy;
+
+    fn find_cpu_sensor(sys: &Path) -> Option<PathBuf> {
+        hyprlink_env::sensors::find_cpu_sensor(sys).map(|s| s.path)
+    }
 
     #[test]
     fn cpu_sample_has_sane_shape() {
@@ -750,7 +645,16 @@ mod tests {
         let sys = Path::new(SYS);
         println!("sensor = {:?}", find_cpu_sensor(sys));
         println!("temp   = {:?}", CpuTemp::default().read(sys));
-        println!("gpu    = {:?}", Gpu::new().sample(sys, false).await);
+        println!(
+            "gpu    = {:?}",
+            Gpu::new(hyprlink_env::gpu::plan(
+                sys,
+                hyprlink_env::overrides::GpuChoice::Auto,
+                &hyprlink_env::env::on_path
+            ))
+            .sample(sys, false)
+            .await
+        );
         println!("nvidia acordada = {}", nvidia_awake(sys));
         println!(
             "disco  = {:?}",
@@ -826,13 +730,12 @@ mod tests {
         let d = sys.join("class/drm/card1/device");
         std::fs::create_dir_all(&d).unwrap();
         std::fs::write(d.join("gpu_busy_percent"), "42\n").unwrap();
-        let mut g = Gpu {
-            nvidia: false,
-            nvidia_last: None,
-            nvidia_at: None,
-            pending: None,
-            announced: true,
-        };
+        let mut g = Gpu::new(hyprlink_env::gpu::plan(
+            &sys,
+            hyprlink_env::overrides::GpuChoice::Auto,
+            &|_| false, // sem nvidia-smi
+        ));
+        g.announced = true;
         for wake in [false, true] {
             assert_eq!(g.sample(&sys, wake).await, Some(42.0));
             assert!(g.pending.is_none());

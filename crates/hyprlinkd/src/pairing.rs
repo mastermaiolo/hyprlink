@@ -52,7 +52,12 @@ fn is_generic_name(n: &str) -> bool {
 impl DeviceMeta {
     /// O que se mostra: alias do PC > nome do telemóvel > «fabricante modelo».
     pub fn display_name(&self) -> String {
-        if let Some(a) = self.alias.as_deref().map(str::trim).filter(|a| !a.is_empty()) {
+        if let Some(a) = self
+            .alias
+            .as_deref()
+            .map(str::trim)
+            .filter(|a| !a.is_empty())
+        {
             return a.to_string();
         }
         if is_generic_name(&self.name) {

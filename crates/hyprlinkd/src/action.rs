@@ -11,6 +11,10 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use hyprlink_env::overrides::Resolved;
+use hyprlink_env::plan::{ShotTool, audio_backend, lock_candidates, screenshot_tool, volume_argv};
+use hyprlink_env::shell::Shell;
+
 /// Nomes suportados, pela ordem em que a app os deve mostrar.
 #[cfg_attr(not(test), allow(dead_code))]
 pub const NAMES: &[&str] = &[
@@ -43,27 +47,32 @@ fn argv(parts: &[&str]) -> Vec<String> {
 /// Mapeia `name` para um plano, dados os executáveis disponíveis (`have`), a
 /// pasta das capturas e um carimbo de data para o nome do ficheiro.
 /// Erro = texto curto em inglês para a app.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn plan(
     name: &str,
     have: &dyn Fn(&str) -> bool,
     shots: &Path,
     stamp: &str,
 ) -> Result<Plan, String> {
+    plan_with(name, have, shots, stamp, Shell::None, &Resolved::default())
+}
+
+/// Como `plan`, com a shell detetada e as opções do `config.json` (o que o
+/// daemon usa de verdade; o `hyprlinkctl doctor` mostra o mesmo).
+pub fn plan_with(
+    name: &str,
+    have: &dyn Fn(&str) -> bool,
+    shots: &Path,
+    stamp: &str,
+    shell: Shell,
+    opts: &Resolved,
+) -> Result<Plan, String> {
     let file = shots.join(format!("Screenshot_{stamp}.png"));
     let file = file.to_string_lossy().into_owned();
     let none = |what: &str| Err(format!("no {what} tool found"));
     match name {
         "lock" => {
-            let mut c = Vec::new();
-            if have("noctalia") {
-                c.push(argv(&["noctalia", "msg", "session", "lock"]));
-            }
-            if have("hyprlock") {
-                c.push(argv(&["hyprlock"]));
-            }
-            if have("loginctl") {
-                c.push(argv(&["loginctl", "lock-session"]));
-            }
+            let c = lock_candidates(shell, have, opts.lock_command.as_deref());
             if c.is_empty() {
                 none("lock")
             } else {
@@ -85,14 +94,15 @@ pub fn plan(
             }
         }
         "screenshot" => {
-            if have("grimblast") {
+            let tool = screenshot_tool(opts.screenshot_tool, have);
+            if tool == Some(ShotTool::Grimblast) {
                 Ok(Plan::Exec(vec![argv(&[
                     "grimblast",
                     "copysave",
                     "screen",
                     &file,
                 ])]))
-            } else if have("grim") {
+            } else if tool == Some(ShotTool::Grim) {
                 let copy = if have("wl-copy") {
                     "&& wl-copy < \"$1\""
                 } else {
@@ -110,14 +120,15 @@ pub fn plan(
             }
         }
         "screenshot_area" => {
-            if have("grimblast") {
+            let tool = screenshot_tool(opts.screenshot_tool, have);
+            if tool == Some(ShotTool::Grimblast) {
                 Ok(Plan::Exec(vec![argv(&[
                     "grimblast",
                     "copysave",
                     "area",
                     &file,
                 ])]))
-            } else if have("grim") && have("slurp") {
+            } else if tool == Some(ShotTool::Grim) && have("slurp") {
                 let copy = if have("wl-copy") {
                     "&& wl-copy < \"$1\""
                 } else {
@@ -135,22 +146,17 @@ pub fn plan(
             }
         }
         "volume_up" | "volume_down" | "volume_mute" => {
-            if !have("wpctl") {
+            let Some(backend) = audio_backend(opts.audio_backend, have) else {
                 return none("volume");
-            }
-            let a = match name {
-                "volume_up" => argv(&[
-                    "wpctl",
-                    "set-volume",
-                    "-l",
-                    "1",
-                    "@DEFAULT_AUDIO_SINK@",
-                    "5%+",
-                ]),
-                "volume_down" => argv(&["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%-"]),
-                _ => argv(&["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]),
             };
-            Ok(Plan::Exec(vec![a]))
+            let what = match name {
+                "volume_up" => "up",
+                "volume_down" => "down",
+                _ => "mute",
+            };
+            Ok(Plan::Exec(vec![
+                volume_argv(backend, what).expect("up/down/mute existem"),
+            ]))
         }
         "media_play_pause" => Ok(Plan::Media("play_pause")),
         "media_next" => Ok(Plan::Media("next")),
@@ -283,7 +289,14 @@ fn run_candidates(cands: &[Vec<String>], wait: Duration, area: bool) -> Result<(
 pub async fn run(name: &str) -> Result<(), String> {
     let stamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
     let dir = shots_dir();
-    let plan = plan(name, &on_path, &dir, &stamp)?;
+    let plan = plan_with(
+        name,
+        &on_path,
+        &dir,
+        &stamp,
+        crate::envinfo::shell(),
+        &crate::envinfo::resolved(),
+    )?;
     match plan {
         Plan::Media(cmd) => {
             crate::media::handle_command(cmd).await;
@@ -510,5 +523,102 @@ mod tests {
         }
         println!("lock plan: {:?}", plan("lock", &on_path, &dir, "x"));
         println!("env: {:?}", real_session_env());
+    }
+}
+
+#[cfg(test)]
+mod env_tests {
+    use super::*;
+    use hyprlink_env::overrides::{AudioChoice, ScreenshotChoice};
+
+    fn has(set: &'static [&'static str]) -> impl Fn(&str) -> bool {
+        move |t| set.contains(&t)
+    }
+
+    fn exec(r: Result<Plan, String>) -> Vec<String> {
+        match r.unwrap() {
+            Plan::Exec(c) => c.iter().map(|a| a.join(" ")).collect(),
+            Plan::Media(_) => panic!("era Exec"),
+        }
+    }
+
+    fn go(
+        name: &str,
+        tools: &'static [&'static str],
+        shell: Shell,
+        o: &Resolved,
+    ) -> Result<Plan, String> {
+        plan_with(name, &has(tools), Path::new("/shots"), "T", shell, o)
+    }
+
+    #[test]
+    fn bloqueio_pela_shell_vem_antes_do_hyprlock() {
+        let t = &["noctalia", "hyprlock", "loginctl", "ryoku-shell"];
+        let o = Resolved::default();
+        assert_eq!(exec(go("lock", t, Shell::Ryoku, &o))[0], "ryoku-shell lock");
+        assert_eq!(
+            exec(go("lock", t, Shell::NoctaliaV5, &o))[0],
+            "noctalia msg session lock"
+        );
+        assert_eq!(
+            exec(go("lock", t, Shell::Caelestia, &o))[0],
+            "loginctl lock-session"
+        );
+        assert_eq!(exec(go("lock", t, Shell::NoctaliaV4, &o))[0], "hyprlock");
+    }
+
+    #[test]
+    fn bloqueio_forcado_pela_opcao() {
+        let o = Resolved {
+            lock_command: Some(vec!["meu-lock".into(), "--agora".into()]),
+            ..Resolved::default()
+        };
+        assert_eq!(
+            exec(go("lock", &["hyprlock"], Shell::None, &o)),
+            vec!["meu-lock --agora"]
+        );
+    }
+
+    #[test]
+    fn captura_forcada_e_em_falta_nao_cai_noutra() {
+        let t = &["grimblast", "grim", "slurp", "wl-copy"];
+        let grim = Resolved {
+            screenshot_tool: ScreenshotChoice::Grim,
+            ..Resolved::default()
+        };
+        assert!(exec(go("screenshot", t, Shell::None, &grim))[0].starts_with("sh -c grim"));
+        let blast = Resolved {
+            screenshot_tool: ScreenshotChoice::Grimblast,
+            ..Resolved::default()
+        };
+        assert!(go("screenshot", &["grim"], Shell::None, &blast).is_err());
+        assert!(
+            go(
+                "screenshot_area",
+                &["grim"],
+                Shell::None,
+                &Resolved::default()
+            )
+            .is_err(),
+            "sem slurp"
+        );
+    }
+
+    #[test]
+    fn volume_cai_no_pactl_sem_wpctl() {
+        let o = Resolved::default();
+        let up = exec(go("volume_up", &["pactl"], Shell::None, &o));
+        assert_eq!(up, vec!["pactl set-sink-volume @DEFAULT_SINK@ +5%"]);
+        let mute = exec(go("volume_mute", &["pactl"], Shell::None, &o));
+        assert_eq!(mute, vec!["pactl set-sink-mute @DEFAULT_SINK@ toggle"]);
+        assert!(go("volume_down", &[], Shell::None, &o).is_err());
+        let forced = Resolved {
+            audio_backend: AudioChoice::Pactl,
+            ..Resolved::default()
+        };
+        assert!(
+            exec(go("volume_down", &["wpctl", "pactl"], Shell::None, &forced))[0]
+                .starts_with("pactl")
+        );
     }
 }

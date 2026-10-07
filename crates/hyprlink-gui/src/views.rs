@@ -8,8 +8,8 @@ use crate::theme::{self, *};
 use crate::ui::*;
 use hyprlink_gui::fmt;
 use hyprlink_gui::i18n::t;
-use hyprlink_gui::tr;
 use hyprlink_gui::link::packets;
+use hyprlink_gui::tr;
 
 use chrono::{Datelike, Local};
 use iced::widget::text::{LineHeight, Wrapping};
@@ -107,7 +107,9 @@ pub fn spark<'a>(data: Vec<f32>, c: Color, min: f32, max: f32, h: f32) -> El<'a>
 
 pub fn cover(app: &App) -> El<'_> {
     let dev = app.primary();
-    let name = dev.map(fmt::name).unwrap_or_else(|| t("SEM LIGAÇÃO").into());
+    let name = dev
+        .map(fmt::name)
+        .unwrap_or_else(|| t("SEM LIGAÇÃO").into());
 
     let top = column![
         row![
@@ -197,21 +199,18 @@ pub fn cover(app: &App) -> El<'_> {
         kicker(t("NESTA EDIÇÃO")),
         gap(space::S),
         rule_c(PAPER, 1.0),
-        toc_entry(
-            Section::Dispositivos,
-            {
-                let linked = app
-                    .devices
-                    .iter()
-                    .filter(|d| d.state == LinkState::Linked)
-                    .count();
-                if app.devices.len() == 1 {
-                    tr!("{} aparelho, {} ligado", app.devices.len(), linked)
-                } else {
-                    tr!("{} aparelhos, {} ligado", app.devices.len(), linked)
-                }
+        toc_entry(Section::Dispositivos, {
+            let linked = app
+                .devices
+                .iter()
+                .filter(|d| d.state == LinkState::Linked)
+                .count();
+            if app.devices.len() == 1 {
+                tr!("{} aparelho, {} ligado", app.devices.len(), linked)
+            } else {
+                tr!("{} aparelhos, {} ligado", app.devices.len(), linked)
             }
-        ),
+        }),
         toc_entry(
             Section::Notificacoes,
             match app.notifs.first() {
@@ -384,7 +383,11 @@ pub fn cover(app: &App) -> El<'_> {
         Some(np) => column![
             kicker(tr!(
                 "{} NO TELEMÓVEL · {}",
-                if np.playing { t("A TOCAR") } else { t("EM PAUSA") },
+                if np.playing {
+                    t("A TOCAR")
+                } else {
+                    t("EM PAUSA")
+                },
                 np.app.clone().unwrap_or_default().to_uppercase()
             )),
             gap(space::S),
@@ -453,11 +456,7 @@ pub fn cover(app: &App) -> El<'_> {
                 .size(14)
                 .color(PAPER),
             fill_x(),
-            kicker(tr!(
-                "{} · LINUX {}",
-                h.compositor.to_uppercase(),
-                h.kernel
-            )),
+            kicker(tr!("{} · LINUX {}", h.compositor.to_uppercase(), h.kernel)),
         ]
         .align_y(Alignment::Center),
         gap(space::S),
@@ -540,17 +539,19 @@ pub fn cover(app: &App) -> El<'_> {
                 } else {
                     theme::primary
                 },
-                Some(if app.mirror_on {
-                    Message::MirrorStop
+                if app.mirror_on {
+                    Some(Message::MirrorStop)
                 } else {
-                    Message::MirrorStart
-                })
+                    (!crate::app::MIRROR_SOON).then_some(Message::MirrorStart)
+                }
             )
             .width(Length::Fill),
         ]
         .spacing(space::S),
         gap(space::XL),
-        deck_s(t("“Cada pacote é uma stream: um frame, um propósito, e fecha-se.”")),
+        deck_s(t(
+            "“Cada pacote é uma stream: um frame, um propósito, e fecha-se.”"
+        )),
         gap(space::S),
         kicker(t("— NOTAS DE ARQUITETURA, HYPRLINK")),
     ]
@@ -785,7 +786,11 @@ pub fn devices(app: &App) -> El<'_> {
             format!(
                 "{} {}.",
                 number_word(n),
-                if n == 1 { t("APARELHO") } else { t("APARELHOS") }
+                if n == 1 {
+                    t("APARELHO")
+                } else {
+                    t("APARELHOS")
+                }
             ),
             t("Cada um com o seu certificado. Nenhum sem a tua autorização."),
         ),
@@ -944,7 +949,11 @@ fn device_detail<'a>(app: &'a App, d: &'a Device) -> El<'a> {
         caps.wrap().vertical_spacing(space::S),
         gap(space::XXL),
         row![
-            btn(t("PING"), theme::ghost, online.then_some(Message::Ping(d.id))),
+            btn(
+                t("PING"),
+                theme::ghost,
+                online.then_some(Message::Ping(d.id))
+            ),
             hgap(space::S),
             btn(
                 t("ENVIAR CLIPBOARD"),
@@ -978,7 +987,9 @@ pub fn pairing<'a>(app: &'a App, ticket: &'a PairingTicket) -> El<'a> {
         gap(space::M),
         headline(t("APONTA O TELEMÓVEL."), size::D3),
         gap(space::M),
-        deck_s(t("Abre a HyprLink no Android e lê o código. Ou escreve-o à mão.")),
+        deck_s(t(
+            "Abre a HyprLink no Android e lê o código. Ou escreve-o à mão."
+        )),
         gap(space::XL),
         if ticket.code.is_some() {
             column![
@@ -1190,9 +1201,9 @@ pub fn desk(app: &App) -> El<'_> {
         kv_text("IPC", ".socket2.sock"),
         kv_text(t("EVENTOS"), "workspace>> activewindow>>"),
         gap(space::XL),
-        deck_s(
-            t("O telemóvel não controla o Hyprland: pede. O daemon decide, e o compositor obedece.")
-        ),
+        deck_s(t(
+            "O telemóvel não controla o Hyprland: pede. O daemon decide, e o compositor obedece."
+        )),
     ];
 
     column![
@@ -1387,8 +1398,13 @@ pub fn mirror_body(app: &App) -> El<'_> {
             btn(
                 t("▶  INICIAR ESPELHO"),
                 theme::primary,
-                Some(Message::MirrorStart),
+                (!crate::app::MIRROR_SOON).then_some(Message::MirrorStart),
             )
+        },
+        if crate::app::MIRROR_SOON {
+            soon_note()
+        } else {
+            gap(0.0)
         },
     ]
     .width(Length::Fill);
@@ -1618,6 +1634,12 @@ pub fn audio(app: &App) -> El<'_> {
         ),
         crate::pages::phone_audio(app),
         gap(space::XXL),
+        setting(
+            t("Modo auricular"),
+            t("o telemóvel é o headset do PC: coluna e microfone num só interruptor"),
+            switch(app.speaker && app.mic_on, Message::Headset),
+        ),
+        gap(space::XXL),
         row![mic, hgap(space::XL), tap],
         gap(space::GUTTER),
         crate::pages::mixer(app),
@@ -1713,7 +1735,13 @@ pub fn sensors_grid(app: &App) -> El<'_> {
             row![
                 kicker(name),
                 fill_x(),
-                switch(on, move |b| Message::Bridge(k, b))
+                if crate::app::SENSORS_SOON {
+                    row![soon_note(), hgap(space::S), switch_off(on)]
+                        .align_y(Alignment::Center)
+                        .into()
+                } else {
+                    switch(on, move |b| Message::Bridge(k, b))
+                }
             ]
             .align_y(Alignment::Center),
             gap(space::L),
@@ -1792,10 +1820,10 @@ pub fn presence_body(app: &App) -> El<'_> {
             } else {
                 "—".to_string()
             })
-                .font(DISPLAY)
-                .size(size::D1)
-                .color(zc)
-                .line_height(LineHeight::Relative(1.0)),
+            .font(DISPLAY)
+            .size(size::D1)
+            .color(zc)
+            .line_height(LineHeight::Relative(1.0)),
             hgap(space::S),
             mono("dBm", MUTED),
         ]
@@ -1854,10 +1882,11 @@ pub fn presence_body(app: &App) -> El<'_> {
                     .color(if r.on { ACID } else { FAINT })
                     .width(56),
                 column![
-                    text(t(r.trigger))
-                        .font(SANS_SEMI)
-                        .size(15)
-                        .color(if r.on { PAPER } else { SUB }),
+                    text(t(r.trigger)).font(SANS_SEMI).size(15).color(if r.on {
+                        PAPER
+                    } else {
+                        SUB
+                    }),
                     gap(2.0),
                     mono(t(r.detail), MUTED).size(11.5)
                 ]
@@ -1869,7 +1898,13 @@ pub fn presence_body(app: &App) -> El<'_> {
                 ]
                 .width(fill_portion(3))
                 .align_y(Alignment::Center),
-                switch(r.on, move |b| Message::Rule(i, b)),
+                if crate::app::PRESENCE_SOON {
+                    row![soon_note(), hgap(space::S), switch_off(r.on)]
+                        .align_y(Alignment::Center)
+                        .into()
+                } else {
+                    switch(r.on, move |b| Message::Rule(i, b))
+                },
             ]
             .align_y(Alignment::Center)
             .padding(Padding::from([14, 0])),
@@ -1997,9 +2032,9 @@ pub fn journal(app: &App) -> El<'_> {
     let mut list = column![];
     if visible.is_empty() {
         list = list.push(
-            container(deck_s(
-                t("Nada a mostrar. O fio está calado — ou o filtro é demasiado exigente."),
-            ))
+            container(deck_s(t(
+                "Nada a mostrar. O fio está calado — ou o filtro é demasiado exigente.",
+            )))
             .padding(Padding::from([space::XL, 0.0])),
         );
     }
@@ -2022,7 +2057,6 @@ pub fn journal(app: &App) -> El<'_> {
     ]
     .into()
 }
-
 
 /// Campo «NOME»: o nome que o PC mostra para este telemóvel (vazio = o do telemóvel).
 fn rename_row<'a>(app: &'a App, d: &'a Device) -> El<'a> {

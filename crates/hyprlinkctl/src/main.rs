@@ -9,6 +9,7 @@
 //!   hyprlinkctl mirror start|stop|toggle
 //!   hyprlinkctl ws <N>
 //!   hyprlinkctl open                           open (or focus) the GUI
+//!   hyprlinkctl doctor [--json] [--report [f]] relatório de compatibilidade (só lê)
 //!
 //! Two halves, one binary:
 //! - **text** (no `--json`): the original `ok …` / `erro: …` protocol over
@@ -22,11 +23,12 @@
 //! simulation, so a Noctalia panel behaves exactly as it will against the
 //! real `hyprlinkd`. Swapping in the real socket changes only `Backend`.
 
+mod doctor;
 mod legacy;
 
 use hyprlink_proto::fmt;
-use hyprlink_proto::i18n::{self, Lang};
 use hyprlink_proto::host::Probe;
+use hyprlink_proto::i18n::{self, Lang};
 #[cfg(feature = "mock")]
 use hyprlink_proto::link::mock::Simulator;
 use hyprlink_proto::link::{Codec, Command, MirrorConfig, Transport};
@@ -304,6 +306,9 @@ fn main() -> ExitCode {
         }
     }
     let json = args.iter().any(|a| a == "--json");
+    if args.first().map(String::as_str) == Some("doctor") {
+        return doctor::run(&args);
+    }
     let first = args
         .iter()
         .find(|a| !a.starts_with("--"))
@@ -474,6 +479,9 @@ mod lang_tests {
         let (rest, l) = take_lang(v(&["status"]));
         assert_eq!(rest, v(&["status"]));
         assert_eq!(l, Ok(None));
-        assert_eq!(take_lang(v(&["--lang", "klingon"])).1, Err("klingon".into()));
+        assert_eq!(
+            take_lang(v(&["--lang", "klingon"])).1,
+            Err("klingon".into())
+        );
     }
 }

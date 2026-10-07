@@ -1,0 +1,190 @@
+[
+ {
+  "id": 65,
+  "type": "PipeWire:Interface:Node",
+  "info": {
+   "state": "idle",
+   "props": {
+    "node.name": "alsa_output.pci-0000_03_00.6.analog-stereo",
+    "media.class": "Audio/Sink",
+    "priority.session": 1009
+   }
+  }
+ },
+ {
+  "id": 66,
+  "type": "PipeWire:Interface:Node",
+  "info": {
+   "state": "idle",
+   "props": {
+    "node.name": "alsa_input.pci-0000_03_00.6.analog-stereo",
+    "media.class": "Audio/Source",
+    "priority.session": 2009
+   }
+  }
+ },
+ {
+  "id": 80,
+  "type": "PipeWire:Interface:Node",
+  "info": {
+   "state": "running",
+   "props": {
+    "node.name": "hyprlink-speaker",
+    "media.class": "Audio/Sink",
+    "priority.session": 1000
+   }
+  }
+ },
+ {
+  "id": 128,
+  "type": "PipeWire:Interface:Node",
+  "info": {
+   "state": "running",
+   "props": {
+    "node.name": "player",
+    "media.class": "Stream/Output/Audio",
+    "application.name": "player",
+    "media.role": "Music"
+   }
+  }
+ },
+ {
+  "id": 89,
+  "type": "PipeWire:Interface:Node",
+  "info": {
+   "state": "running",
+   "props": {
+    "node.name": "easyeffects_sink",
+    "media.class": "Audio/Sink",
+    "priority.session": 0,
+    "node.group": "ee_sink_group",
+    "node.link-group": "ee_sink_group",
+    "node.virtual": true
+   }
+  }
+ },
+ {
+  "id": 90,
+  "type": "PipeWire:Interface:Node",
+  "info": {
+   "state": "suspended",
+   "props": {
+    "node.name": "easyeffects_source",
+    "media.class": "Audio/Source/Virtual",
+    "priority.session": 0,
+    "node.group": "ee_source_group",
+    "node.link-group": "ee_source_group",
+    "node.virtual": true
+   }
+  }
+ },
+ {
+  "id": 99,
+  "type": "PipeWire:Interface:Node",
+  "info": {
+   "state": "idle",
+   "props": {
+    "node.name": "ee_sie_output_level",
+    "node.group": "ee_source_group",
+    "node.link-group": "ee_source_group"
+   }
+  }
+ },
+ {
+  "id": 104,
+  "type": "PipeWire:Interface:Node",
+  "info": {
+   "state": "idle",
+   "props": {
+    "node.name": "ee_sie_spectrum",
+    "node.group": "ee_source_group",
+    "node.link-group": "ee_source_group"
+   }
+  }
+ },
+ {
+  "id": 115,
+  "type": "PipeWire:Interface:Node",
+  "info": {
+   "state": "running",
+   "props": {
+    "node.name": "ee_soe_output_level",
+    "node.group": "ee_sink_group",
+    "node.link-group": "ee_sink_group"
+   }
+  }
+ },
+ {
+  "id": 120,
+  "type": "PipeWire:Interface:Node",
+  "info": {
+   "state": "running",
+   "props": {
+    "node.name": "ee_soe_spectrum",
+    "node.group": "ee_sink_group",
+    "node.link-group": "ee_sink_group"
+   }
+  }
+ },
+ {
+  "id": 1,
+  "type": "PipeWire:Interface:Link",
+  "info": {
+   "output-node-id": 128,
+   "input-node-id": 89,
+   "state": "active"
+  }
+ },
+ {
+  "id": 2,
+  "type": "PipeWire:Interface:Link",
+  "info": {
+   "output-node-id": 89,
+   "input-node-id": 120,
+   "state": "active"
+  }
+ },
+ {
+  "id": 3,
+  "type": "PipeWire:Interface:Link",
+  "info": {
+   "output-node-id": 120,
+   "input-node-id": 115,
+   "state": "active"
+  }
+ },
+ {
+  "id": 4,
+  "type": "PipeWire:Interface:Link",
+  "info": {
+   "output-node-id": 115,
+   "input-node-id": 80,
+   "state": "active"
+  }
+ },
+ {
+  "id": 40,
+  "type": "PipeWire:Interface:Metadata",
+  "props": {
+   "metadata.name": "default"
+  },
+  "metadata": [
+   {
+    "subject": 0,
+    "key": "default.audio.sink",
+    "type": "Spa:String:JSON",
+    "value": {
+     "name": "hyprlink-speaker"
+    }
+   },
+   {
+    "subject": 0,
+    "key": "default.audio.source",
+    "type": "Spa:String:JSON",
+    "value": {
+     "name": "alsa_input.pci-0000_03_00.6.analog-stereo"
+    }
+   }
+  ]
+ }
+]

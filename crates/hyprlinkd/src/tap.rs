@@ -113,6 +113,42 @@ fn resolve_target(
     Ok(name)
 }
 
+/// Quem é o dono do alvo do tap nesta altura.
+struct Resolved {
+    sink: String,
+    why: String,
+}
+
+/// O alvo do tap no modo normal (não coluna): resolve `tap_source` com o grafo
+/// do PipeWire e o estado do EasyEffects (`hyprlink_env::pipewire`). Sem
+/// `pw-dump`, volta à saída predefinida (`wpctl`/`pactl`), como antes.
+/// Bloqueante: chamar em `spawn_blocking`.
+fn resolve_normal() -> Result<Resolved, String> {
+    let choice = crate::envinfo::resolved().tap_source;
+    match crate::envinfo::pw_snapshot() {
+        Some((_, ee)) => hyprlink_env::pipewire::resolve_tap(choice, &ee).map(|t| Resolved {
+            sink: t.sink,
+            why: t.why,
+        }),
+        None => resolve_target(None, resolve_default_sink).map(|sink| Resolved {
+            sink,
+            why: "sem pw-dump: a saída predefinida".into(),
+        }),
+    }
+}
+
+/// O vigia: `Some(mensagem)` se o alvo resolvido agora difere do que se
+/// captura (ou deixou de se poder resolver). Uma resolução falhada passageira
+/// (`pw-dump` ocupado) não derruba o pipeline: só conta um alvo **diferente**.
+fn watch_change(current: &str, now: Result<Resolved, String>) -> Option<String> {
+    match now {
+        Ok(r) if r.sink != current => {
+            Some(format!("o alvo mudou ({current} → {}: {})", r.sink, r.why))
+        }
+        _ => None,
+    }
+}
+
 /// Uma linha de diagnóstico do ambiente de áudio — as falhas de ambiente
 /// (sem pipewire-pulse, sem gst-plugin-pipewire) deixam de ser silêncio.
 fn env_line() -> String {
@@ -234,6 +270,10 @@ pub async fn start(
         return;
     }
 
+    if let Err(e) = crate::envinfo::pipewire_required("o retorno de áudio") {
+        push_log(&hud, format!("[!] {e}"));
+        return;
+    }
     push_log(&hud, format!("[i] {}", env_line()));
 
     let Some(max_dgram) = connection.max_datagram_size() else {
@@ -333,9 +373,16 @@ async fn run_once(
 ) -> TapEnd {
     // Montar o pipeline só falha por ambiente (elemento em falta) — não
     // passa com o tempo, por isso é fatal e não entra no backoff.
-    let target = match tokio::task::spawn_blocking({
+    let resolved = match tokio::task::spawn_blocking({
         let sink = sink.map(str::to_string);
-        move || resolve_target(sink.as_deref(), resolve_default_sink)
+        move || match sink {
+            // Modo coluna: o sink virtual, por nome.
+            Some(s) => resolve_target(Some(&s), || None).map(|sink| Resolved {
+                sink,
+                why: "modo coluna: o sink virtual".into(),
+            }),
+            None => resolve_normal(),
+        }
     })
     .await
     {
@@ -343,7 +390,14 @@ async fn run_once(
         Ok(Err(e)) => return TapEnd::Fatal(e),
         Err(_) => return TapEnd::Fatal("a resolução da saída padrão falhou".into()),
     };
-    push_log(hud, format!("[i] audio tap: a capturar {target}"));
+    let target = resolved.sink.clone();
+    push_log(
+        hud,
+        format!(
+            "[i] audio tap: a capturar o monitor de {target} — {}",
+            resolved.why
+        ),
+    );
     let pipeline = match gst::parse::launch(&pipeline_str(&target)) {
         Ok(el) => match el.downcast::<gst::Pipeline>() {
             Ok(p) => p,
@@ -397,18 +451,13 @@ async fn run_once(
                         return;
                     }
                 }
-                match resolve_default_sink() {
-                    Some(now) if now != target_w => {
-                        push_log(
-                            &hud_w,
-                            format!(
-                                "[i] audio tap: saída padrão mudou ({target_w} → {now}), a religar"
-                            ),
-                        );
-                        let _ = pipeline_w.set_state(gst::State::Null);
-                        return;
-                    }
-                    _ => {}
+                // Reavalia o alvo inteiro (saída predefinida, destino do
+                // EasyEffects e bypass): a predefinida pode não mudar e o som
+                // mudar de sítio, ou o easyeffects_sink desaparecer.
+                if let Some(msg) = watch_change(&target_w, resolve_normal()) {
+                    push_log(&hud_w, format!("[i] audio tap: {msg}, a religar"));
+                    let _ = pipeline_w.set_state(gst::State::Null);
+                    return;
                 }
             }
         });
@@ -458,12 +507,15 @@ async fn run_once(
     // pull_sample() bloqueia — roda numa thread própria. `send_datagram` do
     // quinn é síncrono (só enfileira), então a thread de captura manda direto.
     let hud_thread = hud.clone();
+    let target_t = target.clone();
     let handle_thread = handle.clone();
     let pipeline_thread = pipeline.clone();
     let connection = connection.clone();
     let (tx, rx) = std::sync::mpsc::channel::<TapEnd>();
     std::thread::spawn(move || {
         let mut seq: u16 = 0;
+        let mut silent_since: Option<std::time::Instant> = None;
+        let mut silence_warned = false;
         let mut total: u64 = 0;
         let mut last_logged: u64 = 0;
         let fim = 'capture: loop {
@@ -476,7 +528,25 @@ async fn run_once(
                         continue;
                     };
                     let data = map.as_slice();
-                    push_audio_vu(&hud_thread, peak_percent(data));
+                    let peak = peak_percent(data);
+                    push_audio_vu(&hud_thread, peak);
+                    // Silêncio >10 s com streams a tocar noutro sítio: o monitor
+                    // escolhido não é o que toca (avisa uma vez por silêncio).
+                    if peak > 0 {
+                        silent_since = None;
+                        silence_warned = false;
+                    } else {
+                        let since = *silent_since.get_or_insert_with(std::time::Instant::now);
+                        if !silence_warned && since.elapsed() >= std::time::Duration::from_secs(10)
+                        {
+                            silence_warned = true;
+                            if let Some(w) = crate::envinfo::pw_snapshot().and_then(|(g, _)| {
+                                hyprlink_env::pipewire::silence_warning(&g, &target_t, 10)
+                            }) {
+                                push_log(&hud_thread, format!("[!] audio tap: {w}"));
+                            }
+                        }
+                    }
 
                     for chunk in data.chunks(chunk_size) {
                         let mut datagram = Vec::with_capacity(2 + chunk.len());
@@ -693,5 +763,21 @@ mod tests {
         }
 
         pipeline.set_state(gst::State::Null).ok();
+    }
+
+    fn r(sink: &str) -> Result<Resolved, String> {
+        Ok(Resolved {
+            sink: sink.into(),
+            why: "porque sim".into(),
+        })
+    }
+
+    #[test]
+    fn vigia_so_reage_a_um_alvo_diferente() {
+        assert_eq!(watch_change("a", r("a")), None);
+        let m = watch_change("easyeffects_sink", r("alsa_x")).unwrap();
+        assert!(m.contains("easyeffects_sink") && m.contains("alsa_x") && m.contains("porque sim"));
+        // Falha passageira ao resolver: não derruba o pipeline.
+        assert_eq!(watch_change("a", Err("pw-dump ocupado".into())), None);
     }
 }

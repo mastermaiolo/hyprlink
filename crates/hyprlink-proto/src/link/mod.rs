@@ -233,6 +233,8 @@ pub enum Op {
     Media,
     Dispatch,
     PhoneAudio,
+    /// Abrir um URL ou uma app no telemóvel.
+    Phone,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -423,8 +425,46 @@ pub struct GestureLast {
 }
 
 /// A user-defined `hyprctl dispatch`, also offered on the phone.
+/// Só `http://` e `https://`, com anfitrião, sem espaços nem controlos e até
+/// 2048 caracteres — o que a GUI deixa mandar para o telemóvel.
+pub fn http_url_ok(url: &str) -> bool {
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"));
+    url.chars().count() <= 2048
+        && !url.chars().any(|c| c.is_whitespace() || c.is_control())
+        && rest.is_some_and(|r| !r.is_empty() && !r.starts_with('/'))
+}
+
+/// Nome de package Android: segmentos `[A-Za-z][A-Za-z0-9_]*` separados por
+/// pontos, pelo menos dois (ex.: `com.whatsapp`).
+pub fn package_ok(package: &str) -> bool {
+    let mut segments = 0;
+    for seg in package.split('.') {
+        let mut chars = seg.chars();
+        if !chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+            || !chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            return false;
+        }
+        segments += 1;
+    }
+    segments >= 2 && package.len() <= 255
+}
+
+/// Limites de um atalho (nome visível e comando do `hyprctl dispatch`); a GUI
+/// avisa antes e o daemon recusa o que passar.
+pub const SHORTCUT_NAME_MAX: usize = 40;
+pub const SHORTCUT_COMMAND_MAX: usize = 200;
+pub const SHORTCUTS_MAX: usize = 32;
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Shortcut {
+    /// Identificação estável (gerada pelo daemon ao criar o atalho). Vazia =
+    /// atalho novo: o daemon atribui-lhe uma. É o que o telemóvel usa para o
+    /// executar (nunca o comando).
+    #[serde(default)]
+    pub id: String,
     pub label: String,
     pub dispatch: String,
 }
@@ -466,6 +506,31 @@ pub struct WebcamConfig {
     pub codec: CamCodec,
 }
 
+/// Lente da câmara do telemóvel, como a app a reporta em `webcam.state`.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CamLens {
+    Back,
+    Front,
+    Other,
+}
+
+/// Formato **efetivo** da câmara (`webcam.state`, telemóvel → PC): o que a
+/// câmara/encoder entregam de facto, que pode diferir do pedido.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+pub struct WebcamFormat {
+    pub width: u32,
+    pub height: u32,
+    pub fps: u32,
+    pub codec: CamCodec,
+    #[serde(default)]
+    pub lens: Option<CamLens>,
+    #[serde(default)]
+    pub rotation: u16,
+    #[serde(default)]
+    pub mirror: bool,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
 pub struct WebcamStats {
     pub mbps: f32,
@@ -476,6 +541,10 @@ pub struct WebcamStats {
     /// chegou o primeiro byte, ou daemon antigo.
     #[serde(default)]
     pub codec: Option<CamCodec>,
+    /// Formato efetivo comunicado pelo telemóvel (`webcam.state`). `None` =
+    /// telemóvel antigo (sem o pacote): a GUI cai para o pedido.
+    #[serde(default)]
+    pub format: Option<WebcamFormat>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
@@ -555,6 +624,17 @@ pub struct PhoneNotification {
     pub text: Option<String>,
     /// Unix seconds.
     pub at: u64,
+    /// Ações do botão da notificação (`notification.post.actions`).
+    #[serde(default)]
+    pub actions: Vec<NotifAction>,
+}
+
+/// Ação de uma notificação do telemóvel; `is_reply` = pede texto.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct NotifAction {
+    pub idx: u32,
+    pub label: String,
+    pub is_reply: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -626,6 +706,17 @@ pub struct Settings {
     /// `0` = unknown (an older daemon).
     #[serde(default)]
     pub started_unix: u64,
+    /// Valores do ambiente em uso no daemon (opções de correção do
+    /// `config.json` e o que se detetou); só para mostrar.
+    #[serde(default)]
+    pub env: Vec<EnvValue>,
+}
+
+/// Uma linha «chave → valor em uso» das Definições.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct EnvValue {
+    pub key: String,
+    pub value: String,
 }
 
 /// Commands for the new pages. Kept apart so the original enum stays readable.
@@ -636,6 +727,8 @@ pub enum Command2 {
     SetShortcuts(Vec<Shortcut>),
     SetTrackpad(TrackpadConfig),
     StartWebcam(WebcamConfig),
+    /// Muda o formato com a câmara já ligada (`webcam.configure`).
+    ConfigureWebcam(WebcamConfig),
     StopWebcam,
     TestNetwork,
     SetPhoneVolume(PhoneStream, u8),
@@ -677,6 +770,20 @@ pub enum Command2 {
     /// Esvazia o histórico de ficheiros. Não apaga nada do disco nem cancela
     /// o envio/receção em curso.
     ClearFileHistory,
+    /// Responde com texto a uma notificação ativa (`notification.reply`).
+    /// Recusado se a ação `idx` não for de resposta ou se o texto for vazio
+    /// ou passar de 2000 caracteres.
+    ReplyNotification {
+        key: String,
+        idx: u32,
+        text: String,
+    },
+    /// Abre no telemóvel um URL (`phone.open_url`, só http/https) e/ou uma app
+    /// (`phone.run_app`, nome do package). Pelo menos um tem de vir.
+    OpenOnPhone {
+        url: Option<String>,
+        package: Option<String>,
+    },
 }
 
 /// Events for the new pages.

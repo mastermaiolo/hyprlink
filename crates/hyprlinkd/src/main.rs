@@ -7,6 +7,7 @@ mod bridge;
 mod clip;
 mod config;
 mod ctl;
+mod envinfo;
 mod gesture;
 mod hub;
 mod hypr;
@@ -22,6 +23,7 @@ mod phone_audio;
 mod protocol;
 mod server;
 mod share;
+mod shortcuts;
 mod speaker;
 mod state;
 mod tap;
@@ -44,6 +46,11 @@ fn main() -> anyhow::Result<()> {
     let token_hex = pairing.lock().unwrap().current_token_hex.clone();
     let hud = state::HudState::new(token_hex.clone());
     let config = config::load();
+    // Ambiente detetado (shell, Hyprland, GPU, áudio…) e opções de correção do
+    // config.json — o mesmo código do `hyprlinkctl doctor`.
+    for line in envinfo::init(&config) {
+        state::push_log(&hud, line);
+    }
     // Sessão anterior morreu com o modo coluna ativo? Devolve o som do PC
     // ao sink original antes de qualquer outra coisa — sem isto, o PC
     // ficaria mudo (apps a tocar no sink virtual que já ninguém consome).

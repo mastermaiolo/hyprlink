@@ -1,0 +1,73 @@
+[
+ {
+  "id": 65,
+  "type": "PipeWire:Interface:Node",
+  "info": {
+   "state": "running",
+   "props": {
+    "node.name": "alsa_output.pci-0000_03_00.6.analog-stereo",
+    "media.class": "Audio/Sink",
+    "priority.session": 1009
+   }
+  }
+ },
+ {
+  "id": 66,
+  "type": "PipeWire:Interface:Node",
+  "info": {
+   "state": "idle",
+   "props": {
+    "node.name": "alsa_input.pci-0000_03_00.6.analog-stereo",
+    "media.class": "Audio/Source",
+    "priority.session": 2009
+   }
+  }
+ },
+ {
+  "id": 128,
+  "type": "PipeWire:Interface:Node",
+  "info": {
+   "state": "running",
+   "props": {
+    "node.name": "player",
+    "media.class": "Stream/Output/Audio",
+    "application.name": "player",
+    "media.role": "Music"
+   }
+  }
+ },
+ {
+  "id": 1,
+  "type": "PipeWire:Interface:Link",
+  "info": {
+   "output-node-id": 128,
+   "input-node-id": 65,
+   "state": "active"
+  }
+ },
+ {
+  "id": 40,
+  "type": "PipeWire:Interface:Metadata",
+  "props": {
+   "metadata.name": "default"
+  },
+  "metadata": [
+   {
+    "subject": 0,
+    "key": "default.audio.sink",
+    "type": "Spa:String:JSON",
+    "value": {
+     "name": "alsa_output.pci-0000_03_00.6.analog-stereo"
+    }
+   },
+   {
+    "subject": 0,
+    "key": "default.audio.source",
+    "type": "Spa:String:JSON",
+    "value": {
+     "name": "alsa_input.pci-0000_03_00.6.analog-stereo"
+    }
+   }
+  ]
+ }
+]

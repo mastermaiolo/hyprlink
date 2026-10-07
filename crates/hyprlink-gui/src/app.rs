@@ -138,6 +138,23 @@ pub struct Rule {
     pub on: bool,
 }
 
+/// Formato que os chips marcam: o efetivo se o telemóvel o reporta (câmara
+/// ligada e `webcam.state` recebido), senão a preferência.
+pub fn cam_shown(stats: Option<WebcamStats>, pref: WebcamConfig) -> WebcamConfig {
+    match stats.and_then(|w| w.format) {
+        Some(f) => WebcamConfig {
+            width: f.width,
+            height: f.height,
+            fps: f.fps,
+            codec: f.codec,
+        },
+        None => pref,
+    }
+}
+
+/// Folga para o telemóvel aplicar uma escolha antes de a comparar com o efetivo.
+const CAM_SETTLE_SECS: f32 = 3.0;
+
 pub struct App {
     link: Box<dyn Transport>,
     pub section: Section,
@@ -225,10 +242,25 @@ pub struct App {
     pub alerts: BatteryAlerts,
     pub active_window: Option<ActiveWindow>,
     pub shortcuts: Vec<Shortcut>,
+    /// Página Secretária: modo de edição dos atalhos, rascunhos por posição
+    /// (só as linhas alteradas) e o rascunho do atalho novo.
+    /// Página Partilha: URL e pacote a abrir no telemóvel.
+    pub phone_url: String,
+    pub phone_pkg: String,
+    pub sc_edit: bool,
+    pub sc_drafts: std::collections::HashMap<usize, (String, String)>,
+    pub sc_new: (String, String),
     pub trackpad: TrackpadConfig,
     pub dispatch_input: String,
     pub cam_mode: CamMode,
+    /// Preferência de formato (o que o utilizador escolheu); o formato
+    /// efetivo vem do telemóvel em `webcam.format`.
     pub webcam_cfg: WebcamConfig,
+    /// Conta os toques nos chips para juntar toques seguidos num só pacote.
+    pub cam_seq: u32,
+    /// Até quando (`t`) o telemóvel ainda está a aplicar a última escolha:
+    /// enquanto isso não se mostra a nota «o telemóvel ajustou».
+    pub cam_settle_until: f32,
     pub webcam: Option<WebcamStats>,
     pub webcam_on: bool,
     pub nettest: Option<NetTest>,
@@ -236,6 +268,8 @@ pub struct App {
     pub sinks: Vec<Sink>,
     pub apps: Vec<AppStream>,
     pub notifs: Vec<PhoneNotification>,
+    /// Rascunho de resposta por notificação (chave do Android).
+    pub reply_drafts: std::collections::HashMap<String, String>,
     pub notif_app: Option<String>,
     pub notif_query: String,
     pub clips: Vec<ClipEntry>,
@@ -300,6 +334,8 @@ pub enum Message {
     CamRes(u32, u32),
     CamFps(u32),
     CamCodec(CamCodec),
+    /// Passou o atraso de 300 ms do último toque (número de ordem).
+    CamApply(u32),
     WebcamStart,
     WebcamStop,
     DispatchInput(String),
@@ -310,6 +346,24 @@ pub enum Message {
     Trackpad(TrackpadConfig),
     NotifApp(Option<String>),
     NotifQuery(String),
+    PhoneUrl(String),
+    PhoneUrlOpen,
+    PhonePkg(String),
+    PhonePkgOpen,
+    ShortcutsEdit(bool),
+    ShortcutName(usize, String),
+    ShortcutCommand(usize, String),
+    ShortcutSave(usize),
+    ShortcutRemove(usize),
+    ShortcutNewName(String),
+    ShortcutNewCommand(String),
+    ShortcutAdd,
+    /// Modo auricular: coluna + microfone do telemóvel num só interruptor.
+    Headset(bool),
+    /// Texto da resposta a uma notificação (chave, texto).
+    ReplyInput(String, String),
+    /// Envia a resposta (chave, índice da ação de resposta).
+    ReplySend(String, u32),
     ClipQuery(String),
     SendPath(String),
     SendFile,
@@ -323,6 +377,13 @@ pub enum Message {
     RenameSave(DeviceId),
     DownloadsSave,
 }
+
+/// O daemon ainda responde `NotImplemented` a estes comandos (espelho do
+/// ecrã, ponte de sensores, regras de presença): a GUI mostra-os desativados
+/// com «em breve». Passar a `false` quando o daemon os implementar.
+pub const MIRROR_SOON: bool = true;
+pub const SENSORS_SOON: bool = true;
+pub const PRESENCE_SOON: bool = true;
 
 impl App {
     pub fn boot() -> (Self, Task<Message>) {
@@ -445,6 +506,11 @@ impl App {
             },
             active_window: None,
             shortcuts: Vec::new(),
+            phone_url: String::new(),
+            phone_pkg: String::new(),
+            sc_edit: false,
+            sc_drafts: std::collections::HashMap::new(),
+            sc_new: (String::new(), String::new()),
             trackpad: TrackpadConfig {
                 sensitivity: 1.0,
                 scroll: 1.0,
@@ -454,6 +520,8 @@ impl App {
             },
             dispatch_input: String::new(),
             cam_mode: CamMode::Camera,
+            cam_seq: 0,
+            cam_settle_until: 0.0,
             webcam_cfg: WebcamConfig {
                 width: 1280,
                 height: 720,
@@ -467,6 +535,7 @@ impl App {
             sinks: Vec::new(),
             apps: Vec::new(),
             notifs: Vec::new(),
+            reply_drafts: std::collections::HashMap::new(),
             notif_app: None,
             notif_query: String::new(),
             clips: Vec::new(),
@@ -713,7 +782,14 @@ impl App {
             Event2::BatteryHistory(h) => self.battery_hist = h,
             Event2::BatteryAlerts(a) => self.alerts = a,
             Event2::ActiveWindow(w) => self.active_window = w,
-            Event2::Shortcuts(s) => self.shortcuts = s,
+            Event2::Shortcuts(s) => {
+                // Se a lista mudou de tamanho (remover, adicionar, outro
+                // cliente), os rascunhos por posição deixam de valer.
+                if s.len() != self.shortcuts.len() {
+                    self.sc_drafts.clear();
+                }
+                self.shortcuts = s;
+            }
             Event2::Gestures { rules, last } => {
                 self.gestures = rules;
                 self.last_gesture = last;
@@ -756,6 +832,16 @@ impl App {
         self.link.send(Command::More(c));
     }
 
+    /// Nome e comando que a linha `i` mostra: o rascunho, ou o guardado.
+    pub fn shortcut_draft(&self, i: usize) -> (String, String) {
+        self.sc_drafts.get(&i).cloned().unwrap_or_else(|| {
+            self.shortcuts
+                .get(i)
+                .map(|s| (s.label.clone(), s.dispatch.clone()))
+                .unwrap_or_default()
+        })
+    }
+
     fn toast(&mut self, s: String) {
         self.toasts.push((s, self.t));
         if self.toasts.len() > 3 {
@@ -778,6 +864,40 @@ impl App {
             ));
         }
         self.section = Section::Partilha;
+    }
+
+    /// Agenda o envio do formato 300 ms depois do último toque num chip.
+    fn cam_debounce(&mut self) -> Task<Message> {
+        self.cam_seq = self.cam_seq.wrapping_add(1);
+        self.cam_settle_until = self.t + CAM_SETTLE_SECS;
+        let seq = self.cam_seq;
+        Task::perform(
+            async {
+                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            },
+            move |()| Message::CamApply(seq),
+        )
+    }
+
+    /// Formato que os chips marcam: com a câmara ligada e o telemóvel a
+    /// reportar (`webcam.state`), o EFETIVO; senão a preferência.
+    pub fn cam_shown(&self) -> WebcamConfig {
+        cam_shown(self.webcam, self.webcam_cfg)
+    }
+
+    /// Nota «o telemóvel ajustou: 720p30 H.264» quando o efetivo difere do
+    /// pedido e o telemóvel já teve tempo de aplicar a última escolha.
+    pub fn cam_adjusted_note(&self) -> Option<String> {
+        let f = self.webcam.and_then(|w| w.format)?;
+        let shown = self.cam_shown();
+        (shown != self.webcam_cfg && self.t >= self.cam_settle_until).then(|| {
+            format!(
+                "{}p{} {}",
+                f.height,
+                f.fps,
+                hyprlink_gui::fmt::cam_codec(f.codec)
+            )
+        })
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -918,6 +1038,9 @@ impl App {
             Message::Fps(f) => self.mirror_cfg.max_fps = f,
             Message::Scale(s) => self.mirror_cfg.scale = s,
             Message::MirrorStart => {
+                if MIRROR_SOON {
+                    return Task::none();
+                }
                 self.mirror_on = true;
                 self.link.send(Command::StartMirror(self.mirror_cfg));
             }
@@ -926,6 +1049,9 @@ impl App {
                 self.link.send(Command::StopMirror);
             }
             Message::Bridge(k, b) => {
+                if SENSORS_SOON {
+                    return Task::none();
+                }
                 if b {
                     self.bridges.insert(k);
                 } else {
@@ -934,6 +1060,9 @@ impl App {
                 self.link.send(Command::SetSensorBridge(k, b));
             }
             Message::Rule(i, b) => {
+                if PRESENCE_SOON {
+                    return Task::none();
+                }
                 if let Some(r) = self.rules.get_mut(i) {
                     r.on = b;
                 }
@@ -950,9 +1079,21 @@ impl App {
             Message::CamRes(w, h) => {
                 self.webcam_cfg.width = w;
                 self.webcam_cfg.height = h;
+                return self.cam_debounce();
             }
-            Message::CamFps(f) => self.webcam_cfg.fps = f,
-            Message::CamCodec(c) => self.webcam_cfg.codec = c,
+            Message::CamFps(f) => {
+                self.webcam_cfg.fps = f;
+                return self.cam_debounce();
+            }
+            Message::CamCodec(c) => {
+                self.webcam_cfg.codec = c;
+                return self.cam_debounce();
+            }
+            Message::CamApply(seq) => {
+                if seq == self.cam_seq {
+                    self.more(Command2::ConfigureWebcam(self.webcam_cfg));
+                }
+            }
             Message::WebcamStart => {
                 self.webcam_on = true;
                 self.more(Command2::StartWebcam(self.webcam_cfg));
@@ -1030,6 +1171,95 @@ impl App {
                 self.more(Command2::RenameDevice(id, n));
                 self.rename_for = None;
                 self.rename_input.clear();
+            }
+            Message::PhoneUrl(s) => self.phone_url = s,
+            Message::PhonePkg(s) => self.phone_pkg = s,
+            Message::PhoneUrlOpen => {
+                let url = self.phone_url.trim().to_string();
+                if crate::link::http_url_ok(&url) {
+                    self.phone_url.clear();
+                    self.more(Command2::OpenOnPhone {
+                        url: Some(url),
+                        package: None,
+                    });
+                }
+            }
+            Message::PhonePkgOpen => {
+                let package = self.phone_pkg.trim().to_string();
+                if crate::link::package_ok(&package) {
+                    self.phone_pkg.clear();
+                    self.more(Command2::OpenOnPhone {
+                        url: None,
+                        package: Some(package),
+                    });
+                }
+            }
+            Message::ShortcutsEdit(on) => {
+                self.sc_edit = on;
+                self.sc_drafts.clear();
+                self.sc_new = (String::new(), String::new());
+            }
+            Message::ShortcutName(i, s) => {
+                let cur = self.shortcut_draft(i);
+                self.sc_drafts.insert(i, (s, cur.1));
+            }
+            Message::ShortcutCommand(i, s) => {
+                let cur = self.shortcut_draft(i);
+                self.sc_drafts.insert(i, (cur.0, s));
+            }
+            Message::ShortcutSave(i) => {
+                let (name, command) = self.shortcut_draft(i);
+                if shortcut_valid(&name, &command) && i < self.shortcuts.len() {
+                    let mut list = self.shortcuts.clone();
+                    list[i] = Shortcut {
+                        id: list[i].id.clone(),
+                        label: name.trim().into(),
+                        dispatch: command.trim().into(),
+                    };
+                    self.sc_drafts.remove(&i);
+                    self.more(Command2::SetShortcuts(list));
+                }
+            }
+            Message::ShortcutRemove(i) => {
+                if i < self.shortcuts.len() {
+                    let mut list = self.shortcuts.clone();
+                    list.remove(i);
+                    self.sc_drafts.clear();
+                    self.more(Command2::SetShortcuts(list));
+                }
+            }
+            Message::ShortcutNewName(s) => self.sc_new.0 = s,
+            Message::ShortcutNewCommand(s) => self.sc_new.1 = s,
+            Message::ShortcutAdd => {
+                let (name, command) = self.sc_new.clone();
+                if shortcut_valid(&name, &command)
+                    && self.shortcuts.len() < crate::link::SHORTCUTS_MAX
+                {
+                    let mut list = self.shortcuts.clone();
+                    list.push(Shortcut {
+                        id: String::new(),
+                        label: name.trim().into(),
+                        dispatch: command.trim().into(),
+                    });
+                    self.sc_new = (String::new(), String::new());
+                    self.more(Command2::SetShortcuts(list));
+                }
+            }
+            Message::Headset(b) => {
+                self.speaker = b;
+                self.mic_on = b;
+                self.mic_clicked = Some(Instant::now());
+                self.more(Command2::SetHeadset(b));
+            }
+            Message::ReplyInput(key, s) => {
+                self.reply_drafts.insert(key, s);
+            }
+            Message::ReplySend(key, idx) => {
+                let text = self.reply_drafts.get(&key).cloned().unwrap_or_default();
+                if !text.trim().is_empty() {
+                    self.reply_drafts.remove(&key);
+                    self.more(Command2::ReplyNotification { key, idx, text });
+                }
             }
             Message::DownloadsInput(s) => self.downloads_input = s,
             Message::DownloadsSave => {
@@ -1550,6 +1780,50 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
+    fn pref() -> WebcamConfig {
+        WebcamConfig {
+            width: 1920,
+            height: 1080,
+            fps: 60,
+            codec: CamCodec::H265,
+        }
+    }
+
+    #[test]
+    fn chips_follow_the_effective_format_when_live() {
+        let live = WebcamStats {
+            mbps: 4.0,
+            fps: Some(30.0),
+            codec: Some(CamCodec::H264),
+            format: Some(link::WebcamFormat {
+                width: 1280,
+                height: 720,
+                fps: 30,
+                codec: CamCodec::H264,
+                lens: None,
+                rotation: 0,
+                mirror: false,
+            }),
+        };
+        let shown = cam_shown(Some(live), pref());
+        assert_eq!((shown.width, shown.height, shown.fps), (1280, 720, 30));
+        assert_eq!(shown.codec, CamCodec::H264);
+    }
+
+    #[test]
+    fn chips_fall_back_to_the_preference() {
+        // Sem câmara.
+        assert_eq!(cam_shown(None, pref()), pref());
+        // Telemóvel antigo: stream sem `webcam.state`.
+        let old = WebcamStats {
+            mbps: 4.0,
+            fps: None,
+            codec: Some(CamCodec::H264),
+            format: None,
+        };
+        assert_eq!(cam_shown(Some(old), pref()), pref());
+    }
+
     #[test]
     fn plan_send_skips_folders_keeps_order_and_repeats() {
         let dir = std::env::temp_dir().join(format!("hyprlink-plan-{}", std::process::id()));
@@ -1569,4 +1843,14 @@ mod tests {
         assert_eq!((none.files.len(), none.folders), (0, 0));
         let _ = std::fs::remove_dir_all(&dir);
     }
+}
+
+/// Mesmos limites do daemon (`config::validate_shortcuts`): nada vazio, nome
+/// até 40 e comando até 200 caracteres.
+pub fn shortcut_valid(name: &str, command: &str) -> bool {
+    let (n, c) = (name.trim(), command.trim());
+    !n.is_empty()
+        && !c.is_empty()
+        && n.chars().count() <= crate::link::SHORTCUT_NAME_MAX
+        && c.chars().count() <= crate::link::SHORTCUT_COMMAND_MAX
 }

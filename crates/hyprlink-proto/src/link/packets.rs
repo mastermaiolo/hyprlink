@@ -30,6 +30,10 @@ pub const PAIR_REVOKE: &str = "pair.revoke";
 
 // ── confirmed against PROTOCOL.md (were "to confirm") ──
 pub const WEBCAM_STOP: &str = "webcam.stop";
+/// PC → telemóvel, opcional: muda o formato com a câmara ligada.
+pub const WEBCAM_CONFIGURE: &str = "webcam.configure";
+/// Telemóvel → PC, opcional: formato efetivo (resolução/fps/codec/lente...).
+pub const WEBCAM_STATE: &str = "webcam.state";
 /// No wire packet of its own: the daemon's network test is a 60 s
 /// `webcam.start` (1080p30 H.264) measured locally.
 pub const WEBCAM_NETTEST: &str = "webcam.start";
@@ -41,6 +45,9 @@ pub const PHONE_DND: &str = "phone_audio.set_dnd";
 pub const INPUT_CONFIG: &str = "input.move";
 pub const SHARE_OFFER: &str = "share.file";
 pub const NOTIF_DISMISS: &str = "notification.dismiss";
+pub const PHONE_OPEN_URL: &str = "phone.open_url";
+pub const PHONE_RUN_APP: &str = "phone.run_app";
+pub const NOTIF_REPLY: &str = "notification.reply";
 /// Was in "proposed"; the phone already sends it.
 pub const NOTIF_POSTED: &str = "notification.post";
 
