@@ -298,6 +298,37 @@ pub fn push_notif_entry(
     s.modules.notif_active.truncate(MAX_HISTORY);
 }
 
+/// Notificação que **já estava** na barra do telemóvel quando ele ligou
+/// (`notification.post` com `replay: true`): entra na lista de ativas, mas não
+/// conta como nova nem vai para o histórico — não é um acontecimento.
+pub fn register_active_notif(
+    state: &Arc<Mutex<HudState>>,
+    key: String,
+    app: String,
+    title: String,
+    text: String,
+) {
+    let mut s = state.lock().unwrap();
+    let entry = NotifEntry {
+        key,
+        at_unix: now_unix(),
+        app,
+        title,
+        text,
+    };
+    if !entry.key.is_empty() {
+        s.modules.notif_active.retain(|n| n.key != entry.key);
+    }
+    s.modules.notif_active.insert(0, entry);
+    s.modules.notif_active.truncate(MAX_HISTORY);
+}
+
+/// A lista de ativas é a do telemóvel: quando ele desliga, esvazia-se (o
+/// telemóvel volta a enviá-la inteira quando ligar).
+pub fn clear_active_notifs(state: &Arc<Mutex<HudState>>) {
+    state.lock().unwrap().modules.notif_active.clear();
+}
+
 /// Saiu do telemóvel (ou o PC dispensou-a). `true` se estava na lista.
 pub fn remove_active_notif(state: &Arc<Mutex<HudState>>, key: &str) -> bool {
     let mut s = state.lock().unwrap();
@@ -589,6 +620,23 @@ mod tests {
         assert_eq!(active_notif_keys(&h), vec!["k1"]);
         // O histórico guarda tudo.
         assert_eq!(h.lock().unwrap().modules.notif_history.len(), 3);
+    }
+
+    #[test]
+    fn replayed_notifications_are_active_but_not_events() {
+        let h = hud();
+        register_active_notif(&h, "r1".into(), "app".into(), "a".into(), "".into());
+        register_active_notif(&h, "r2".into(), "app".into(), "b".into(), "".into());
+        // O mesmo `replay` duas vezes não duplica.
+        register_active_notif(&h, "r1".into(), "app".into(), "a".into(), "".into());
+        assert_eq!(active_notif_keys(&h), vec!["r1", "r2"]);
+        {
+            let s = h.lock().unwrap();
+            assert_eq!(s.modules.notif_count, 0);
+            assert!(s.modules.notif_history.is_empty());
+        } // o guard tem de cair antes de `clear_active_notifs` voltar a bloquear
+        clear_active_notifs(&h);
+        assert!(active_notif_keys(&h).is_empty());
     }
 }
 

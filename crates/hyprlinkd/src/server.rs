@@ -196,6 +196,7 @@ pub async fn run(endpoint: quinn::Endpoint, pairing: Arc<Mutex<PairingStore>>, c
                 // O estado que o telemóvel reportou de si mesmo morre com a
                 // conexão — não fica a informação velha na GUI/ctl.
                 state::set_phone_status(&ctx.hud, Default::default());
+                state::clear_active_notifs(&ctx.hud);
                 // Modo coluna sem telemóvel = PC mudo: devolve o som às
                 // colunas na hora (não espera pelo próximo arranque).
                 crate::speaker::disable(&ctx.tap, &ctx.hud, &ctx.config, &ctx.speaker).await;
@@ -356,6 +357,7 @@ async fn handle_connection(
     // O estado que o telemóvel reportou de si mesmo morre com a conexão —
     // não fica a informação velha na GUI/ctl.
     state::set_phone_status(&ctx.hud, Default::default());
+    state::clear_active_notifs(&ctx.hud);
     // Modo coluna sem telemóvel = PC mudo: devolve o som às colunas na
     // hora (não espera pelo próximo arranque).
     crate::speaker::disable(&ctx.tap, &ctx.hud, &ctx.config, &ctx.speaker).await;
@@ -693,9 +695,21 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                             .collect()
                     })
                     .unwrap_or_default();
-                state::push_notif_entry(hud, key.clone(), app.clone(), title.clone(), text.clone());
-                state::push_log(hud, format!("[i] notification.post · {app}: {title}"));
-                notif::post(&app, &title, &text, &key, &actions, &ctx.notif, &ctx.dbus).await;
+                // `replay: true` = já estava na barra do telemóvel quando ele ligou:
+                // entra na lista de ativas, mas não gera balão no PC nem conta como nova.
+                if crate::protocol::body_get_bool(b, "replay").unwrap_or(false) {
+                    state::register_active_notif(hud, key, app, title, text);
+                } else {
+                    state::push_notif_entry(
+                        hud,
+                        key.clone(),
+                        app.clone(),
+                        title.clone(),
+                        text.clone(),
+                    );
+                    state::push_log(hud, format!("[i] notification.post · {app}: {title}"));
+                    notif::post(&app, &title, &text, &key, &actions, &ctx.notif, &ctx.dbus).await;
+                }
             }
         }
         "notification.dismissed" => {

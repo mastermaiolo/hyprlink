@@ -172,7 +172,7 @@ mesma lógica do guard de texto). Do lado P→D, o uni-stream é roteado pelo
 ### notification
 | type | dir | body |
 |---|---|---|
-| `notification.post` | P→D one-way | `{key, app, title, text (≤2000c), actions:[{idx,label,is_reply}]}` |
+| `notification.post` | P→D one-way | `{key, app, title, text (≤2000c), actions:[{idx,label,is_reply}], replay?: bool}` — `replay: true` = já estava na barra quando o telemóvel ligou: o daemon só a junta à lista de ativas (sem balão no PC, sem contar como nova). O telemóvel envia as ativas assim, logo após o `core.hello`; ao desligar, o daemon esvazia a lista. |
 | `notification.dismissed` | P→D one-way | `{key}` |
 | `notification.send` | D→P push | `{title, body, app_name}` |
 | `notification.action` | D→P push | `{key, idx (ou action)}` |
