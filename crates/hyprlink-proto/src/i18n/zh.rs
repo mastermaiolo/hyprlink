@@ -418,7 +418,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("ESCOLHER FICHEIROS…", "选择文件…"),
     ("Escolhe um ou vários ficheiros, de qualquer formato.", "选择一个或多个任意格式的文件。"),
     ("precisa de um telemóvel ligado", "需要已连接的手机"),
-    ("ou escreve o caminho: ~/Música/OMNIS_v3.wav", "或输入路径：~/Música/OMNIS_v3.wav"),
+    ("ou escreve o caminho: ~/Documentos/ficheiro.ext", "或输入路径：~/文档/文件.ext"),
     ("ENVIAR", "发送"),
     ("↓ DO TELEMÓVEL", "↓ 来自手机"),
     ("↑ PARA O TELEMÓVEL", "↑ 发送到手机"),

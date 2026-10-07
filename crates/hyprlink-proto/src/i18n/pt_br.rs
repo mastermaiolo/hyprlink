@@ -127,7 +127,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("ESCOLHER FICHEIROS…", "ESCOLHER ARQUIVOS…"),
     ("Escolhe um ou vários ficheiros, de qualquer formato.", "Escolha um ou vários arquivos, de qualquer formato."),
     ("precisa de um telemóvel ligado", "precisa de um celular conectado"),
-    ("ou escreve o caminho: ~/Música/OMNIS_v3.wav", "ou digite o caminho: ~/Música/OMNIS_v3.wav"),
+    ("ou escreve o caminho: ~/Documentos/ficheiro.ext", "ou digite o caminho: ~/Documentos/arquivo.ext"),
     ("↓ DO TELEMÓVEL", "↓ DO CELULAR"),
     ("↑ PARA O TELEMÓVEL", "↑ PARA O CELULAR"),
     ("PARTILHA", "COMPARTILHAMENTO"),

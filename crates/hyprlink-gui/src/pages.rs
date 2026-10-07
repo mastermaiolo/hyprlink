@@ -910,7 +910,7 @@ pub fn share(app: &App) -> El<'_> {
             gap(space::M),
             row![
                 text_input(
-                    t("ou escreve o caminho: ~/Música/OMNIS_v3.wav"),
+                    t("ou escreve o caminho: ~/Documentos/ficheiro.ext"),
                     &app.send_path
                 )
                 .on_input(Message::SendPath)
