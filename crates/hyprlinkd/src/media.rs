@@ -9,6 +9,7 @@ use zbus::zvariant::OwnedValue;
 use zbus::{Connection, Proxy};
 
 use crate::active::{ActiveConn, push};
+use crate::art::{self, Art};
 use crate::state::{self, HudState};
 
 const PLAYER_PATH: &str = "/org/mpris/MediaPlayer2";
@@ -166,12 +167,15 @@ fn metadata_first_str_in_array(meta: &HashMap<String, OwnedValue>, key: &str) ->
     list.into_iter().next()
 }
 
+#[derive(Clone)]
 struct NowPlaying {
     player: String,
     status: String,
     title: Option<String>,
     artist: Option<String>,
     album: Option<String>,
+    /// `mpris:artUrl` (`file://…` ou `https://…`); `None` = sem capa.
+    art_url: Option<String>,
     /// Posição / duração em ms; `None` = o player não as dá (nunca 0).
     position_ms: Option<u64>,
     length_ms: Option<u64>,
@@ -208,6 +212,7 @@ async fn snapshot(conn: &Connection) -> Option<NowPlaying> {
         title: metadata_str(&meta, "xesam:title"),
         artist: metadata_first_str_in_array(&meta, "xesam:artist"),
         album: metadata_str(&meta, "xesam:album"),
+        art_url: metadata_str(&meta, "mpris:artUrl").filter(|u| !u.is_empty()),
         position_ms: proxy
             .get_property::<i64>("Position")
             .await
@@ -227,7 +232,8 @@ async fn snapshot(conn: &Connection) -> Option<NowPlaying> {
     })
 }
 
-fn to_body(np: &NowPlaying) -> Value {
+/// `art_id` em todos os estados da faixa; `art` (JPEG) só quando `art` é `Some`.
+fn to_body(np: &NowPlaying, art_id: Option<&str>, art: Option<&[u8]>) -> Value {
     let mut map = vec![
         (Value::Text("player".into()), Value::Text(np.player.clone())),
         (Value::Text("status".into()), Value::Text(np.status.clone())),
@@ -247,24 +253,73 @@ fn to_body(np: &NowPlaying) -> Value {
     if let Some(l) = np.length_ms {
         map.push((Value::Text("length_ms".into()), Value::Integer(l.into())));
     }
+    if let Some(id) = art_id {
+        map.push((Value::Text("art_id".into()), Value::Text(id.into())));
+        if let Some(jpeg) = art {
+            map.push((Value::Text("art".into()), Value::Bytes(jpeg.to_vec())));
+        }
+    }
     Value::Map(map)
 }
 
 /// Poll baixo (2s) do player MPRIS ativo, empurra `media.state` só quando
-/// algo muda de verdade.
+/// algo muda de verdade. A capa carrega-se à parte (nunca dentro do poll):
+/// o estado vai logo sem `art`, e quando a capa chega vai outro da mesma faixa
+/// com `art_id` + `art`.
 pub async fn poll_and_push(
     active: ActiveConn,
     hud: Arc<Mutex<HudState>>,
     dbus: Option<Connection>,
 ) {
-    let mut last_key: Option<(String, String, Option<String>)> = None;
+    // O `artUrl` entra na chave: o Spotify põe-no um instante depois do título.
+    let mut last_key: Option<(String, String, Option<String>, Option<String>)> = None;
     // Onde a posição devia estar agora, se o player seguiu a tocar normalmente.
     let mut expected: Option<(u64, std::time::Instant, bool)> = None;
+    // Capa da faixa atual: a que já chegou, e se o telemóvel já a recebeu.
+    let cache: Arc<art::Cache> = Arc::new(Mutex::new(None));
+    let (art_tx, mut art_rx) = tokio::sync::mpsc::unbounded_channel::<(String, Option<Arc<Art>>)>();
+    let mut cur_url: Option<String> = None;
+    let mut cur_art: Option<Arc<Art>> = None;
+    let mut art_sent = false;
+    // Ligação do telemóvel de que se sabe: uma nova (ou reposta) pede o estado
+    // inteiro outra vez, capa incluída.
+    let mut conn_id: Option<usize> = None;
+    let mut force = false;
     loop {
         if let Some(conn) = &dbus {
+            let now_conn = active.lock().unwrap().as_ref().map(|c| c.stable_id());
+            if now_conn != conn_id {
+                conn_id = now_conn;
+                if now_conn.is_some() {
+                    last_key = None;
+                    art_sent = false;
+                }
+            }
             match snapshot(conn).await {
                 Some(np) => {
-                    let key = (np.player.clone(), np.status.clone(), np.title.clone());
+                    if np.art_url != cur_url {
+                        cur_url = np.art_url.clone();
+                        cur_art = None;
+                        art_sent = false;
+                        if let Some(url) = cur_url.clone() {
+                            match art::peek(&cache, &url) {
+                                Some(hit) => cur_art = hit,
+                                None => {
+                                    let (cache, tx) = (cache.clone(), art_tx.clone());
+                                    tokio::spawn(async move {
+                                        let a = art::cached_art(&cache, &url).await;
+                                        let _ = tx.send((url, a));
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    let key = (
+                        np.player.clone(),
+                        np.status.clone(),
+                        np.title.clone(),
+                        np.art_url.clone(),
+                    );
                     let playing = np.status == "Playing";
                     let projected = expected.map(|(p, at, was_playing)| {
                         if was_playing {
@@ -275,7 +330,7 @@ pub async fn poll_and_push(
                     });
                     let jumped = last_key.is_some() && position_jumped(projected, np.position_ms);
                     expected = np.position_ms.map(|p| (p, std::time::Instant::now(), playing));
-                    if last_key.as_ref() != Some(&key) || jumped {
+                    if last_key.as_ref() != Some(&key) || jumped || force {
                         last_key = Some(key);
                         let label = match (&np.title, &np.artist) {
                             (Some(t), Some(a)) => format!("{a} — {t}"),
@@ -283,18 +338,43 @@ pub async fn poll_and_push(
                             _ => format!("{} ({})", np.player, np.status),
                         };
                         state::set_media_status(&hud, Some(label));
-                        push(&active, "media.state", Some(to_body(&np))).await;
+                        let send_art = cur_art.as_ref().filter(|_| !art_sent);
+                        let body = to_body(
+                            &np,
+                            cur_art.as_ref().map(|a| a.id.as_str()),
+                            send_art.map(|a| a.jpeg.as_slice()),
+                        );
+                        let pushed = push(&active, "media.state", Some(body)).await.is_some();
+                        if pushed && send_art.is_some() {
+                            art_sent = true;
+                        }
                     }
+                    force = false;
                 }
-                None if last_key.is_some() => {
-                    last_key = None;
-                    expected = None;
-                    state::set_media_status(&hud, None);
+                None => {
+                    if last_key.is_some() {
+                        last_key = None;
+                        expected = None;
+                        state::set_media_status(&hud, None);
+                    }
+                    cur_url = None;
+                    cur_art = None;
+                    art_sent = false;
+                    force = false;
                 }
-                None => {}
             }
         }
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        // Dorme 2 s, ou acorda já se uma capa ficou pronta.
+        tokio::select! {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(2)) => {}
+            Some((url, art)) = art_rx.recv() => {
+                if cur_url.as_deref() == Some(url.as_str()) && art.is_some() {
+                    cur_art = art;
+                    art_sent = false;
+                    force = true;
+                }
+            }
+        }
     }
 }
 
@@ -309,6 +389,7 @@ mod tests {
             title: Some("t".into()),
             artist: None,
             album: None,
+            art_url: None,
             position_ms: pos,
             length_ms: len,
         }
@@ -320,10 +401,37 @@ mod tests {
 
     #[test]
     fn corpo_leva_posicao_so_quando_conhecida() {
-        let com = to_body(&np(Some(42_000), Some(200_000)));
+        let com = to_body(&np(Some(42_000), Some(200_000)), None, None);
         assert!(has(&com, "position_ms") && has(&com, "length_ms"));
-        let sem = to_body(&np(None, None));
+        let sem = to_body(&np(None, None), None, None);
         assert!(!has(&sem, "position_ms") && !has(&sem, "length_ms"));
+    }
+
+    fn get<'a>(v: &'a Value, k: &str) -> Option<&'a Value> {
+        match v {
+            Value::Map(m) => m
+                .iter()
+                .find(|(a, _)| matches!(a, Value::Text(t) if t == k))
+                .map(|(_, b)| b),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn corpo_leva_capa_so_quando_ha() {
+        let n = np(Some(1), Some(2));
+        // Sem capa: chaves ausentes (nunca vazias).
+        let sem = to_body(&n, None, None);
+        assert!(!has(&sem, "art") && !has(&sem, "art_id"));
+        // Primeiro estado da faixa: `art_id` + `art`.
+        let com = to_body(&n, Some("abc123def456"), Some(&[0xff, 0xd8, 0xff]));
+        assert_eq!(get(&com, "art_id"), Some(&Value::Text("abc123def456".into())));
+        assert_eq!(get(&com, "art"), Some(&Value::Bytes(vec![0xff, 0xd8, 0xff])));
+        // Estados seguintes: só `art_id`.
+        let depois = to_body(&n, Some("abc123def456"), None);
+        assert!(has(&depois, "art_id") && !has(&depois, "art"));
+        // `art` sem `art_id` não existe.
+        assert!(!has(&to_body(&n, None, Some(&[1])), "art"));
     }
 
     #[test]

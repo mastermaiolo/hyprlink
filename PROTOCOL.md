@@ -167,7 +167,7 @@ mesma lógica do guard de texto). Do lado P→D, o uni-stream é roteado pelo
 
 ### media
 `media.command` (P→D one-way, `{command}`: play_pause/play/pause/next/previous)
-`media.state` (D→P push, `{player, status, title?, artist?, album?, position_ms?, length_ms?}`, status: Playing/Paused/Stopped). `position_ms`/`length_ms` (uint, ms) são opcionais: ausentes = desconhecido (nunca 0). Só se reenvia quando há salto (seek, faixa nova, pausa/retoma) — o telemóvel avança a barra sozinho.
+`media.state` (D→P push, `{player, status, title?, artist?, album?, position_ms?, length_ms?, art_id?, art?}`, status: Playing/Paused/Stopped). `position_ms`/`length_ms` (uint, ms) são opcionais: ausentes = desconhecido (nunca 0). Só se reenvia quando há salto (seek, faixa nova, pausa/retoma) — o telemóvel avança a barra sozinho. **Capa (opcional, aditiva):** `art_id` (string, 12 hex) identifica a capa da faixa e vai em **todos** os `media.state` dessa faixa; `art` (bytes) é o JPEG da capa (≤ 320×320, ≤ 96 KiB, recodificado pelo daemon, nunca o original) e vai **só no primeiro estado com essa capa** (ou quando o `art_id` muda, ou numa ligação nova do telemóvel). Sem capa, as duas chaves estão ausentes (nunca vazias). O daemon carrega a capa em segundo plano a partir do `mpris:artUrl` (`file://` ≤ 8 MiB ou `https://` ≤ 5 MiB, sem rede local): o primeiro `media.state` da faixa pode chegar sem capa, e a seguir chega outro da mesma faixa com `art_id` + `art`. Quem recebe guarda a capa por `art_id`. O `media.state` é reenviado por inteiro (capa incluída) quando o telemóvel liga.
 
 ### notification
 | type | dir | body |
