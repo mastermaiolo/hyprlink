@@ -70,7 +70,11 @@ fn ram_sample() -> Option<(u64, u64)> {
 /// Temperatura plausível de um `…_input` (milligraus). Zero, negativo ou
 /// absurdo → `None`.
 fn read_temp(path: &Path) -> Option<f32> {
-    let millic = std::fs::read_to_string(path).ok()?.trim().parse::<i64>().ok()?;
+    let millic = std::fs::read_to_string(path)
+        .ok()?
+        .trim()
+        .parse::<i64>()
+        .ok()?;
     let c = millic as f32 / 1000.0;
     (c > 0.0 && c < 120.0).then_some(c)
 }
@@ -214,9 +218,7 @@ fn parse_gpu_busy(raw: &str) -> Option<f32> {
 /// uma linha por GPU; vence a mais carregada. Linhas vazias ou texto de erro
 /// são ignorados; sem nenhum número → `None`.
 fn parse_nvidia_smi(out: &str) -> Option<f32> {
-    out.lines()
-        .filter_map(parse_gpu_busy)
-        .reduce(f32::max)
+    out.lines().filter_map(parse_gpu_busy).reduce(f32::max)
 }
 
 /// Carga de cada placa AMD sob `sys/class/drm/card*/device/gpu_busy_percent`.
@@ -237,9 +239,8 @@ fn amd_gpu_busy(sys: &Path) -> Vec<f32> {
 }
 
 fn nvidia_smi_exists() -> bool {
-    std::env::var_os("PATH").is_some_and(|p| {
-        std::env::split_paths(&p).any(|d| d.join("nvidia-smi").is_file())
-    })
+    std::env::var_os("PATH")
+        .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join("nvidia-smi").is_file()))
 }
 
 /// Corre o `nvidia-smi` com tempo limite (bloqueante: chamar em `spawn_blocking`).
@@ -313,8 +314,7 @@ impl Gpu {
             {
                 self.nvidia_last = self.pending.take().unwrap().await.ok().flatten();
             }
-            if self.pending.is_none()
-                && self.nvidia_at.is_none_or(|t| t.elapsed() >= NVIDIA_EVERY)
+            if self.pending.is_none() && self.nvidia_at.is_none_or(|t| t.elapsed() >= NVIDIA_EVERY)
             {
                 self.nvidia_at = Some(Instant::now());
                 self.pending = Some(tokio::task::spawn_blocking(nvidia_smi_busy));
@@ -391,11 +391,7 @@ fn disk_path(config: &SharedConfig) -> Option<PathBuf> {
 }
 
 /// Envia `pc.status` a cada 2 s enquanto houver telemóvel ligado.
-pub async fn poll_and_push(
-    active: ActiveConn,
-    _hud: Arc<Mutex<HudState>>,
-    config: SharedConfig,
-) {
+pub async fn poll_and_push(active: ActiveConn, _hud: Arc<Mutex<HudState>>, config: SharedConfig) {
     let host = hostname();
     let sys = Path::new(SYS);
     let mut interval = tokio::time::interval(Duration::from_secs(2));
@@ -522,7 +518,12 @@ mod tests {
     #[test]
     fn k10temp_prefere_tdie_a_tctl() {
         let sys = fake_sys("tdie");
-        hwmon(&sys, 0, "k10temp", &[("1", "Tctl", "75000"), ("2", "Tdie", "45000")]);
+        hwmon(
+            &sys,
+            0,
+            "k10temp",
+            &[("1", "Tctl", "75000"), ("2", "Tdie", "45000")],
+        );
         assert_eq!(temp_of(&sys), Some(45.0));
         std::fs::remove_dir_all(&sys).ok();
     }
@@ -627,7 +628,9 @@ mod tests {
         assert_eq!(parse_nvidia_smi(""), None);
         assert_eq!(parse_nvidia_smi("\n\n"), None);
         assert_eq!(
-            parse_nvidia_smi("NVIDIA-SMI has failed because it couldn't communicate with the NVIDIA driver."),
+            parse_nvidia_smi(
+                "NVIDIA-SMI has failed because it couldn't communicate with the NVIDIA driver."
+            ),
             None
         );
         assert_eq!(parse_nvidia_smi("No devices were found\n"), None);
@@ -674,8 +677,15 @@ mod tests {
     fn corpo_sem_as_chaves_quando_faltam_dados() {
         let vazio = status_body("pc", &Sample::default());
         for k in [
-            "cpu_pct", "ram_used_b", "ram_total_b", "cpu_temp_c", "uptime_s", "rtt_ms",
-            "disk_free_b", "disk_total_b", "gpu_pct",
+            "cpu_pct",
+            "ram_used_b",
+            "ram_total_b",
+            "cpu_temp_c",
+            "uptime_s",
+            "rtt_ms",
+            "disk_free_b",
+            "disk_total_b",
+            "gpu_pct",
         ] {
             assert!(!has(&vazio, k), "{k} devia faltar");
         }
@@ -694,7 +704,13 @@ mod tests {
             assert!(has(&cheio, k), "{k}");
         }
         // Só o disco falha: as outras ficam.
-        let sem_disco = status_body("pc", &Sample { gpu_pct: Some(1.0), ..Default::default() });
+        let sem_disco = status_body(
+            "pc",
+            &Sample {
+                gpu_pct: Some(1.0),
+                ..Default::default()
+            },
+        );
         assert!(!has(&sem_disco, "disk_free_b") && !has(&sem_disco, "disk_total_b"));
         assert!(has(&sem_disco, "gpu_pct"));
     }
@@ -707,6 +723,9 @@ mod tests {
         println!("sensor = {:?}", find_cpu_sensor(sys));
         println!("temp   = {:?}", CpuTemp::default().read(sys));
         println!("gpu    = {:?}", Gpu::new().sample(sys).await);
-        println!("disco  = {:?}", dirs::home_dir().and_then(|h| disk_usage(&h)));
+        println!(
+            "disco  = {:?}",
+            dirs::home_dir().and_then(|h| disk_usage(&h))
+        );
     }
 }

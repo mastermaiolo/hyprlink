@@ -71,7 +71,10 @@ fn default_sink_name() -> Option<String> {
 fn parse_inspect_node_name(out: &str) -> Option<String> {
     out.lines().find_map(|l| {
         let l = l.trim_start().trim_start_matches('*').trim_start();
-        let v = l.strip_prefix("node.name")?.trim_start().strip_prefix('=')?;
+        let v = l
+            .strip_prefix("node.name")?
+            .trim_start()
+            .strip_prefix('=')?;
         let v = v.trim().trim_matches('"');
         (!v.is_empty()).then(|| v.to_string())
     })
@@ -379,11 +382,14 @@ async fn run_once(
     // e a supervisão reconstrói-o com o alvo novo. Sai sozinho quando a
     // sessão acaba (o handle deixa de ter este pipeline).
     if sink.is_none() {
-        let (handle_w, pipeline_w, hud_w, target_w) =
-            (handle.clone(), pipeline.clone(), hud.clone(), target.clone());
+        let (handle_w, pipeline_w, hud_w, target_w) = (
+            handle.clone(),
+            pipeline.clone(),
+            hud.clone(),
+            target.clone(),
+        );
         std::thread::spawn(move || {
-            let ours =
-                || handle_w.lock().unwrap().as_ref() == Some(&pipeline_w);
+            let ours = || handle_w.lock().unwrap().as_ref() == Some(&pipeline_w);
             loop {
                 for _ in 0..30 {
                     std::thread::sleep(std::time::Duration::from_millis(100));
@@ -395,7 +401,9 @@ async fn run_once(
                     Some(now) if now != target_w => {
                         push_log(
                             &hud_w,
-                            format!("[i] audio tap: saída padrão mudou ({target_w} → {now}), a religar"),
+                            format!(
+                                "[i] audio tap: saída padrão mudou ({target_w} → {now}), a religar"
+                            ),
                         );
                         let _ = pipeline_w.set_state(gst::State::Null);
                         return;
@@ -583,9 +591,15 @@ mod tests {
     #[test]
     fn node_name_do_wpctl_inspect() {
         let out = "id 78, type PipeWire:Interface:Node\n    application.id = \"com.github.wwmm.easyeffects\"\n  * client.id = \"181\"\n  * media.class = \"Audio/Sink\"\n  * node.description = \"Easy Effects Sink\"\n  * node.name = \"easyeffects_sink\"\n  * object.serial = \"51749\"\n";
-        assert_eq!(parse_inspect_node_name(out), Some("easyeffects_sink".into()));
+        assert_eq!(
+            parse_inspect_node_name(out),
+            Some("easyeffects_sink".into())
+        );
         // `node.description` não se confunde com `node.name`.
-        assert_eq!(parse_inspect_node_name("  * node.description = \"x\"\n"), None);
+        assert_eq!(
+            parse_inspect_node_name("  * node.description = \"x\"\n"),
+            None
+        );
         assert_eq!(parse_inspect_node_name(""), None);
         assert_eq!(parse_inspect_node_name("  * node.name = \"\"\n"), None);
     }
@@ -615,10 +629,12 @@ mod tests {
     fn manual_pipeline() {
         gst::init().expect("GStreamer deveria inicializar");
         println!("{}", env_line());
-        let pipeline = gst::parse::launch(&pipeline_str(&resolve_default_sink().expect("saída padrão")))
-            .unwrap()
-            .downcast::<gst::Pipeline>()
-            .unwrap();
+        let pipeline = gst::parse::launch(&pipeline_str(
+            &resolve_default_sink().expect("saída padrão"),
+        ))
+        .unwrap()
+        .downcast::<gst::Pipeline>()
+        .unwrap();
         let appsink = pipeline
             .by_name("hyprlink_tap")
             .unwrap()
@@ -645,10 +661,12 @@ mod tests {
     #[ignore]
     fn manual_pipeline_loop() {
         gst::init().expect("GStreamer deveria inicializar");
-        let pipeline = gst::parse::launch(&pipeline_str(&resolve_default_sink().expect("saída padrão")))
-            .unwrap()
-            .downcast::<gst::Pipeline>()
-            .unwrap();
+        let pipeline = gst::parse::launch(&pipeline_str(
+            &resolve_default_sink().expect("saída padrão"),
+        ))
+        .unwrap()
+        .downcast::<gst::Pipeline>()
+        .unwrap();
         let appsink = pipeline
             .by_name("hyprlink_tap")
             .unwrap()

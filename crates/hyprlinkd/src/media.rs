@@ -329,7 +329,9 @@ pub async fn poll_and_push(
                         }
                     });
                     let jumped = last_key.is_some() && position_jumped(projected, np.position_ms);
-                    expected = np.position_ms.map(|p| (p, std::time::Instant::now(), playing));
+                    expected = np
+                        .position_ms
+                        .map(|p| (p, std::time::Instant::now(), playing));
                     if last_key.as_ref() != Some(&key) || jumped || force {
                         last_key = Some(key);
                         let label = match (&np.title, &np.artist) {
@@ -425,8 +427,14 @@ mod tests {
         assert!(!has(&sem, "art") && !has(&sem, "art_id"));
         // Primeiro estado da faixa: `art_id` + `art`.
         let com = to_body(&n, Some("abc123def456"), Some(&[0xff, 0xd8, 0xff]));
-        assert_eq!(get(&com, "art_id"), Some(&Value::Text("abc123def456".into())));
-        assert_eq!(get(&com, "art"), Some(&Value::Bytes(vec![0xff, 0xd8, 0xff])));
+        assert_eq!(
+            get(&com, "art_id"),
+            Some(&Value::Text("abc123def456".into()))
+        );
+        assert_eq!(
+            get(&com, "art"),
+            Some(&Value::Bytes(vec![0xff, 0xd8, 0xff]))
+        );
         // Estados seguintes: só `art_id`.
         let depois = to_body(&n, Some("abc123def456"), None);
         assert!(has(&depois, "art_id") && !has(&depois, "art"));

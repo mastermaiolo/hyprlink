@@ -129,9 +129,7 @@ fn read_file(path_part: &str) -> Option<Vec<u8>> {
         return None;
     }
     let bytes = percent_decode(path_part)?;
-    let path = std::path::PathBuf::from(std::ffi::OsString::from(
-        String::from_utf8(bytes).ok()?,
-    ));
+    let path = std::path::PathBuf::from(std::ffi::OsString::from(String::from_utf8(bytes).ok()?));
     let meta = std::fs::metadata(&path).ok()?;
     if !meta.is_file() || meta.len() > MAX_FILE {
         return None;
@@ -427,8 +425,16 @@ mod tests {
         assert!(peek(&cache, "file:///b.jpg").is_none());
 
         // URL novo → trabalha de novo; a falha também fica em cache.
-        assert!(cached_with(&cache, "file:///b.jpg", load(false)).await.is_none());
-        assert!(cached_with(&cache, "file:///b.jpg", load(false)).await.is_none());
+        assert!(
+            cached_with(&cache, "file:///b.jpg", load(false))
+                .await
+                .is_none()
+        );
+        assert!(
+            cached_with(&cache, "file:///b.jpg", load(false))
+                .await
+                .is_none()
+        );
         assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 }
