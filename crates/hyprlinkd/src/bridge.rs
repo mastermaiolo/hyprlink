@@ -1042,6 +1042,52 @@ async fn execute_more(b: &Arc<Bridge>, c: Command2) {
                 Err(why) => state::push_log(&ctx.hud, format!("[!] resposta recusada · {why}")),
             }
         }
+        Command2::OpenOnPhone { url, package } => {
+            let url = url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty());
+            let package = package
+                .map(|p| p.trim().to_string())
+                .filter(|p| !p.is_empty());
+            if url.is_none() && package.is_none() {
+                state::push_log(&ctx.hud, "[!] abrir no telemóvel recusado · nada a abrir");
+                return;
+            }
+            if let Some(u) = &url
+                && !crate::ctl::http_url_ok(u)
+            {
+                state::push_log(&ctx.hud, "[!] abrir no telemóvel recusado · só http(s)://");
+                return;
+            }
+            if let Some(p) = &package
+                && !crate::ctl::package_ok(p)
+            {
+                state::push_log(
+                    &ctx.hud,
+                    "[!] abrir no telemóvel recusado · nome de package inválido",
+                );
+                return;
+            }
+            if b.connection().is_none() {
+                b.fail(Op::Phone, ErrorKind::Offline);
+                return;
+            }
+            if let Some(u) = url {
+                if crate::ctl::phone_open_url(&ctx.active, &u).await {
+                    state::push_log(&ctx.hud, format!("[i] URL enviado ao telemóvel · {u}"));
+                } else {
+                    b.fail(Op::Phone, ErrorKind::Offline);
+                }
+            }
+            if let Some(p) = package {
+                if crate::ctl::phone_run_app(&ctx.active, &p).await {
+                    state::push_log(
+                        &ctx.hud,
+                        format!("[i] pedido para abrir no telemóvel · {p}"),
+                    );
+                } else {
+                    b.fail(Op::Phone, ErrorKind::Offline);
+                }
+            }
+        }
         Command2::DismissNotification(key) => dismiss_notification(b, key).await,
         Command2::DismissAllNotifications => {
             for key in state::active_notif_keys(&ctx.hud) {

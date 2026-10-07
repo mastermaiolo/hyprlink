@@ -41,6 +41,8 @@ pub const PHONE_DND: &str = "phone_audio.set_dnd";
 pub const INPUT_CONFIG: &str = "input.move";
 pub const SHARE_OFFER: &str = "share.file";
 pub const NOTIF_DISMISS: &str = "notification.dismiss";
+pub const PHONE_OPEN_URL: &str = "phone.open_url";
+pub const PHONE_RUN_APP: &str = "phone.run_app";
 pub const NOTIF_REPLY: &str = "notification.reply";
 /// Was in "proposed"; the phone already sends it.
 pub const NOTIF_POSTED: &str = "notification.post";

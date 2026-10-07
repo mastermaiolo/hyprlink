@@ -728,5 +728,18 @@ pub const TABLE: &[(&str, &str)] = &[
     ("novo atalho", "nuevo atajo"),
     ("máx. {} caracteres", "máx. {} caracteres"),
     ("Modo auricular", "Modo auricular"),
-    ("o telemóvel é o headset do PC: coluna e microfone num só interruptor", "el teléfono es el auricular del PC: altavoz y micrófono en un solo interruptor"),
+    (
+        "o telemóvel é o headset do PC: coluna e microfone num só interruptor",
+        "el teléfono es el auricular del PC: altavoz y micrófono en un solo interruptor",
+    ),
+    // ── abrir no telemóvel ──
+    ("Abrir no telemóvel", "Abrir en el teléfono"),
+    ("https://…", "https://…"),
+    ("ABRIR NO TELEMÓVEL", "ABRIR EN EL TELÉFONO"),
+    ("pacote: com.whatsapp", "paquete: com.whatsapp"),
+    ("ABRIR APP", "ABRIR APP"),
+    ("só http:// ou https://", "solo http:// o https://"),
+    ("nome de pacote inválido", "nombre de paquete no válido"),
+    ("o telemóvel decide se abre já ou mostra uma notificação", "el teléfono decide si abre al momento o muestra una notificación"),
+    ("Telemóvel", "Teléfono"),
 ];

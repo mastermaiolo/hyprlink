@@ -178,6 +178,14 @@ fn all_commands2() -> Vec<Command2> {
             idx: 1,
             text: "Já vou, 5 min".into(),
         },
+        OpenOnPhone {
+            url: Some("https://exemplo.pt/a?b=c".into()),
+            package: None,
+        },
+        OpenOnPhone {
+            url: None,
+            package: Some("com.whatsapp".into()),
+        },
         SetGesture("swipe_left_3".into(), false),
         ClearFileHistory,
     ]

@@ -340,6 +340,13 @@ permite (ex: com atividade visível); senão mostra uma notificação tappable
 |---|---|---|
 | `phone.open_url` | D→P push | `{url}` — ACTION_VIEW |
 | `phone.run_app` | D→P push | `{package}` — launch intent do package (ex: `com.whatsapp`) |
+
+Quem os envia: `hyprlinkctl phone-url|phone-app` e a página Partilha da GUI
+(`Command2::OpenOnPhone {url?, package?}`, o mesmo caminho em `ctl.rs`). A GUI
+e o daemon só aceitam `http://`/`https://` (sem espaços, ≤ 2048 caracteres) em
+`url` e um nome de package Android válido (`com.whatsapp`: segmentos
+alfanuméricos separados por pontos, pelo menos dois); o que falhar fica
+recusado no Diário e nada é enviado.
 | `phone.media` | D→P push | `{action:"previous"\|"play_pause"\|"next"}` — controla a MediaSession ativa do telemóvel (o inverso do `media.command`, que controla o MPRIS do PC); sem resposta — o telemóvel reenvia `phone.status` com o `now_playing` atualizado depois de agir |
 
 ### phone.status (P→D, o telemóvel reporta o estado dele)

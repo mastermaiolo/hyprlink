@@ -233,6 +233,8 @@ pub enum Op {
     Media,
     Dispatch,
     PhoneAudio,
+    /// Abrir um URL ou uma app no telemóvel.
+    Phone,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -423,6 +425,33 @@ pub struct GestureLast {
 }
 
 /// A user-defined `hyprctl dispatch`, also offered on the phone.
+/// Só `http://` e `https://`, com anfitrião, sem espaços nem controlos e até
+/// 2048 caracteres — o que a GUI deixa mandar para o telemóvel.
+pub fn http_url_ok(url: &str) -> bool {
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"));
+    url.chars().count() <= 2048
+        && !url.chars().any(|c| c.is_whitespace() || c.is_control())
+        && rest.is_some_and(|r| !r.is_empty() && !r.starts_with('/'))
+}
+
+/// Nome de package Android: segmentos `[A-Za-z][A-Za-z0-9_]*` separados por
+/// pontos, pelo menos dois (ex.: `com.whatsapp`).
+pub fn package_ok(package: &str) -> bool {
+    let mut segments = 0;
+    for seg in package.split('.') {
+        let mut chars = seg.chars();
+        if !chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+            || !chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            return false;
+        }
+        segments += 1;
+    }
+    segments >= 2 && package.len() <= 255
+}
+
 /// Limites de um atalho (nome visível e comando do `hyprctl dispatch`); a GUI
 /// avisa antes e o daemon recusa o que passar.
 pub const SHORTCUT_NAME_MAX: usize = 40;
@@ -701,6 +730,12 @@ pub enum Command2 {
         key: String,
         idx: u32,
         text: String,
+    },
+    /// Abre no telemóvel um URL (`phone.open_url`, só http/https) e/ou uma app
+    /// (`phone.run_app`, nome do package). Pelo menos um tem de vir.
+    OpenOnPhone {
+        url: Option<String>,
+        package: Option<String>,
     },
 }
 

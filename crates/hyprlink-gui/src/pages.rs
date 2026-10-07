@@ -995,6 +995,78 @@ pub fn notifications(app: &App) -> El<'_> {
 
 // ═════════════════════════ 07 PARTILHA ═════════════════════════
 
+/// «Abrir no telemóvel»: URL (só http/https) e/ou app (nome do package).
+fn open_on_phone(app: &App) -> El<'_> {
+    let linked = app.primary().is_some();
+    let url = app.phone_url.trim();
+    let url_ok = linked && crate::link::http_url_ok(url);
+    let pkg = app.phone_pkg.trim();
+    let pkg_ok = linked && crate::link::package_ok(pkg);
+    let hint = |on: bool, bad: bool, msg: &'static str| -> El<'static> {
+        if on && bad {
+            El::from(mono(t(msg), HOT).size(10.5))
+        } else {
+            gap(0.0)
+        }
+    };
+    column![
+        subhead("C", t("Abrir no telemóvel")),
+        row![
+            text_input(t("https://…"), &app.phone_url)
+                .on_input(Message::PhoneUrl)
+                .on_submit(Message::PhoneUrlOpen)
+                .font(MONO)
+                .size(12)
+                .padding(Padding::from([9, 12]))
+                .style(theme::input),
+            hgap(space::S),
+            btn(
+                t("ABRIR NO TELEMÓVEL"),
+                theme::primary,
+                url_ok.then_some(Message::PhoneUrlOpen)
+            ),
+        ]
+        .align_y(Alignment::Center),
+        hint(
+            !url.is_empty(),
+            !crate::link::http_url_ok(url),
+            "só http:// ou https://"
+        ),
+        gap(space::M),
+        row![
+            text_input(t("pacote: com.whatsapp"), &app.phone_pkg)
+                .on_input(Message::PhonePkg)
+                .on_submit(Message::PhonePkgOpen)
+                .font(MONO)
+                .size(12)
+                .padding(Padding::from([9, 12]))
+                .style(theme::input),
+            hgap(space::S),
+            btn(
+                t("ABRIR APP"),
+                theme::primary,
+                pkg_ok.then_some(Message::PhonePkgOpen)
+            ),
+        ]
+        .align_y(Alignment::Center),
+        hint(
+            !pkg.is_empty(),
+            !crate::link::package_ok(pkg),
+            "nome de pacote inválido"
+        ),
+        gap(space::S),
+        if linked {
+            mono(
+                t("o telemóvel decide se abre já ou mostra uma notificação"),
+                FAINT,
+            )
+        } else {
+            mono(t("precisa de um telemóvel ligado"), FAINT)
+        },
+    ]
+    .into()
+}
+
 pub fn share(app: &App) -> El<'_> {
     // ── clipboard ──
     let q = app.clip_query.to_lowercase();
@@ -1076,6 +1148,8 @@ pub fn share(app: &App) -> El<'_> {
         clip_list,
         gap(space::M),
         mono(t("sincroniza sozinha; texto e PNG · clip.rs"), FAINT),
+        gap(space::XXL),
+        open_on_phone(app),
     ]
     .width(fill_portion(1));
 

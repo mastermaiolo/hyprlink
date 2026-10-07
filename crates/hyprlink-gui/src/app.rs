@@ -227,6 +227,9 @@ pub struct App {
     pub shortcuts: Vec<Shortcut>,
     /// Página Secretária: modo de edição dos atalhos, rascunhos por posição
     /// (só as linhas alteradas) e o rascunho do atalho novo.
+    /// Página Partilha: URL e pacote a abrir no telemóvel.
+    pub phone_url: String,
+    pub phone_pkg: String,
     pub sc_edit: bool,
     pub sc_drafts: std::collections::HashMap<usize, (String, String)>,
     pub sc_new: (String, String),
@@ -317,6 +320,10 @@ pub enum Message {
     Trackpad(TrackpadConfig),
     NotifApp(Option<String>),
     NotifQuery(String),
+    PhoneUrl(String),
+    PhoneUrlOpen,
+    PhonePkg(String),
+    PhonePkgOpen,
     ShortcutsEdit(bool),
     ShortcutName(usize, String),
     ShortcutCommand(usize, String),
@@ -466,6 +473,8 @@ impl App {
             },
             active_window: None,
             shortcuts: Vec::new(),
+            phone_url: String::new(),
+            phone_pkg: String::new(),
             sc_edit: false,
             sc_drafts: std::collections::HashMap::new(),
             sc_new: (String::new(), String::new()),
@@ -1072,6 +1081,28 @@ impl App {
                 self.more(Command2::RenameDevice(id, n));
                 self.rename_for = None;
                 self.rename_input.clear();
+            }
+            Message::PhoneUrl(s) => self.phone_url = s,
+            Message::PhonePkg(s) => self.phone_pkg = s,
+            Message::PhoneUrlOpen => {
+                let url = self.phone_url.trim().to_string();
+                if crate::link::http_url_ok(&url) {
+                    self.phone_url.clear();
+                    self.more(Command2::OpenOnPhone {
+                        url: Some(url),
+                        package: None,
+                    });
+                }
+            }
+            Message::PhonePkgOpen => {
+                let package = self.phone_pkg.trim().to_string();
+                if crate::link::package_ok(&package) {
+                    self.phone_pkg.clear();
+                    self.more(Command2::OpenOnPhone {
+                        url: None,
+                        package: Some(package),
+                    });
+                }
             }
             Message::ShortcutsEdit(on) => {
                 self.sc_edit = on;

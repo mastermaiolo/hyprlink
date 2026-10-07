@@ -53,6 +53,8 @@ a app Android tem versões próprias (`versionName`).
 - **Atalhos editáveis** na página Secretária (adicionar, editar, remover) e
   **Modo auricular** (coluna + microfone) na página Áudio; o daemon valida
   os atalhos (vazios, 40/200 caracteres, máximo de 32).
+- **Abrir no telemóvel pela GUI** (página Partilha): URL (só http/https) com
+  «Abrir no telemóvel» e nome de pacote com «Abrir app».
 
 ### PC
 - `hyprlink-daemon` sem janela; a **GUI** (`hyprlink-gui`, iced) é um processo

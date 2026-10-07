@@ -162,6 +162,32 @@ pub async fn serve(ctl: Ctl) {
     }
 }
 
+/// `phone.open_url` (PROTOCOL.md §phone): o telemóvel decide se abre direto ou
+/// mostra uma notificação. `false` = sem telemóvel ligado. Partilhado pelo
+/// `hyprlinkctl phone-url` e pela GUI (`Command2::OpenOnPhone`).
+pub async fn phone_open_url(active: &ActiveConn, url: &str) -> bool {
+    let body = Some(ciborium::Value::Map(vec![(
+        ciborium::Value::Text("url".into()),
+        ciborium::Value::Text(url.into()),
+    )]));
+    crate::active::push(active, "phone.open_url", body)
+        .await
+        .is_some()
+}
+
+/// `phone.run_app`: abre o package no telemóvel. `false` = sem telemóvel.
+pub async fn phone_run_app(active: &ActiveConn, package: &str) -> bool {
+    let body = Some(ciborium::Value::Map(vec![(
+        ciborium::Value::Text("package".into()),
+        ciborium::Value::Text(package.into()),
+    )]));
+    crate::active::push(active, "phone.run_app", body)
+        .await
+        .is_some()
+}
+
+pub use hyprlink_proto::link::{http_url_ok, package_ok};
+
 async fn handle(line: &str, ctl: &Ctl) -> String {
     let mut parts = line.split_whitespace();
     let cmd = parts.next().unwrap_or("");
@@ -343,25 +369,19 @@ async fn handle(line: &str, ctl: &Ctl) -> String {
         // se abre direto ou mostra notificação tappable, ver PROTOCOL.md).
         "phone-url" if !rest.is_empty() => {
             let url = rest.join(" ");
-            let body = Some(ciborium::Value::Map(vec![(
-                ciborium::Value::Text("url".into()),
-                ciborium::Value::Text(url.clone()),
-            )]));
-            match crate::active::push(&ctl.active, "phone.open_url", body).await {
-                Some(_) => format!("ok enviado pro telemóvel: {url}"),
-                None => "erro: sem telemóvel conectado".to_string(),
+            if phone_open_url(&ctl.active, &url).await {
+                format!("ok enviado pro telemóvel: {url}")
+            } else {
+                "erro: sem telemóvel conectado".to_string()
             }
         }
 
         "phone-app" if rest.len() == 1 => {
             let package = rest[0];
-            let body = Some(ciborium::Value::Map(vec![(
-                ciborium::Value::Text("package".into()),
-                ciborium::Value::Text(package.into()),
-            )]));
-            match crate::active::push(&ctl.active, "phone.run_app", body).await {
-                Some(_) => format!("ok pedido pra abrir {package} no telemóvel"),
-                None => "erro: sem telemóvel conectado".to_string(),
+            if phone_run_app(&ctl.active, package).await {
+                format!("ok pedido pra abrir {package} no telemóvel")
+            } else {
+                "erro: sem telemóvel conectado".to_string()
             }
         }
 
@@ -388,5 +408,51 @@ async fn handle(line: &str, ctl: &Ctl) -> String {
         _ => format!(
             "erro: comando desconhecido: {cmd} (ping, status, send, dispatch, lock, tap, speaker, headset, mic, notif, url, phone-url, phone-app, phone-media)"
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn so_http_e_https() {
+        assert!(http_url_ok("https://exemplo.pt/a?b=c#d"));
+        assert!(http_url_ok("http://192.168.1.2:8080"));
+        for mau in [
+            "",
+            "exemplo.pt",
+            "ftp://exemplo.pt",
+            "javascript:alert(1)",
+            "intent://x#Intent;end",
+            "file:///etc/passwd",
+            "https://",
+            "https:///x",
+            "https://a b.pt",
+            "https://a.pt/\n",
+            "HTTPS-x://a.pt",
+        ] {
+            assert!(!http_url_ok(mau), "devia recusar {mau:?}");
+        }
+        assert!(!http_url_ok(&format!("https://a.pt/{}", "x".repeat(2048))));
+    }
+
+    #[test]
+    fn nomes_de_package() {
+        assert!(package_ok("com.whatsapp"));
+        assert!(package_ok("org.thoughtcrime.securesms"));
+        assert!(package_ok("com.google.android.apps_x.v2"));
+        for mau in [
+            "", "whatsapp", "com.", ".com", "com..x", "com.1x", "com.a-b", "com.a b",
+        ] {
+            assert!(!package_ok(mau), "devia recusar {mau:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn sem_telemovel_nao_envia() {
+        let active = crate::active::new_registry();
+        assert!(!phone_open_url(&active, "https://exemplo.pt").await);
+        assert!(!phone_run_app(&active, "com.whatsapp").await);
     }
 }

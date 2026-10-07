@@ -590,6 +590,14 @@ impl More {
                     Self::packet(out, t, Dir::Tx, p::NOTIF_REPLY, 48 + text.len(), key);
                 }
             }
+            Command2::OpenOnPhone { url, package } => {
+                if let Some(u) = url {
+                    Self::packet(out, t, Dir::Tx, p::PHONE_OPEN_URL, 48 + u.len(), u);
+                }
+                if let Some(pkg) = package {
+                    Self::packet(out, t, Dir::Tx, p::PHONE_RUN_APP, 48 + pkg.len(), pkg);
+                }
+            }
             Command2::DismissAllNotifications => {
                 self.notifs.clear();
                 Self::packet(out, t, Dir::Tx, p::NOTIF_DISMISS, 24, "all");

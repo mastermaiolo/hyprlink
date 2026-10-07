@@ -178,6 +178,7 @@ fn op(o: Op) -> &'static str {
         Op::Media => t("Multimédia"),
         Op::Dispatch => t("Dispatch"),
         Op::PhoneAudio => t("Volume do telemóvel"),
+        Op::Phone => t("Telemóvel"),
     }
 }
 

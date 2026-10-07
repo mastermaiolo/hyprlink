@@ -677,5 +677,18 @@ pub const TABLE: &[(&str, &str)] = &[
     ("novo atalho", "新快捷方式"),
     ("máx. {} caracteres", "最多 {} 个字符"),
     ("Modo auricular", "耳机模式"),
-    ("o telemóvel é o headset do PC: coluna e microfone num só interruptor", "手机作为电脑的耳机：扬声器和麦克风一个开关"),
+    (
+        "o telemóvel é o headset do PC: coluna e microfone num só interruptor",
+        "手机作为电脑的耳机：扬声器和麦克风一个开关",
+    ),
+    // ── abrir no telemóvel ──
+    ("Abrir no telemóvel", "在手机上打开"),
+    ("https://…", "https://…"),
+    ("ABRIR NO TELEMÓVEL", "在手机上打开"),
+    ("pacote: com.whatsapp", "包名：com.whatsapp"),
+    ("ABRIR APP", "打开应用"),
+    ("só http:// ou https://", "仅限 http:// 或 https://"),
+    ("nome de pacote inválido", "包名无效"),
+    ("o telemóvel decide se abre já ou mostra uma notificação", "手机决定是立即打开还是显示通知"),
+    ("Telemóvel", "手机"),
 ];
