@@ -47,6 +47,9 @@ a app Android tem versões próprias (`versionName`).
 - **Câmara pedida pelo telemóvel** (`webcam.request` → `webcam.request_result`):
   o daemon arranca a câmara pelo mesmo caminho da GUI e recusa se já estiver
   ativa.
+- **Bateria do PC** no telemóvel com `charging` (a carregar de facto) e
+  `plugged` (fio ligado) separados, e `present:false` sem bateria; empurrada
+  quando muda e de 5 em 5 minutos, só com o telemóvel ligado.
 
 ### PC
 - `hyprlink-daemon` sem janela; a **GUI** (`hyprlink-gui`, iced) é um processo

@@ -188,7 +188,18 @@ o que o PC faz. Estado para a GUI: `Event2::Gestures {rules, last}` no socket lo
 | `hypr.event` | D→P push | `{event: String}` (ex: "workspace>>2") — lido de `/tmp/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock` |
 
 ### battery
-`battery.request` (P→D req) · `battery.state` (bidi, mesmo tipo — `{level:Int, charging:Bool}`)
+`battery.request` (P→D req) · `battery.state` (bidi, mesmo tipo):
+
+- **P→D** (bateria do telemóvel): `{level:Int, charging:Bool}`.
+- **D→P** (bateria do PC), resposta ao `battery.request` e também empurrado:
+  `{level:Int, charging:Bool, plugged:Bool, present:Bool}`. `charging` = a
+  carregar de facto (`Charging`); cheia ligada à corrente (`Full`) ou com limite
+  de carga (`Not charging`) dão `charging:false, plugged:true`. `plugged` = fio
+  ligado (fonte `Mains` com `online=1` em `/sys/class/power_supply`; a carregar
+  também conta). `present:false` = PC sem bateria: só esse campo vai, os outros
+  faltam (nunca valores inventados). O daemon empurra quando `level`, `charging`,
+  `plugged` ou `present` mudam (verificação de 30 s), de 5 em 5 minutos como
+  batimento e na primeira verificação depois de o telemóvel ligar; só com telemóvel ligado.
 
 ### media
 `media.command` (P→D one-way, `{command}`: play_pause/play/pause/next/previous)
