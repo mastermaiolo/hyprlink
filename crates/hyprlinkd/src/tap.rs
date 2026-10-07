@@ -2,13 +2,19 @@
 //! (`pipewiresrc` no monitor) — sem bindings C do libpipewire, o GStreamer
 //! já faz esse trabalho.
 //!
-//! Como o tap se adapta ao roteamento (robustez, 2026-10-05):
-//! - **Modo normal** (`sink: None`): captura SEM `target-object`, só com
-//!   `stream.capture.sink=true` — o WirePlumber liga a captura ao monitor
-//!   da saída padrão E SEGUE-A sozinha: ligar auscultadores, Bluetooth a
-//!   entrar/sair ou trocar de saída a meio não exige parar o tap.
-//! - **Modo coluna** (`sink: Some(name)`, ver `speaker.rs`): nome explícito
-//!   pro sink virtual — determinístico mesmo que o default mude a meio.
+//! Como o tap liga ao áudio (2026-10-07, depois de captar o microfone):
+//! - **Sempre com `target-object` explícito.** Nunca se confia no WirePlumber
+//!   para escolher: sem alvo (ou com `stream.capture.sink` mal lido) ele liga
+//!   a captura à fonte padrão, o MICROFONE. Modo normal: resolve-se a saída
+//!   padrão (`wpctl inspect @DEFAULT_AUDIO_SINK@` → `node.name`); se não se
+//!   conseguir resolver, o tap **falha com erro claro** em vez de cair no
+//!   microfone. Modo coluna (`speaker.rs`): o sink virtual, por nome.
+//! - **`stream.capture.sink=(string)true`**: o GStreamer serializa um
+//!   booleano como `TRUE` e o PipeWire só reconhece `true`/`1`; o prefixo
+//!   `(string)` entrega o texto certo (medido com `pw-dump`, ver `pipeline_str`).
+//! - **Saída padrão a mudar** (auscultadores, Bluetooth): um vigia reavalia-a
+//!   de 3 em 3 s e, se mudou, derruba o pipeline; a supervisão reconstrói-o
+//!   já com o alvo novo.
 //! - **Recuperação**: se o pipeline morrer (saída desapareceu, PipeWire
 //!   reiniciou), a supervisão volta a construir depois de um backoff
 //!   crescente (1s → 15s) — em vez de parar de vez como antes. Backoff
@@ -60,6 +66,50 @@ fn default_sink_name() -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// `node.name` na saída de `wpctl inspect <id>`: `  * node.name = "xxx"`
+/// (o `*` marca propriedades que não vêm só do cliente).
+fn parse_inspect_node_name(out: &str) -> Option<String> {
+    out.lines().find_map(|l| {
+        let l = l.trim_start().trim_start_matches('*').trim_start();
+        let v = l.strip_prefix("node.name")?.trim_start().strip_prefix('=')?;
+        let v = v.trim().trim_matches('"');
+        (!v.is_empty()).then(|| v.to_string())
+    })
+}
+
+/// Saída padrão atual como nome de nó do PipeWire: `wpctl` primeiro, `pactl`
+/// como segunda via. `None` = não se sabe (o tap recusa-se a arrancar).
+fn resolve_default_sink() -> Option<String> {
+    std::process::Command::new("wpctl")
+        .args(["inspect", "@DEFAULT_AUDIO_SINK@"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| parse_inspect_node_name(&String::from_utf8_lossy(&o.stdout)))
+        .or_else(default_sink_name)
+}
+
+/// Alvo da captura: o sink pedido (modo coluna) ou o padrão resolvido agora.
+/// Nunca devolve «sem alvo» — era isso que ligava ao microfone.
+fn resolve_target(
+    sink: Option<&str>,
+    resolver: impl FnOnce() -> Option<String>,
+) -> Result<String, String> {
+    let name = match sink {
+        Some(n) => n.to_string(),
+        None => resolver().ok_or_else(|| {
+            "não consegui resolver a saída padrão (wpctl/pactl) — recuso-me a capturar sem alvo, \
+             que ligaria ao microfone"
+                .to_string()
+        })?,
+    };
+    // O nome entra entre aspas na descrição do pipeline.
+    if name.is_empty() || name.contains(['"', '\\', '\n']) {
+        return Err(format!("nome de saída inválido: {name:?}"));
+    }
+    Ok(name)
+}
+
 /// Uma linha de diagnóstico do ambiente de áudio — as falhas de ambiente
 /// (sem pipewire-pulse, sem gst-plugin-pipewire) deixam de ser silêncio.
 fn env_line() -> String {
@@ -84,24 +134,21 @@ fn env_line() -> String {
     format!("audio: {server} · {src} · saída padrão: {sink}")
 }
 
-/// Pipeline do tap. `None` = seguir a saída padrão (sem `target-object`: o
-/// WirePlumber religa ao monitor do default a cada mudança); `Some(nome)` =
-/// capturar esse sink em concreto (modo coluna).
+/// Pipeline do tap: captura o monitor do sink `target` (nome do nó).
 ///
 /// ponytail: "target-object=<sink>.monitor" NÃO existe como nó nativo do
-/// PipeWire (é convenção do PulseAudio) — sem correspondência, o WirePlumber
-/// liga a captura à fonte padrão (o MICROFONE físico). A forma certa de
-/// "escutar" um sink: apontar `target-object` pro próprio nó do sink e marcar
-/// a stream com `stream.capture.sink=true` (liga nas portas de monitor). No
-/// modo normal NÃO se põe target-object nenhum — só o
-/// `stream.capture.sink=true` — e é o próprio WirePlumber que escolhe o
-/// monitor do default e o segue quando o default muda.
-fn pipeline_str(sink: Option<&str>) -> String {
-    let target = sink
-        .map(|s| format!(" target-object=\"{s}\""))
-        .unwrap_or_default();
+/// PipeWire (é convenção do PulseAudio). A forma certa de "escutar" um sink
+/// é apontar `target-object` ao próprio nó do sink e marcar a stream com
+/// `stream.capture.sink=true`, que a liga nas portas de monitor.
+/// **Armadilha (medida em 2026-10-07, PipeWire 1.6.9):** `props,
+/// stream.capture.sink=true` chega ao PipeWire como `"TRUE"` (o GStreamer
+/// serializa booleanos em maiúsculas) e não é reconhecido — sem ele, o
+/// WirePlumber liga a stream à fonte padrão, o microfone, mesmo com
+/// `target-object`. `(string)true` chega como `true`.
+fn pipeline_str(target: &str) -> String {
     format!(
-        "pipewiresrc{target} stream-properties=\"props,stream.capture.sink=true\" \
+        "pipewiresrc target-object=\"{target}\" \
+         stream-properties=\"props,stream.capture.sink=(string)true\" \
          ! audioconvert ! audioresample \
          ! audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved \
          ! appsink name=hyprlink_tap sync=false max-buffers=8 drop=true"
@@ -205,11 +252,9 @@ pub async fn start(
             format!("[+] audio tap iniciado · captura fixa de {name}"),
         ),
         None => {
-            let atual = default_sink_name()
-                .unwrap_or_else(|| "desconhecida (a seguir a padrão)".to_string());
             push_log(
                 &hud,
-                format!("[+] audio tap iniciado · a seguir a saída padrão (agora: {atual})"),
+                "[+] audio tap iniciado · a seguir a saída padrão".to_string(),
             );
         }
     }
@@ -285,7 +330,18 @@ async fn run_once(
 ) -> TapEnd {
     // Montar o pipeline só falha por ambiente (elemento em falta) — não
     // passa com o tempo, por isso é fatal e não entra no backoff.
-    let pipeline = match gst::parse::launch(&pipeline_str(sink)) {
+    let target = match tokio::task::spawn_blocking({
+        let sink = sink.map(str::to_string);
+        move || resolve_target(sink.as_deref(), resolve_default_sink)
+    })
+    .await
+    {
+        Ok(Ok(t)) => t,
+        Ok(Err(e)) => return TapEnd::Fatal(e),
+        Err(_) => return TapEnd::Fatal("a resolução da saída padrão falhou".into()),
+    };
+    push_log(hud, format!("[i] audio tap: a capturar {target}"));
+    let pipeline = match gst::parse::launch(&pipeline_str(&target)) {
         Ok(el) => match el.downcast::<gst::Pipeline>() {
             Ok(p) => p,
             Err(_) => return TapEnd::Fatal("pipeline inesperado".into()),
@@ -317,6 +373,37 @@ async fn run_once(
             return TapEnd::Stopped;
         }
         *guard = Some(pipeline.clone());
+    }
+
+    // Vigia da saída padrão (só no modo normal): se mudou, derruba o pipeline
+    // e a supervisão reconstrói-o com o alvo novo. Sai sozinho quando a
+    // sessão acaba (o handle deixa de ter este pipeline).
+    if sink.is_none() {
+        let (handle_w, pipeline_w, hud_w, target_w) =
+            (handle.clone(), pipeline.clone(), hud.clone(), target.clone());
+        std::thread::spawn(move || {
+            let ours =
+                || handle_w.lock().unwrap().as_ref() == Some(&pipeline_w);
+            loop {
+                for _ in 0..30 {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    if !ours() {
+                        return;
+                    }
+                }
+                match resolve_default_sink() {
+                    Some(now) if now != target_w => {
+                        push_log(
+                            &hud_w,
+                            format!("[i] audio tap: saída padrão mudou ({target_w} → {now}), a religar"),
+                        );
+                        let _ = pipeline_w.set_state(gst::State::Null);
+                        return;
+                    }
+                    _ => {}
+                }
+            }
+        });
     }
 
     // Bus: logar erros e DERRUBAR o pipeline (Null desbloqueia o
@@ -459,22 +546,48 @@ async fn run_once(
 mod tests {
     use super::*;
 
-    /// Os dois modos têm de diferir EXATAMENTE no target-object: o normal
-    /// não pode fixar nome nenhum (é o que faz o WirePlumber seguir o
-    /// default), o coluna tem de fixar o sink virtual.
+    /// O alvo é sempre explícito e o booleano vai como texto: sem isto o
+    /// PipeWire não reconhece `stream.capture.sink` e liga ao microfone.
     #[test]
-    fn pipeline_variants() {
-        let normal = pipeline_str(None);
-        assert!(
-            !normal.contains("target-object"),
-            "normal não pode fixar: {normal}"
-        );
-        assert!(normal.contains("stream.capture.sink=true"));
-        assert!(normal.contains("channels=2"));
+    fn pipeline_leva_alvo_e_capture_sink_como_texto() {
+        for alvo in ["easyeffects_sink", "hyprlink-speaker"] {
+            let p = pipeline_str(alvo);
+            assert!(p.contains(&format!("target-object=\"{alvo}\"")), "{p}");
+            assert!(p.contains("stream.capture.sink=(string)true"), "{p}");
+            assert!(!p.contains("stream.capture.sink=true"), "{p}");
+            assert!(p.contains("channels=2"));
+        }
+    }
 
-        let coluna = pipeline_str(Some("hyprlink-speaker"));
-        assert!(coluna.contains("target-object=\"hyprlink-speaker\""));
-        assert!(coluna.contains("stream.capture.sink=true"));
+    #[test]
+    fn sem_alvo_resolve_ou_falha_nunca_cai_no_microfone() {
+        // Modo normal: usa o resolvedor.
+        assert_eq!(
+            resolve_target(None, || Some("alsa_output.x".into())),
+            Ok("alsa_output.x".into())
+        );
+        // Não resolveu: erro claro, não «sem alvo».
+        let e = resolve_target(None, || None).unwrap_err();
+        assert!(e.contains("microfone"), "{e}");
+        // Modo coluna: o nome pedido, sem consultar ninguém.
+        assert_eq!(
+            resolve_target(Some("hyprlink-speaker"), || panic!("não devia resolver")),
+            Ok("hyprlink-speaker".into())
+        );
+        // Nomes que partiriam a descrição do pipeline.
+        for mau in ["", "a\"b", "a\nb", "a\\b"] {
+            assert!(resolve_target(Some(mau), || None).is_err(), "{mau:?}");
+        }
+    }
+
+    #[test]
+    fn node_name_do_wpctl_inspect() {
+        let out = "id 78, type PipeWire:Interface:Node\n    application.id = \"com.github.wwmm.easyeffects\"\n  * client.id = \"181\"\n  * media.class = \"Audio/Sink\"\n  * node.description = \"Easy Effects Sink\"\n  * node.name = \"easyeffects_sink\"\n  * object.serial = \"51749\"\n";
+        assert_eq!(parse_inspect_node_name(out), Some("easyeffects_sink".into()));
+        // `node.description` não se confunde com `node.name`.
+        assert_eq!(parse_inspect_node_name("  * node.description = \"x\"\n"), None);
+        assert_eq!(parse_inspect_node_name(""), None);
+        assert_eq!(parse_inspect_node_name("  * node.name = \"\"\n"), None);
     }
 
     /// O bug do backoff: com o pipeline morto o handle está vazio, e o
@@ -502,7 +615,7 @@ mod tests {
     fn manual_pipeline() {
         gst::init().expect("GStreamer deveria inicializar");
         println!("{}", env_line());
-        let pipeline = gst::parse::launch(&pipeline_str(default_sink_name().as_deref()))
+        let pipeline = gst::parse::launch(&pipeline_str(&resolve_default_sink().expect("saída padrão")))
             .unwrap()
             .downcast::<gst::Pipeline>()
             .unwrap();
@@ -532,7 +645,7 @@ mod tests {
     #[ignore]
     fn manual_pipeline_loop() {
         gst::init().expect("GStreamer deveria inicializar");
-        let pipeline = gst::parse::launch(&pipeline_str(default_sink_name().as_deref()))
+        let pipeline = gst::parse::launch(&pipeline_str(&resolve_default_sink().expect("saída padrão")))
             .unwrap()
             .downcast::<gst::Pipeline>()
             .unwrap();
