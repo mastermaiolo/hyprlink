@@ -9,7 +9,7 @@
 #   --skip-checks  não corre cargo test/clippy (só para repetir o empacotamento)
 #
 # Saída em dist/: hyprlink-VERSÃO.tar.gz, .sha256 e notas-VERSÃO.md.
-# Publicar é à mão, ver docs/PUBLICAR.md.
+# Publicar é à mão: tag, push e gh release create com os ficheiros de dist/.
 set -euo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

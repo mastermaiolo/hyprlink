@@ -177,7 +177,6 @@ O daemon só reage a gestos que o utilizador ligou; um gesto desligado ou descon
 fica no Diário (`[i] gesture … (desligado)`) e **conta como «último gesto recebido»** na
 GUI mesmo assim. `volume` sem `dir` válido é ignorado. A app só **emite**; nunca decide
 o que o PC faz. Estado para a GUI: `Event2::Gestures {rules, last}` no socket local.
-Ver `android-design-kit/prompts/29-gestos.md` (o que a app tem de emitir).
 
 ### hypr
 | type | dir | body |

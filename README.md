@@ -16,7 +16,7 @@ diretamente com o PC.
 > [Estado atual](#estado-atual)). Use por sua conta e risco; relatórios de
 > erros são bem-vindos.
 
-![GUI do PC: Capa, Dispositivos, Secretária, Espelho, Áudio, Sensores, Presença e Diário](crates/hyprlink-gui/docs/screenshots/contact-sheet.png)
+![GUI do PC: índice das páginas](crates/hyprlink-gui/docs/screenshots/indice.png)
 
 *English summary at the [end of this file](#english).*
 
@@ -28,16 +28,10 @@ diretamente com o PC.
 │   ├── hyprlink-gui/         GUI do PC (iced, com tray próprio)
 │   ├── hyprlink-proto/       Contrato entre daemon, GUI e hyprlinkctl (+ textos em fmt.rs)
 │   └── hyprlinkctl/          Linha de comandos, para scripts e atalhos
-├── app android hyprlink/     App Android (Kotlin/Compose), com origem no Google AI Studio
-├── android-design-kit/       Kit de design da app: tokens, mockups e prompts
-│   └── prompts/              Prompts por aplicar (ordem em ORDEM.md); os feitos em prompts/Done/
-├── docs/
-│   ├── prompts-ai-studio/    Prompts soltos para o AI Studio (aplicados em aplicados/)
-│   ├── testes/               Relatórios do teste real e o prompt do Claude Code
-│   └── historico/            Planos e materiais antigos, só para consulta
 ├── contrib/                  Waybar, .desktop, script de instalação
-├── scripts/                  hyprlink-start.sh / hyprlink-stop.sh (daemon + GUI), gui-capture.sh
-├── PLANO_COMPLETAR.md        Estado e plano (a secção do topo é a mais recente)
+├── packaging/arch/           PKGBUILD local (pacote hyprlink-bridge)
+├── scripts/                  hyprlink-start.sh / hyprlink-stop.sh (daemon + GUI), gui-capture.sh, release.sh
+├── CHANGELOG.md              Alterações por versão
 └── PROTOCOL.md               Especificação do protocolo (fonte de verdade)
 ```
 
@@ -168,12 +162,14 @@ Opcional, nada disto está ligado por omissão: `mold` (`paru -S mold`, depois
 
 ## App Android
 
-Em `app android hyprlink/` — projeto Kotlin/Jetpack Compose que nasceu no
-[Google AI Studio](https://ai.studio) e é hoje evoluído a partir do
-`android-design-kit/` (design, mockups e prompts por ordem em `ORDEM.md`).
-Abra a pasta no Android Studio para compilar. O pacote de release assinado
-usa variáveis de ambiente (`KEYSTORE_PATH`, `STORE_PASSWORD`, `KEY_PASSWORD`);
-nunca guarde a keystore nem as palavras-passe no repositório.
+A app Android (Kotlin/Jetpack Compose) é desenvolvida e distribuída à parte;
+este repositório tem só o lado do PC: daemon, GUI e `hyprlinkctl`. Por agora,
+a app será disponibilizada como APK assinado nos
+[Releases](https://github.com/mastermaiolo/hyprlink/releases) deste
+repositório (ainda não publicado).
+
+Quem quiser escrever outro cliente tem o protocolo completo em
+[`PROTOCOL.md`](PROTOCOL.md).
 
 ## Protocolo
 
