@@ -228,6 +228,16 @@ pub fn switch<'a>(on: bool, f: impl Fn(bool) -> Message + 'a) -> El<'a> {
         .into()
 }
 
+/// Interruptor desativado (sem `on_toggle`): para o que o daemon ainda não faz.
+pub fn switch_off<'a>(on: bool) -> El<'a> {
+    toggler(on).size(18).style(theme::switch_style).into()
+}
+
+/// Nota «em breve» ao lado de um controlo desativado.
+pub fn soon_note<'a>() -> El<'a> {
+    kicker(hyprlink_gui::i18n::t("EM BREVE")).into()
+}
+
 /// A setting line: title + explanation on the left, control on the right.
 pub fn setting<'a>(
     title: impl text::IntoFragment<'a>,

@@ -186,6 +186,14 @@ motivo no Diário e devolve a lista guardada em `Event2::Shortcuts`) se houver
 nome ou comando vazios, nome com mais de 40 caracteres, comando com mais de 200
 ou mais de 32 atalhos. Os atalhos não são enviados ao telemóvel.
 
+### por implementar (só IPC GUI ↔ daemon)
+`Command::StartMirror` (espelho do ecrã), `Command::SetSensorBridge` (ponte de
+sensores) e `Command::SetRule` (regras de presença) não têm pacote no wire: o
+daemon responde `NotImplemented` (`Notice::Failed`). A GUI mostra os controlos
+desativados com «em breve» (constantes `MIRROR_SOON`, `SENSORS_SOON` e
+`PRESENCE_SOON` em `hyprlink-gui/src/app.rs`, a pôr a `false` quando o daemon
+os implementar) e não envia o comando.
+
 ### hypr
 | type | dir | body |
 |---|---|---|

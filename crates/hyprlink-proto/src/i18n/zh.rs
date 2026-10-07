@@ -689,6 +689,11 @@ pub const TABLE: &[(&str, &str)] = &[
     ("ABRIR APP", "打开应用"),
     ("só http:// ou https://", "仅限 http:// 或 https://"),
     ("nome de pacote inválido", "包名无效"),
-    ("o telemóvel decide se abre já ou mostra uma notificação", "手机决定是立即打开还是显示通知"),
+    (
+        "o telemóvel decide se abre já ou mostra uma notificação",
+        "手机决定是立即打开还是显示通知",
+    ),
     ("Telemóvel", "手机"),
+    // ── controlos por implementar no daemon ──
+    ("EM BREVE", "即将推出"),
 ];

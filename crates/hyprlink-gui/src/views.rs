@@ -539,11 +539,11 @@ pub fn cover(app: &App) -> El<'_> {
                 } else {
                     theme::primary
                 },
-                Some(if app.mirror_on {
-                    Message::MirrorStop
+                if app.mirror_on {
+                    Some(Message::MirrorStop)
                 } else {
-                    Message::MirrorStart
-                })
+                    (!crate::app::MIRROR_SOON).then_some(Message::MirrorStart)
+                }
             )
             .width(Length::Fill),
         ]
@@ -1398,8 +1398,13 @@ pub fn mirror_body(app: &App) -> El<'_> {
             btn(
                 t("▶  INICIAR ESPELHO"),
                 theme::primary,
-                Some(Message::MirrorStart),
+                (!crate::app::MIRROR_SOON).then_some(Message::MirrorStart),
             )
+        },
+        if crate::app::MIRROR_SOON {
+            soon_note()
+        } else {
+            gap(0.0)
         },
     ]
     .width(Length::Fill);
@@ -1730,7 +1735,13 @@ pub fn sensors_grid(app: &App) -> El<'_> {
             row![
                 kicker(name),
                 fill_x(),
-                switch(on, move |b| Message::Bridge(k, b))
+                if crate::app::SENSORS_SOON {
+                    row![soon_note(), hgap(space::S), switch_off(on)]
+                        .align_y(Alignment::Center)
+                        .into()
+                } else {
+                    switch(on, move |b| Message::Bridge(k, b))
+                }
             ]
             .align_y(Alignment::Center),
             gap(space::L),
@@ -1887,7 +1898,13 @@ pub fn presence_body(app: &App) -> El<'_> {
                 ]
                 .width(fill_portion(3))
                 .align_y(Alignment::Center),
-                switch(r.on, move |b| Message::Rule(i, b)),
+                if crate::app::PRESENCE_SOON {
+                    row![soon_note(), hgap(space::S), switch_off(r.on)]
+                        .align_y(Alignment::Center)
+                        .into()
+                } else {
+                    switch(r.on, move |b| Message::Rule(i, b))
+                },
             ]
             .align_y(Alignment::Center)
             .padding(Padding::from([14, 0])),

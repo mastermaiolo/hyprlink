@@ -740,6 +740,11 @@ pub const TABLE: &[(&str, &str)] = &[
     ("ABRIR APP", "ABRIR APP"),
     ("só http:// ou https://", "solo http:// o https://"),
     ("nome de pacote inválido", "nombre de paquete no válido"),
-    ("o telemóvel decide se abre já ou mostra uma notificação", "el teléfono decide si abre al momento o muestra una notificación"),
+    (
+        "o telemóvel decide se abre já ou mostra uma notificação",
+        "el teléfono decide si abre al momento o muestra una notificación",
+    ),
     ("Telemóvel", "Teléfono"),
+    // ── controlos por implementar no daemon ──
+    ("EM BREVE", "PRÓXIMAMENTE"),
 ];

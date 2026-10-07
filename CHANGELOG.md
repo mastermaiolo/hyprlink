@@ -55,6 +55,9 @@ a app Android tem versões próprias (`versionName`).
   os atalhos (vazios, 40/200 caracteres, máximo de 32).
 - **Abrir no telemóvel pela GUI** (página Partilha): URL (só http/https) com
   «Abrir no telemóvel» e nome de pacote com «Abrir app».
+- **Controlos por implementar** (espelhar ecrã, ponte de sensores, regras de
+  presença) ficam desativados na GUI com a nota «em breve», em vez de darem
+  erro ao carregar.
 
 ### PC
 - `hyprlink-daemon` sem janela; a **GUI** (`hyprlink-gui`, iced) é um processo

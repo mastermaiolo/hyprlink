@@ -352,6 +352,13 @@ pub enum Message {
     DownloadsSave,
 }
 
+/// O daemon ainda responde `NotImplemented` a estes comandos (espelho do
+/// ecrã, ponte de sensores, regras de presença): a GUI mostra-os desativados
+/// com «em breve». Passar a `false` quando o daemon os implementar.
+pub const MIRROR_SOON: bool = true;
+pub const SENSORS_SOON: bool = true;
+pub const PRESENCE_SOON: bool = true;
+
 impl App {
     pub fn boot() -> (Self, Task<Message>) {
         let start = std::env::var("HYPRLINK_SECTION")
@@ -969,6 +976,9 @@ impl App {
             Message::Fps(f) => self.mirror_cfg.max_fps = f,
             Message::Scale(s) => self.mirror_cfg.scale = s,
             Message::MirrorStart => {
+                if MIRROR_SOON {
+                    return Task::none();
+                }
                 self.mirror_on = true;
                 self.link.send(Command::StartMirror(self.mirror_cfg));
             }
@@ -977,6 +987,9 @@ impl App {
                 self.link.send(Command::StopMirror);
             }
             Message::Bridge(k, b) => {
+                if SENSORS_SOON {
+                    return Task::none();
+                }
                 if b {
                     self.bridges.insert(k);
                 } else {
@@ -985,6 +998,9 @@ impl App {
                 self.link.send(Command::SetSensorBridge(k, b));
             }
             Message::Rule(i, b) => {
+                if PRESENCE_SOON {
+                    return Task::none();
+                }
                 if let Some(r) = self.rules.get_mut(i) {
                     r.on = b;
                 }
