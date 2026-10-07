@@ -66,26 +66,32 @@ impl More {
             last_gesture: None,
             shortcuts: vec![
                 Shortcut {
+                    id: "s1".into(),
                     label: "Terminal".into(),
                     dispatch: "exec kitty".into(),
                 },
                 Shortcut {
+                    id: "s2".into(),
                     label: "Bloquear".into(),
                     dispatch: "exec hyprlock".into(),
                 },
                 Shortcut {
+                    id: "s3".into(),
                     label: "Ecrã inteiro".into(),
                     dispatch: "fullscreen 1".into(),
                 },
                 Shortcut {
+                    id: "s4".into(),
                     label: "Scratchpad".into(),
                     dispatch: "togglespecialworkspace".into(),
                 },
                 Shortcut {
+                    id: "s5".into(),
                     label: "Captura".into(),
                     dispatch: "exec grimblast copy area".into(),
                 },
                 Shortcut {
+                    id: "s6".into(),
                     label: "Reaper".into(),
                     dispatch: "workspace 4".into(),
                 },
@@ -326,6 +332,14 @@ impl More {
                     .duration_since(std::time::UNIX_EPOCH)
                     .map_or(0, |d| d.as_secs())
                     .saturating_sub(3 * 3600 + 17 * 60),
+                env: ["shell", "lock_command", "screenshot_tool", "audio_backend"]
+                    .iter()
+                    .zip(["Noctalia v5", "noctalia msg session lock", "grim", "wpctl"])
+                    .map(|(k, v)| EnvValue {
+                        key: (*k).into(),
+                        value: v.into(),
+                    })
+                    .collect(),
             },
             next_id: 100,
             active_ws: 3,
@@ -497,6 +511,19 @@ impl More {
                 // Só o histórico: o que ainda está a decorrer fica.
                 self.transfers.retain(|t| t.state == TransferState::Active);
                 Self::more(out, Event2::Transfers(self.transfers.clone()));
+            }
+            Command2::ConfigureWebcam(c) => {
+                if self.webcam.is_some() {
+                    self.webcam = Some(c);
+                }
+                Self::packet(
+                    out,
+                    t,
+                    Dir::Tx,
+                    p::WEBCAM_CONFIGURE,
+                    48,
+                    format!("{}x{} {}fps {:?}", c.width, c.height, c.fps, c.codec).to_lowercase(),
+                );
             }
             Command2::StopWebcam => {
                 self.webcam = None;
@@ -714,6 +741,15 @@ impl More {
                     mbps,
                     fps: None,
                     codec: self.webcam.map(|c| c.codec),
+                    format: self.webcam.map(|c| WebcamFormat {
+                        width: c.width,
+                        height: c.height,
+                        fps: c.fps,
+                        codec: c.codec,
+                        lens: Some(CamLens::Back),
+                        rotation: 0,
+                        mirror: false,
+                    }),
                 })),
             );
         }

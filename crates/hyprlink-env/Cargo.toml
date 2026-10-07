@@ -1,0 +1,11 @@
+[package]
+name = "hyprlink-env"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Deteção do ambiente (hardware, shell, Hyprland, áudio) partilhada pelo daemon e pelo `hyprlinkctl doctor`"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+rustix = { version = "1", default-features = false, features = ["fs", "std"] }

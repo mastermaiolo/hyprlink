@@ -1,0 +1,7 @@
+hyprctl
+grimblast
+grim
+hyprlock
+loginctl
+pactl
+nvidia-smi

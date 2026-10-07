@@ -16,7 +16,7 @@ hyprlink-proto = { workspace = true, features = ["fmt"] }
 iced = { version = "0.14.0", features = ["canvas", "tokio", "qr_code"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 ksni = "0.3.6"
-tokio = { version = "1", features = ["net", "io-util"] }
+tokio = { version = "1", features = ["net", "io-util", "time"] }
 serde_json.workspace = true
 serde.workspace = true
 rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "tokio"] }

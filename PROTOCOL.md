@@ -177,14 +177,35 @@ O daemon só reage a gestos que o utilizador ligou; um gesto desligado ou descon
 fica no Diário (`[i] gesture … (desligado)`) e **conta como «último gesto recebido»** na
 GUI mesmo assim. `volume` sem `dir` válido é ignorado. A app só **emite**; nunca decide
 o que o PC faz. Estado para a GUI: `Event2::Gestures {rules, last}` no socket local.
+Ver `android-design-kit/prompts/29-gestos.md` (o que a app tem de emitir).
 
-### atalhos (só IPC GUI ↔ daemon, sem pacote no wire)
-`Command2::SetShortcuts(Vec<Shortcut{label, dispatch}>)` substitui a lista
+### shortcuts (atalhos da GUI no telemóvel)
+Os atalhos criados na página Secretária da GUI aparecem na aba Ações da app. A
+app **nunca** recebe nem envia o comando: só a identificação do atalho.
+
+| type | dir | body (CBOR) |
+|---|---|---|
+| `shortcuts.list` | D→P push | mapa `{shortcuts: [ {id: text, label: text}, … ]}`. `id`: texto estável de 8 hex (gerado ao criar o atalho, não é o índice; sobrevive a reordenar e a editar o rótulo/comando). `label`: texto (≤ 40 caracteres). **Sem o comando.** Não leva `icon` (a config não tem ícones; chave reservada, a app deve ignorar chaves que não conheça). Lista vazia = `shortcuts: []` (a app esconde os botões). A lista é **a lista inteira** (substitui a anterior). |
+| `shortcut.run` | P→D pedido/resposta | mapa `{id: text}` |
+| `shortcut.run_result` | D→P resposta (na mesma stream) | mapa `{id: text, ok: bool, error?: text}`; `error` é um de `"unknown shortcut"` (id que não existe na config: nada correu), `"rate limited"` (mais de 5 pedidos por segundo nessa ligação), `"failed"` (o Hyprland recusou o comando); nunca leva o texto do comando nem do Hyprland. |
+
+Quando: a lista vai logo a seguir ao `core.hello` e **outra vez 2 s depois**
+(idempotente, para o caso de a app ainda não estar a aceitar streams do PC no
+primeiro instante), e a cada alteração feita na GUI. O `shortcut.run` é um
+pedido/resposta: a app escreve, faz half-close e lê a resposta (tempo-limite 10 s,
+como os outros). O daemon só executa atalhos que existam na sua configuração e
+corre-os pelo mesmo caminho dos atalhos da GUI (`hypr::dispatch_checked`: sintaxe
+clássica ou Lua detetada, e o prefixo `lua:`); regista no Diário o **rótulo**
+(`[i] atalho do telemóvel · Navegador`), nunca o comando. Config antiga sem `id`:
+migra no arranque (cada atalho ganha um; nenhum se perde).
+
+#### Só IPC GUI ↔ daemon
+`Command2::SetShortcuts(Vec<Shortcut{id, label, dispatch}>)` substitui a lista
 guardada em `config.json` (`shortcuts`); a página Secretária da GUI adiciona,
 edita e remove. O daemon apara espaços e **recusa a lista toda** (regista o
 motivo no Diário e devolve a lista guardada em `Event2::Shortcuts`) se houver
 nome ou comando vazios, nome com mais de 40 caracteres, comando com mais de 200
-ou mais de 32 atalhos. Os atalhos não são enviados ao telemóvel.
+ou mais de 32 atalhos. `id` vazio = atalho novo (o daemon atribui); um `id` que já existe não muda. Depois de gravar, o daemon envia o `shortcuts.list` ao telemóvel.
 
 ### por implementar (só IPC GUI ↔ daemon)
 `Command::StartMirror` (espelho do ecrã), `Command::SetSensorBridge` (ponte de
@@ -411,6 +432,8 @@ dispositivos pareados.
 | `webcam.request` | P→D pedido/resposta | `{width?, height?, fps?, codec?}` — o telemóvel pede a câmara; omitidos = valores por omissão do `webcam.start`. Resposta `webcam.request_result`. Só aceita `codec` `"h264"` ou `"h265"`. |
 | `webcam.request_result` | D→P resposta | `{ok: Bool, error?: String}` — erro curto em inglês: `"already active"` (câmara ativa ou `webcam.start` à espera do vídeo; não reinicia), `"no phone connected"`, `"invalid parameters"`, `"unsupported codec"`. Em caso de `ok:true`, o daemon envia logo a seguir o `webcam.start` normal (D→P), pelo mesmo caminho do botão «Iniciar» da GUI. |
 | `webcam.stop` | D→P push | body irrelevante |
+| `webcam.configure` | D→P push (opcional) | `{width, height, fps, codec:"h264"\|"h265"}` — muda o formato com a câmara já ligada (a GUI junta toques seguidos em 300 ms). Telemóvel antigo ignora-o. |
+| `webcam.state` | P→D one-way (opcional) | `{width, height, fps, codec:"h264"\|"h265", lens?:"back"\|"front"\|…, rotation?:0\|90\|180\|270, mirror?:Bool}` — formato **efetivo** (o que a câmara/encoder entregam), enviado após arrancar o encoder e a cada mudança. O telemóvel é a fonte de verdade; sem este pacote a GUI mostra o pedido. |
 | `webcam.error` | P→D one-way | `{message}` |
 | `webcam.transform` | P→D one-way | `{rotation:0\|90\|180\|270, mirror:Bool}` |
 | `webcam.mic_start` | P→D anúncio (`has_payload=true`) | `{rate:48000, channels:1}` — `id` retornado correlaciona uni-stream de mic |
@@ -425,6 +448,11 @@ contínuo. Uni-stream de mic (P→D): 8 bytes id + PCM cru **16-bit LE,
 48000Hz, mono**, sem mais framing.
 
 A GUI oferece **H.264** e **H.265** (MJPEG foi retirado: o telemóvel só codifica H.264/HEVC) e mostra o codec **efetivo** (o byte acima, via `WebcamStats.codec`), não o pedido.
+
+Reinício local no telemóvel (resolução/codec): reabre o uni-stream de vídeo
+com o **mesmo id** da sessão em curso; o daemon substitui o pipeline sem novo
+`webcam.start`. Campos omitidos num `webcam.request` seguem a última
+preferência definida na GUI.
 
 Codec HEVC só é usado pelo telemóvel se houver encoder de hardware
 disponível — pode divergir do que o `webcam.start` pediu; o byte indicador é
@@ -443,29 +471,73 @@ início de sessão de streaming.
   vídeo/áudio não vêm especificados em lugar nenhum do projeto original —
   são decisões de implementação do daemon Rust (ver plano de fases em
   `~/.claude/plans/bubbly-frolicking-wilkes.md`).
-- **`hyprctl dispatch` nem sempre aceita a sintaxe clássica.** Em forks de
-  Hyprland baseados em Lua (confirmado num, apelidado "ryoku" pelo usuário
-  de desenvolvimento), `hyprctl dispatch <dispatcher> <args>` foi substituído
-  por avaliação de uma expressão Lua (`hl.dispatch(...)`) e o clássico falha
-  com exit code != 0 e uma mensagem tipo
-  `[string "return hl.dispatch(...)"]: ')' expected`. `hypr::dispatch` em
-  `hypr.rs` tenta o clássico primeiro (funciona em qualquer Hyprland padrão)
-  e só cai pro fallback Lua se ele falhar — sintaxe confirmada ao vivo:
-  - `workspace <n>` → `hl.dsp.focus({workspace = <n>})`
-  - `focuswindow address:0x..` → `hl.dsp.focus({window = "address:0x.."})`
-  - `closewindow address:0x..` → `hl.dsp.window.close({address = "address:0x.."})`
-  - `exec <cmd>` → `hl.dsp.exec_cmd("<cmd>")` (o comando como literal Lua;
-    **o `hyprctl dispatch exec …` clássico falha com `')' expected`** neste
-    Hyprland 0.56.2 — medido em 2026-10-07)
-  - `workspace e-1` / `name:x` → `hl.dsp.focus({workspace = "e-1"})`,
-    `killactive` → `hl.dsp.window.close()`,
-    `togglespecialworkspace [nome]` → `hl.dsp.workspace.toggle_special("nome")`,
-    `fullscreen [0|1]` → `hl.dsp.window.fullscreen()` / `({mode = 1})`
-  Outros dispatchers (`reload`, …) continuam sem tradução e falham em forks
-  assim com `error:"Hyprland refused the classic syntax and `x` has no Lua
-  mapping"`. `wpctl`, `grimblast` e afins **não são dispatchers**: vão por
-  `exec` ou, melhor, por `pc.action`.
+- **`hyprctl dispatch` nem sempre aceita a sintaxe clássica.** Com
+  configuração Lua (Hyprland 0.55+; confirmado no 0.56.2), `hyprctl dispatch`
+  é um atalho de `eval 'hl.dispatch(...)'` e recebe uma expressão Lua; o
+  clássico falha com exit code != 0 (`hl.dispatch: expected a dispatcher`).
+  `hypr::dispatch` **deteta o modo uma vez** com `hl.dsp.no_op()` e guarda-o
+  (volta a testar se um dispatch falhar; a opção `hypr_dispatch_mode` força um
+  modo): em modo clássico envia `<dispatcher> <args>`; em modo Lua traduz. A
+  tabela completa (com a fonte de cada linha, na wiki do Hyprland) está em
+  `docs/COMPATIBILIDADE.md` §2; os principais:
+  - `workspace <n>` / `e-1` / `name:x` → `hl.dsp.focus({ workspace = "<n>" })`
+    (sempre texto)
+  - `focuswindow address:0x..` → `hl.dsp.focus({ window = "address:0x.." })`
+  - `closewindow address:0x..` → `hl.dsp.window.close({ window = "address:0x.." })`
+    (o seletor vai em `window`; **antes ia numa chave `address`**)
+  - `exec <cmd>` → `hl.dsp.exec_cmd("<cmd>")` (o comando como literal Lua; o
+    `hyprctl dispatch exec …` clássico falha com `')' expected` no 0.56.2)
+  - `fullscreen [0|1]` → `hl.dsp.window.fullscreen({ mode = "fullscreen" })` /
+    `({ mode = "maximized" })` (**texto**: o Hyprland recusa um número; testado
+    no 0.56.2, «invalid mode … (expected fullscreen/maximized)»)
+  - `movefocus`, `movewindow`, `swapwindow` (`l/r/u/d` → `left/right/up/down`),
+    `togglefloating`, `pin`, `pseudo`, `centerwindow`, `bringactivetotop`,
+    `movetoworkspace[silent]` (`follow = true/false`), `cyclenext`,
+    `resizeactive`, `moveactive`, `focusmonitor`, `global`, `layoutmsg`,
+    `submap`, `killactive`, `exit`, `togglespecialworkspace`.
+  - `dpms` e `forceidle` **não** se traduzem (a wiki avisa para não os ligar
+    a atalhos). O que não tem mapeamento falha com
+    `error:"`<x>` has no Lua mapping (use the `lua:` prefix …)"`: nos atalhos
+    e no `RunDispatch` da GUI, o prefixo `lua:` envia uma expressão Lua direta
+    (`lua:hl.dsp.window.kill()`). `wpctl`, `grimblast` e afins **não são
+    dispatchers**: vão por `exec` ou, melhor, por `pc.action`.
 - **Ambiente da sessão.** O daemon pode arrancar sem `WAYLAND_DISPLAY` nem
   `HYPRLAND_INSTANCE_SIGNATURE` (systemd --user, `exec-once`); `action.rs`
   descobre-os pelos sockets em `$XDG_RUNTIME_DIR` e passa-os ao `hyprctl` e às
   ações.
+
+## 7. Configuração do daemon: opções de correção do ambiente
+
+Sem efeito no wire. Em `~/.config/hyprlink/config.json` (chaves de topo; ver
+`hyprlink-env/src/overrides.rs`). São lidas sem rigidez e validadas à parte: um
+valor inválido volta ao automático, e fica no Diário (`[!] config.json · …`) e
+no `hyprlinkctl doctor`. O valor em uso aparece no `doctor` e nas Definições da GUI.
+
+| Chave | Valores | Efeito |
+|---|---|---|
+| `lock_command` | lista de textos não vazia | substitui a cadeia de bloqueio de `pc.action lock` |
+| `screenshot_tool` | `auto` · `grim` · `grimblast` | ferramenta de `screenshot`/`screenshot_area` (forçada e em falta = sem captura) |
+| `temp_sensor` | caminho absoluto de um `…_input` com temperatura plausível | sensor de `cpu_temp_c` |
+| `gpu_source` | `auto` · `amd` · `nvidia` · `intel` · `none` | origem de `gpu_pct`; `intel` só com driver `i915` e `intel_gpu_top` |
+| `v4l2_device_nr` | inteiro 1–255 (42) | `/dev/videoN` da webcam virtual |
+| `audio_backend` | `auto` · `wpctl` · `pactl` | programa do volume em `pc.action volume_*` |
+| `hypr_dispatch_mode` | `auto` · `classic` · `lua` | sintaxe do `hyprctl dispatch` |
+| `tap_source` | `auto` · `default` · `easyeffects_pre` · `easyeffects_post` | o que o retorno de áudio (`audio.tap_*`) captura; ver abaixo |
+
+**`tap_source` e o EasyEffects.** O tap captura sempre o **monitor** de um sink,
+com `target-object` explícito e `stream.capture.sink=(string)true` (assim o
+EasyEffects não o move para a fonte dele: ignora streams com `target.object` para
+outro dispositivo e, por omissão, as de `capture.sink`). O EasyEffects cria o
+`easyeffects_sink` (o som **sem** efeitos passa no monitor dele) e toca os efeitos
+num sink real (o monitor desse é o som **com** efeitos). Estado lido do grafo
+(`pw-dump`), do socket `EasyEffectsServer` (só `get_global_bypass`) e do
+`easyeffectsrc` (só se existir). Valores:
+`default` — a saída predefinida do sistema (o comportamento antigo; **fica mudo**
+se o EasyEffects tocar noutro sink); `easyeffects_pre` — monitor do
+`easyeffects_sink`; `easyeffects_post` — monitor do sink real onde o EasyEffects
+toca; `auto` — sem EasyEffects ou em bypass: a predefinida; EasyEffects é a
+predefinida: o monitor do `easyeffects_sink`; EasyEffects a tocar noutro sink que
+não a predefinida: o sink real de destino. O Diário diz o que está em uso e porquê;
+o vigia (3 s) reavalia e religa se o alvo mudar.
+
+`hyprlinkctl doctor [--json] [--report [ficheiro]]` mostra tudo isto (só lê).

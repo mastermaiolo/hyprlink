@@ -392,7 +392,9 @@ pub fn camera(app: &App) -> El<'_> {
 }
 
 fn camera_body(app: &App) -> El<'_> {
-    let cfg = app.webcam_cfg;
+    // Chips e rótulos: o formato EFETIVO quando o telemóvel o reporta,
+    // senão a preferência (`webcam_cfg`).
+    let cfg = app.cam_shown();
     let live = app.webcam.is_some();
     let frame = canvas(CameraFrame {
         t: app.t,
@@ -492,6 +494,14 @@ fn camera_body(app: &App) -> El<'_> {
         status,
         gap(space::XXL),
         subhead("A", t("Formato")),
+        match app.cam_adjusted_note() {
+            Some(n) => column![
+                deck_s(format!("{} {n}", t("o telemóvel ajustou:"))),
+                gap(space::S)
+            ]
+            .into(),
+            None => El::from(gap(0.0)),
+        },
         setting(
             t("Resolução"),
             format!("{}×{}", cfg.width, cfg.height),
@@ -1506,6 +1516,36 @@ pub fn media(app: &App) -> El<'_> {
 
 // ═════════════════════════ ·· DEFINIÇÕES ═════════════════════════
 
+/// O ambiente em uso no daemon (o que detetou e as opções de correção do
+/// `config.json`), só para ver — o mesmo que `hyprlinkctl doctor`.
+fn env_values(app: &App) -> El<'_> {
+    let Some(st) = app.settings.as_ref().filter(|s| !s.env.is_empty()) else {
+        return mono(t("sem dados do daemon"), FAINT).into();
+    };
+    let mut col = column![];
+    for v in &st.env {
+        let label = match v.key.as_str() {
+            "shell" => t("SHELL"),
+            "hypr_dispatch_mode" => t("DISPATCH DO HYPRLAND"),
+            "lock_command" => t("BLOQUEIO"),
+            "screenshot_tool" => t("CAPTURA"),
+            "temp_sensor" => t("TEMPERATURA"),
+            "gpu_source" => t("CARGA DA GPU"),
+            "audio_backend" => t("VOLUME"),
+            "v4l2_device_nr" => t("CÂMARA (/dev/videoN)"),
+            "tap_source" => t("FONTE DO RETORNO"),
+            "aviso" => t("AVISO"),
+            other => other,
+        };
+        col = col.push(kv_text(label, v.value.clone()));
+    }
+    col.push(mono(
+        t("para os forçar: opções no config.json (ver README, «Compatibilidade»)"),
+        FAINT,
+    ))
+    .into()
+}
+
 pub fn settings(app: &App) -> El<'_> {
     let s = app.settings.as_ref();
     let current = hyprlink_gui::i18n::get();
@@ -1583,10 +1623,13 @@ pub fn settings(app: &App) -> El<'_> {
         kv_text(t("DAEMON"), "systemctl --user enable --now hyprlinkd"),
         kv_text(t("TRAY"), t("fechar a janela deixa a app no tray")),
         gap(space::XXL),
-        subhead("D", t("Idioma")),
+        subhead("D", t("Ambiente")),
+        env_values(app),
+        gap(space::XXL),
+        subhead("E", t("Idioma")),
         langs,
         gap(space::XXL),
-        subhead("E", t("Sobre")),
+        subhead("F", t("Sobre")),
         kv_text(
             t("GUI"),
             format!("hyprlink-gui {}", env!("CARGO_PKG_VERSION"))

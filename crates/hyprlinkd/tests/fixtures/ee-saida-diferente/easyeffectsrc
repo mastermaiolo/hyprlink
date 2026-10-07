@@ -1,0 +1,3 @@
+[StreamOutputs]
+useDefaultOutputDevice=false
+outputDevice=bluez_output.AA_BB_CC_01_02_03.1

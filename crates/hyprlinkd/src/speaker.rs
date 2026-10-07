@@ -146,6 +146,16 @@ pub async fn enable(
     }
 
     crate::config::set_speaker_prev_sink(config, Some(&prev));
+    // Com o EasyEffects como predefinido, guarda onde ele tocava: ao desligar
+    // devolve-se o predefinido a esse sink antes de voltar ao easyeffects_sink.
+    if prev == hyprlink_env::pipewire::EE_SINK {
+        let dest = tokio::task::spawn_blocking(|| {
+            crate::envinfo::pw_snapshot().and_then(|(_, ee)| ee.destination.map(|d| d.sink))
+        })
+        .await
+        .unwrap_or(None);
+        crate::config::set_speaker_prev_ee_dest(config, dest.as_deref());
+    }
 
     let Some(index) = tokio::task::spawn_blocking(load_speaker_module)
         .await
@@ -184,7 +194,35 @@ pub async fn enable(
         tap.clone(),
         hud.clone(),
     ));
+    // O EasyEffects (ou outra coisa) pode estar a levar o som para outro sink:
+    // dá-lhe tempo a reagir à mudança do predefinido e avisa.
+    let hud_w = hud.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+        let warn = tokio::task::spawn_blocking(|| {
+            let (g, ee) = crate::envinfo::pw_snapshot()?;
+            hyprlink_env::pipewire::speaker_routing_warning(&g, &ee)
+        })
+        .await
+        .unwrap_or(None);
+        if let Some(w) = warn {
+            push_log(&hud_w, format!("[!] coluna: {w}"));
+        }
+    });
     true
+}
+
+/// Devolve o sink predefinido: se era o `easyeffects_sink`, passa primeiro
+/// pelo sink real onde o EasyEffects tocava (ele segue o predefinido mas
+/// ignora o seu próprio sink), ver `hyprlink_env::pipewire::restore_default_order`.
+fn restore_default(prev: &str, ee_dest: Option<&str>) {
+    let order = hyprlink_env::pipewire::restore_default_order(prev, ee_dest);
+    for (i, sink) in order.iter().enumerate() {
+        if i > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(400));
+        }
+        crate::audio::set_default_sink(sink);
+    }
 }
 
 /// Desliga o modo coluna e devolve o sink padrão ao dono original. Ordem
@@ -210,9 +248,12 @@ pub async fn disable(
             hud,
             format!("[i] coluna: a devolver a saída de som a {prev_name}"),
         );
+        let ee_dest = crate::config::speaker_prev_ee_dest(config);
         let _ =
-            tokio::task::spawn_blocking(move || crate::audio::set_default_sink(&prev_name)).await;
+            tokio::task::spawn_blocking(move || restore_default(&prev_name, ee_dest.as_deref()))
+                .await;
         crate::config::set_speaker_prev_sink(config, None);
+        crate::config::set_speaker_prev_ee_dest(config, None);
     }
 
     crate::tap::stop(tap, hud);
@@ -267,12 +308,14 @@ pub fn cleanup_orphans(config: &SharedConfig) {
     let orphans = orphan_module_indexes();
     if let Some(prev) = crate::config::speaker_prev_sink(config) {
         if !orphans.is_empty() {
-            crate::audio::set_default_sink(&prev);
+            let ee_dest = crate::config::speaker_prev_ee_dest(config);
+            restore_default(&prev, ee_dest.as_deref());
             println!(
                 "[i] coluna: sessão anterior terminou com o telemóvel como saída — a devolver pra {prev}"
             );
         }
         crate::config::set_speaker_prev_sink(config, None);
+        crate::config::set_speaker_prev_ee_dest(config, None);
     }
     for idx in orphans {
         if unload_module(idx) {

@@ -55,6 +55,8 @@ pub struct Ctx {
     /// notificação e cada poll de mídia (a cada 2s, pra sempre) abriam uma
     /// conexão nova, cada uma é uma negociação de socket completa.
     pub dbus: Option<zbus::Connection>,
+    /// Limite de frequência do `shortcut.run` (por ligação; recomeça ao ligar).
+    pub shortcut_limiter: crate::shortcuts::SharedLimiter,
 }
 
 impl Ctx {
@@ -84,6 +86,7 @@ impl Ctx {
             mic: crate::mic::new_handle(),
             pending_mic: crate::mic::new_pending(),
             dbus,
+            shortcut_limiter: crate::shortcuts::new_limiter(),
         }
     }
 }
@@ -349,6 +352,11 @@ async fn handle_connection(
     write_frame(&mut send, &reply.encode()).await?;
     send.finish()?;
 
+    // Atalhos da GUI no telemóvel: a lista (sem comandos) logo a seguir ao
+    // handshake; o limite de frequência recomeça com a ligação.
+    ctx.shortcut_limiter.lock().unwrap().reset();
+    crate::shortcuts::spawn_push_on_connect(ctx.active.clone(), ctx.config.clone());
+
     // Streams seguintes (incluindo mais chamadas na mesma stream de controlo,
     // se o app reabrir uma nova) são despachadas por tipo.
     // Streams unidirecionais (ficheiros, por ora) chegam numa tarefa à
@@ -409,9 +417,15 @@ async fn route_uni_stream(mut recv: quinn::RecvStream, ctx: Ctx) {
         match *pending {
             Some((pending_id, width, height)) if pending_id == id => {
                 *pending = None;
+                state::set_webcam_session(&ctx.hud, Some((id, width, height)));
                 Some((width, height))
             }
-            _ => None,
+            // Reinício local no telemóvel (resolução/codec): reabre o stream
+            // com o id da sessão em curso, sem novo `webcam.start`.
+            _ => match ctx.hud.lock().unwrap().modules.webcam_session {
+                Some((sid, width, height)) if sid == id => Some((width, height)),
+                _ => None,
+            },
         }
     };
     let mic_res = {
@@ -676,6 +690,13 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                 state::push_log(hud, "[!] webcam.request · telemóvel desligou".to_string());
             }
         }
+        // Opcional (telemóvel recente): formato efetivo. Um telemóvel antigo
+        // nunca o envia e a GUI cai para o pedido.
+        "webcam.state" => {
+            if let Some(fmt) = webcam::parse_state(body) {
+                webcam::apply_state(fmt, &ctx.webcam, &ctx.pending_webcam, hud);
+            }
+        }
         "webcam.transform" => {
             if let (Some(rotation), Some(mirror)) = (
                 body.and_then(|b| crate::protocol::body_get_i64(b, "rotation")),
@@ -833,6 +854,39 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                 // O «último gesto» vai logo para a GUI.
                 crate::hub::global().publish(crate::bridge::gestures_event(&ctx.config));
             }
+        }
+        // Atalho da GUI pedido pelo telemóvel (só a identificação, nunca o
+        // comando): ver `shortcuts.rs`. Responde `shortcut.run_result`.
+        "shortcut.run" => {
+            let id = body
+                .and_then(|b| body_get_str(b, "id"))
+                .unwrap_or("")
+                .to_string();
+            let (config, limiter, hud_c) = (
+                ctx.config.clone(),
+                ctx.shortcut_limiter.clone(),
+                hud.clone(),
+            );
+            let id_c = id.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                crate::shortcuts::run(
+                    &config,
+                    &limiter,
+                    &hud_c,
+                    &id_c,
+                    std::time::Instant::now(),
+                    &crate::hypr::dispatch_checked,
+                )
+            })
+            .await
+            .unwrap_or(Err(crate::shortcuts::ERR_FAILED));
+            reply(
+                &mut send,
+                packet.id,
+                "shortcut.run_result",
+                Some(crate::shortcuts::result_body(&id, result)),
+            )
+            .await;
         }
         "notification.dismissed" => {
             if let Some(key) = body.and_then(|b| body_get_str(b, "key")) {

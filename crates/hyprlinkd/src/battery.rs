@@ -14,54 +14,9 @@ const SYS: &str = "/sys";
 /// Batimento: mesmo sem mudanças, o `battery.state` repete-se de 5 em 5 min.
 const HEARTBEAT: Duration = Duration::from_secs(300);
 
-/// Estado da bateria do PC. `None` (nas funções abaixo) = o PC não tem
-/// bateria (desktop).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PcBattery {
-    /// 0–100.
-    pub level: i64,
-    /// A carregar de facto (`Charging`); cheia ou com limite de carga, não.
-    pub charging: bool,
-    /// Fio ligado: alguma fonte `Mains` com `online=1` (ou a carregar, que
-    /// só é possível com fio — cobre carregadores USB-C que o kernel não
-    /// classifica como `Mains`).
-    pub plugged: bool,
-}
-
-/// Lê a primeira bateria `BAT*` em `<sys>/class/power_supply`.
-pub fn read_at(sys: &Path) -> Option<PcBattery> {
-    let dir = sys.join("class/power_supply");
-    let mut mains_online = false;
-    let mut bat = None;
-    let mut names: Vec<_> = std::fs::read_dir(&dir).ok()?.flatten().collect();
-    names.sort_by_key(|e| e.file_name());
-    for entry in names {
-        let path = entry.path();
-        let read = |f: &str| {
-            std::fs::read_to_string(path.join(f))
-                .map(|s| s.trim().to_string())
-                .ok()
-        };
-        if entry.file_name().to_string_lossy().starts_with("BAT") {
-            if bat.is_none()
-                && let Some(level) = read("capacity").and_then(|c| c.parse::<i64>().ok())
-            {
-                bat = Some((level.clamp(0, 100), read("status").unwrap_or_default()));
-            }
-        } else if read("type").is_some_and(|t| t.eq_ignore_ascii_case("Mains"))
-            && read("online").as_deref() == Some("1")
-        {
-            mains_online = true;
-        }
-    }
-    let (level, status) = bat?;
-    let charging = status.eq_ignore_ascii_case("Charging");
-    Some(PcBattery {
-        level,
-        charging,
-        plugged: mains_online || charging,
-    })
-}
+/// Estado da bateria do PC e a regra de escolha (a do sistema, não a de
+/// periféricos): ver `hyprlink_env::battery`. `None` = o PC não tem bateria.
+pub use hyprlink_env::battery::{PcBattery, read_at};
 
 pub fn read() -> Option<PcBattery> {
     read_at(Path::new(SYS))

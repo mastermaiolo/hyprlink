@@ -130,6 +130,7 @@ fn all_commands2() -> Vec<Command2> {
         }),
         RunDispatch("workspace 3".into()),
         SetShortcuts(vec![Shortcut {
+            id: "a1b2c3d4".into(),
             label: "Bloquear".into(),
             dispatch: "exec hyprlock".into(),
         }]),
@@ -145,6 +146,12 @@ fn all_commands2() -> Vec<Command2> {
             height: 1080,
             fps: 30,
             codec: CamCodec::H264,
+        }),
+        ConfigureWebcam(WebcamConfig {
+            width: 1280,
+            height: 720,
+            fps: 30,
+            codec: CamCodec::H265,
         }),
         StopWebcam,
         TestNetwork,
@@ -357,6 +364,7 @@ fn webcam_stats_codec_is_additive() {
         mbps: 6.2,
         fps: None,
         codec: Some(CamCodec::H265),
+        format: None,
     };
     same(&now);
     assert_eq!(serde_json::to_value(now).unwrap()["codec"], "h265");
@@ -378,4 +386,33 @@ fn gestures_contract() {
         rules: vec![],
         last: None,
     });
+}
+
+/// `format` em `WebcamStats` é aditivo (telemóvel/daemon antigo sem
+/// `webcam.state`) e faz round-trip completo quando existe.
+#[test]
+fn webcam_format_is_additive_and_roundtrips() {
+    let old: WebcamStats = serde_json::from_str(r#"{"mbps": 6.2, "fps": null}"#).unwrap();
+    assert_eq!(old.format, None);
+    let fmt = WebcamFormat {
+        width: 1280,
+        height: 720,
+        fps: 30,
+        codec: CamCodec::H264,
+        lens: Some(CamLens::Front),
+        rotation: 90,
+        mirror: true,
+    };
+    same(&WebcamStats {
+        mbps: 3.0,
+        fps: Some(30.0),
+        codec: Some(CamCodec::H264),
+        format: Some(fmt),
+    });
+    let partial: WebcamFormat =
+        serde_json::from_str(r#"{"width":640,"height":480,"fps":15,"codec":"h264"}"#).unwrap();
+    assert_eq!(
+        (partial.lens, partial.rotation, partial.mirror),
+        (None, 0, false)
+    );
 }

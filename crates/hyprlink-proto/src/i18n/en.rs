@@ -520,6 +520,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Formato", "Format"),
     ("Resolução", "Resolution"),
     ("o telemóvel pode baixar", "the phone may lower it"),
+    ("o telemóvel ajustou:", "the phone adjusted it:"),
     ("Rede", "Network"),
     ("TESTAR REDE", "TEST NETWORK"),
     ("DISPOSITIVO", "DEVICE"),
@@ -735,4 +736,21 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Telemóvel", "Phone"),
     // ── controlos por implementar no daemon ──
     ("EM BREVE", "COMING SOON"),
+    // ── ambiente nas definições ──
+    ("Ambiente", "Environment"),
+    ("sem dados do daemon", "no data from the daemon"),
+    ("SHELL", "SHELL"),
+    ("DISPATCH DO HYPRLAND", "HYPRLAND DISPATCH"),
+    ("BLOQUEIO", "LOCK"),
+    ("CAPTURA", "SCREENSHOT"),
+    ("CARGA DA GPU", "GPU LOAD"),
+    ("VOLUME", "VOLUME"),
+    ("CÂMARA (/dev/videoN)", "CAMERA (/dev/videoN)"),
+    ("AVISO", "WARNING"),
+    (
+        "para os forçar: opções no config.json (ver README, «Compatibilidade»)",
+        "to force them: options in config.json (see the README, “Compatibility”)",
+    ),
+    // ── fonte do retorno ──
+    ("FONTE DO RETORNO", "RETURN SOURCE"),
 ];

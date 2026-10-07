@@ -143,6 +143,16 @@ pub struct ModuleStatus {
     /// Codec efetivo do stream de vídeo atual, pelo byte que o telemóvel
     /// envia: `"H.264"` / `"H.265"`. `None` = ainda não chegou.
     pub webcam_codec: Option<&'static str>,
+    /// Formato efetivo que o telemóvel reportou em `webcam.state` (opcional:
+    /// telemóvel antigo nunca o envia). Limpo quando a câmara pára.
+    pub webcam_format: Option<hyprlink_proto::link::WebcamFormat>,
+    /// Sessão de vídeo em curso: (id do uni-stream, largura, altura dos caps
+    /// do `v4l2sink`). Permite ao telemóvel reabrir o stream com o mesmo id
+    /// (reinício local de resolução/codec) sem novo `webcam.start`.
+    pub webcam_session: Option<(u64, i64, i64)>,
+    /// Última preferência de formato definida na GUI; serve de base aos
+    /// `webcam.request` do telemóvel que omitem campos. Sobrevive à câmara.
+    pub webcam_pref: Option<crate::webcam::StartParams>,
 }
 
 #[derive(Debug, Clone)]
@@ -564,7 +574,20 @@ pub fn set_webcam_active(state: &Arc<Mutex<HudState>>, active: bool) {
     if !active {
         s.modules.webcam_mbps = None;
         s.modules.webcam_codec = None;
+        s.modules.webcam_format = None;
+        s.modules.webcam_session = None;
     }
+}
+
+pub fn set_webcam_format(
+    state: &Arc<Mutex<HudState>>,
+    format: Option<hyprlink_proto::link::WebcamFormat>,
+) {
+    state.lock().unwrap().modules.webcam_format = format;
+}
+
+pub fn set_webcam_session(state: &Arc<Mutex<HudState>>, session: Option<(u64, i64, i64)>) {
+    state.lock().unwrap().modules.webcam_session = session;
 }
 
 pub fn set_webcam_codec(state: &Arc<Mutex<HudState>>, label: &'static str) {
@@ -657,6 +680,28 @@ mod tests {
         clear_file_history(&h);
         clear_file_history(&h);
         assert!(h.lock().unwrap().modules.file_history.is_empty());
+    }
+
+    #[test]
+    fn webcam_format_and_session_are_forgotten_when_the_stream_ends() {
+        let h = HudState::new(String::new());
+        set_webcam_active(&h, true);
+        set_webcam_session(&h, Some((7, 1280, 720)));
+        set_webcam_format(
+            &h,
+            Some(hyprlink_proto::link::WebcamFormat {
+                width: 1280,
+                height: 720,
+                fps: 30,
+                codec: hyprlink_proto::link::CamCodec::H264,
+                lens: None,
+                rotation: 0,
+                mirror: false,
+            }),
+        );
+        set_webcam_active(&h, false);
+        let m = &h.lock().unwrap().modules;
+        assert!(m.webcam_format.is_none() && m.webcam_session.is_none());
     }
 
     #[test]

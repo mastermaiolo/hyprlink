@@ -12,5 +12,6 @@ mock = ["hyprlink-proto/mock"]
 
 [dependencies]
 hyprlink-proto = { workspace = true, features = ["fmt"] }
+hyprlink-env.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -119,6 +119,10 @@ impl PeakMeter {
 /// bytes crus por um canal pra `run_gst_thread`, que faz tudo relacionado
 /// ao GStreamer/PipeWire numa única OS thread fixa.
 pub async fn feed(mut recv: quinn::RecvStream, handle: MicHandle, hud: Arc<Mutex<HudState>>) {
+    if let Err(e) = crate::envinfo::pipewire_required("o microfone do telemóvel") {
+        push_log(&hud, format!("[!] {e}"));
+        return;
+    }
     let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
     let gst_thread = {
         let handle = handle.clone();

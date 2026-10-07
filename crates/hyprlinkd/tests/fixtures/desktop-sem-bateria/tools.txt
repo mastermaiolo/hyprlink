@@ -1,0 +1,10 @@
+hyprctl
+grim
+slurp
+wl-copy
+wl-paste
+loginctl
+wpctl
+pactl
+gst-launch-1.0
+caelestia

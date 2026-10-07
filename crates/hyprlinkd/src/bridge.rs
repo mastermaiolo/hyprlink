@@ -345,14 +345,21 @@ impl Bridge {
 
     fn webcam(&self) -> Option<WebcamStats> {
         let hud = self.ctx.hud.lock().unwrap();
-        hud.modules.webcam_active.then(|| WebcamStats {
-            mbps: hud.modules.webcam_mbps.unwrap_or(0.0) as f32,
-            fps: None,
-            codec: match hud.modules.webcam_codec {
+        hud.modules.webcam_active.then(|| {
+            let format = hud.modules.webcam_format;
+            let stream_codec = match hud.modules.webcam_codec {
                 Some("H.265") => Some(CamCodec::H265),
                 Some("H.264") => Some(CamCodec::H264),
                 _ => None,
-            },
+            };
+            WebcamStats {
+                mbps: hud.modules.webcam_mbps.unwrap_or(0.0) as f32,
+                fps: format.map(|f| f.fps as f32),
+                // O byte do stream é a verdade sobre o codec; o
+                // `webcam.state` cobre o intervalo até chegar o primeiro byte.
+                codec: stream_codec.or(format.map(|f| f.codec)),
+                format,
+            }
         })
     }
 
@@ -382,6 +389,7 @@ impl Bridge {
             daemon_version: env!("CARGO_PKG_VERSION").to_string(),
             socket: self.socket.clone(),
             started_unix: crate::state::now_unix().saturating_sub(uptime_s() as u64),
+            env: crate::envinfo::values(),
         }
     }
 }
@@ -849,6 +857,7 @@ fn shortcuts_event(config: &config::SharedConfig) -> Event {
         config::shortcuts(config)
             .into_iter()
             .map(|s| Shortcut {
+                id: s.id,
                 label: s.name,
                 dispatch: s.command,
             })
@@ -879,16 +888,12 @@ async fn execute_more(b: &Arc<Bridge>, c: Command2) {
             let list: Vec<config::Shortcut> = list
                 .into_iter()
                 .map(|s| config::Shortcut {
+                    id: s.id,
                     name: s.label,
                     command: s.dispatch,
                 })
                 .collect();
-            match config::validate_shortcuts(list) {
-                Ok(list) => config::set_shortcuts(&ctx.config, list),
-                Err(why) => {
-                    state::push_log(&ctx.hud, format!("[!] atalhos recusados · {why}"));
-                }
-            }
+            let _ = crate::shortcuts::apply_edit(&ctx.active, &ctx.config, &ctx.hud, list).await;
             // Devolve a lista guardada (a nova, ou a antiga se foi recusada).
             hub.publish(shortcuts_event(&ctx.config));
         }
@@ -927,6 +932,12 @@ async fn execute_more(b: &Arc<Bridge>, c: Command2) {
                     return;
                 }
             };
+            ctx.hud.lock().unwrap().modules.webcam_pref = Some(crate::webcam::StartParams {
+                width: i64::from(cfg.width),
+                height: i64::from(cfg.height),
+                fps: i64::from(cfg.fps),
+                codec,
+            });
             let ok = crate::webcam::request_start(
                 &ctx.active,
                 &ctx.pending_webcam,
@@ -937,6 +948,40 @@ async fn execute_more(b: &Arc<Bridge>, c: Command2) {
             )
             .await;
             if !ok {
+                b.fail(Op::Webcam, ErrorKind::Offline);
+            }
+        }
+        Command2::ConfigureWebcam(cfg) => {
+            let codec = match cfg.codec {
+                CamCodec::H264 => "h264",
+                CamCodec::H265 => "h265",
+                CamCodec::Mjpeg => {
+                    b.fail(Op::Webcam, ErrorKind::NotImplemented);
+                    return;
+                }
+            };
+            // Guarda sempre como preferência (próximo arranque pelo telemóvel);
+            // só empurra para o telemóvel com a câmara ligada.
+            let live = {
+                let mut hud = ctx.hud.lock().unwrap();
+                hud.modules.webcam_pref = Some(crate::webcam::StartParams {
+                    width: i64::from(cfg.width),
+                    height: i64::from(cfg.height),
+                    fps: i64::from(cfg.fps),
+                    codec,
+                });
+                hud.modules.webcam_active
+            };
+            if live
+                && !crate::webcam::request_configure(
+                    &ctx.active,
+                    i64::from(cfg.width),
+                    i64::from(cfg.height),
+                    i64::from(cfg.fps),
+                    codec,
+                )
+                .await
+            {
                 b.fail(Op::Webcam, ErrorKind::Offline);
             }
         }

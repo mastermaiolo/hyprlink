@@ -1,0 +1,4 @@
+HOME=/home/zeca
+USER=zeca
+XDG_SESSION_TYPE=wayland
+XDG_CURRENT_DESKTOP=Hyprland

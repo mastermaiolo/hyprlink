@@ -30,6 +30,10 @@ pub const PAIR_REVOKE: &str = "pair.revoke";
 
 // ── confirmed against PROTOCOL.md (were "to confirm") ──
 pub const WEBCAM_STOP: &str = "webcam.stop";
+/// PC → telemóvel, opcional: muda o formato com a câmara ligada.
+pub const WEBCAM_CONFIGURE: &str = "webcam.configure";
+/// Telemóvel → PC, opcional: formato efetivo (resolução/fps/codec/lente...).
+pub const WEBCAM_STATE: &str = "webcam.state";
 /// No wire packet of its own: the daemon's network test is a 60 s
 /// `webcam.start` (1080p30 H.264) measured locally.
 pub const WEBCAM_NETTEST: &str = "webcam.start";

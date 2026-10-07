@@ -460,6 +460,11 @@ pub const SHORTCUTS_MAX: usize = 32;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Shortcut {
+    /// Identificação estável (gerada pelo daemon ao criar o atalho). Vazia =
+    /// atalho novo: o daemon atribui-lhe uma. É o que o telemóvel usa para o
+    /// executar (nunca o comando).
+    #[serde(default)]
+    pub id: String,
     pub label: String,
     pub dispatch: String,
 }
@@ -501,6 +506,31 @@ pub struct WebcamConfig {
     pub codec: CamCodec,
 }
 
+/// Lente da câmara do telemóvel, como a app a reporta em `webcam.state`.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CamLens {
+    Back,
+    Front,
+    Other,
+}
+
+/// Formato **efetivo** da câmara (`webcam.state`, telemóvel → PC): o que a
+/// câmara/encoder entregam de facto, que pode diferir do pedido.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+pub struct WebcamFormat {
+    pub width: u32,
+    pub height: u32,
+    pub fps: u32,
+    pub codec: CamCodec,
+    #[serde(default)]
+    pub lens: Option<CamLens>,
+    #[serde(default)]
+    pub rotation: u16,
+    #[serde(default)]
+    pub mirror: bool,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
 pub struct WebcamStats {
     pub mbps: f32,
@@ -511,6 +541,10 @@ pub struct WebcamStats {
     /// chegou o primeiro byte, ou daemon antigo.
     #[serde(default)]
     pub codec: Option<CamCodec>,
+    /// Formato efetivo comunicado pelo telemóvel (`webcam.state`). `None` =
+    /// telemóvel antigo (sem o pacote): a GUI cai para o pedido.
+    #[serde(default)]
+    pub format: Option<WebcamFormat>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
@@ -672,6 +706,17 @@ pub struct Settings {
     /// `0` = unknown (an older daemon).
     #[serde(default)]
     pub started_unix: u64,
+    /// Valores do ambiente em uso no daemon (opções de correção do
+    /// `config.json` e o que se detetou); só para mostrar.
+    #[serde(default)]
+    pub env: Vec<EnvValue>,
+}
+
+/// Uma linha «chave → valor em uso» das Definições.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct EnvValue {
+    pub key: String,
+    pub value: String,
 }
 
 /// Commands for the new pages. Kept apart so the original enum stays readable.
@@ -682,6 +727,8 @@ pub enum Command2 {
     SetShortcuts(Vec<Shortcut>),
     SetTrackpad(TrackpadConfig),
     StartWebcam(WebcamConfig),
+    /// Muda o formato com a câmara já ligada (`webcam.configure`).
+    ConfigureWebcam(WebcamConfig),
     StopWebcam,
     TestNetwork,
     SetPhoneVolume(PhoneStream, u8),

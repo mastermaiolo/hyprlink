@@ -493,6 +493,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Formato", "格式"),
     ("Resolução", "分辨率"),
     ("o telemóvel pode baixar", "手机可能会降低"),
+    ("o telemóvel ajustou:", "手机已调整为："),
     ("Rede", "网络"),
     ("TESTAR REDE", "测试网络"),
     ("DISPOSITIVO", "设备"),
@@ -696,4 +697,21 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Telemóvel", "手机"),
     // ── controlos por implementar no daemon ──
     ("EM BREVE", "即将推出"),
+    // ── ambiente nas definições ──
+    ("Ambiente", "环境"),
+    ("sem dados do daemon", "守护进程无数据"),
+    ("SHELL", "SHELL"),
+    ("DISPATCH DO HYPRLAND", "HYPRLAND 调度"),
+    ("BLOQUEIO", "锁屏"),
+    ("CAPTURA", "截图"),
+    ("CARGA DA GPU", "GPU 负载"),
+    ("VOLUME", "音量"),
+    ("CÂMARA (/dev/videoN)", "摄像头 (/dev/videoN)"),
+    ("AVISO", "警告"),
+    (
+        "para os forçar: opções no config.json (ver README, «Compatibilidade»)",
+        "如需强制指定：在 config.json 中设置（见 README“兼容性”）",
+    ),
+    // ── fonte do retorno ──
+    ("FONTE DO RETORNO", "回传来源"),
 ];

@@ -9,6 +9,7 @@
 //!   hyprlinkctl mirror start|stop|toggle
 //!   hyprlinkctl ws <N>
 //!   hyprlinkctl open                           open (or focus) the GUI
+//!   hyprlinkctl doctor [--json] [--report [f]] relatório de compatibilidade (só lê)
 //!
 //! Two halves, one binary:
 //! - **text** (no `--json`): the original `ok …` / `erro: …` protocol over
@@ -22,6 +23,7 @@
 //! simulation, so a Noctalia panel behaves exactly as it will against the
 //! real `hyprlinkd`. Swapping in the real socket changes only `Backend`.
 
+mod doctor;
 mod legacy;
 
 use hyprlink_proto::fmt;
@@ -304,6 +306,9 @@ fn main() -> ExitCode {
         }
     }
     let json = args.iter().any(|a| a == "--json");
+    if args.first().map(String::as_str) == Some("doctor") {
+        return doctor::run(&args);
+    }
     let first = args
         .iter()
         .find(|a| !a.starts_with("--"))

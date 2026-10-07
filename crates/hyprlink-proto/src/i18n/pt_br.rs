@@ -202,6 +202,7 @@ pub const TABLE: &[(&str, &str)] = &[
         "Escolha o formato e ligue. Aparece no PC como /dev/video42.",
     ),
     ("o telemóvel pode baixar", "o celular pode reduzir"),
+    ("o telemóvel ajustou:", "o celular ajustou:"),
     ("■  DESLIGAR CÂMARA", "■  DESLIGAR CÂMERA"),
     ("▶  LIGAR CÂMARA", "▶  LIGAR CÂMERA"),
     ("CÂMARA DO TELEMÓVEL", "CÂMERA DO CELULAR"),

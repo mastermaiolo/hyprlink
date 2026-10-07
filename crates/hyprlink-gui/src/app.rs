@@ -138,6 +138,23 @@ pub struct Rule {
     pub on: bool,
 }
 
+/// Formato que os chips marcam: o efetivo se o telemóvel o reporta (câmara
+/// ligada e `webcam.state` recebido), senão a preferência.
+pub fn cam_shown(stats: Option<WebcamStats>, pref: WebcamConfig) -> WebcamConfig {
+    match stats.and_then(|w| w.format) {
+        Some(f) => WebcamConfig {
+            width: f.width,
+            height: f.height,
+            fps: f.fps,
+            codec: f.codec,
+        },
+        None => pref,
+    }
+}
+
+/// Folga para o telemóvel aplicar uma escolha antes de a comparar com o efetivo.
+const CAM_SETTLE_SECS: f32 = 3.0;
+
 pub struct App {
     link: Box<dyn Transport>,
     pub section: Section,
@@ -236,7 +253,14 @@ pub struct App {
     pub trackpad: TrackpadConfig,
     pub dispatch_input: String,
     pub cam_mode: CamMode,
+    /// Preferência de formato (o que o utilizador escolheu); o formato
+    /// efetivo vem do telemóvel em `webcam.format`.
     pub webcam_cfg: WebcamConfig,
+    /// Conta os toques nos chips para juntar toques seguidos num só pacote.
+    pub cam_seq: u32,
+    /// Até quando (`t`) o telemóvel ainda está a aplicar a última escolha:
+    /// enquanto isso não se mostra a nota «o telemóvel ajustou».
+    pub cam_settle_until: f32,
     pub webcam: Option<WebcamStats>,
     pub webcam_on: bool,
     pub nettest: Option<NetTest>,
@@ -310,6 +334,8 @@ pub enum Message {
     CamRes(u32, u32),
     CamFps(u32),
     CamCodec(CamCodec),
+    /// Passou o atraso de 300 ms do último toque (número de ordem).
+    CamApply(u32),
     WebcamStart,
     WebcamStop,
     DispatchInput(String),
@@ -494,6 +520,8 @@ impl App {
             },
             dispatch_input: String::new(),
             cam_mode: CamMode::Camera,
+            cam_seq: 0,
+            cam_settle_until: 0.0,
             webcam_cfg: WebcamConfig {
                 width: 1280,
                 height: 720,
@@ -838,6 +866,40 @@ impl App {
         self.section = Section::Partilha;
     }
 
+    /// Agenda o envio do formato 300 ms depois do último toque num chip.
+    fn cam_debounce(&mut self) -> Task<Message> {
+        self.cam_seq = self.cam_seq.wrapping_add(1);
+        self.cam_settle_until = self.t + CAM_SETTLE_SECS;
+        let seq = self.cam_seq;
+        Task::perform(
+            async {
+                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            },
+            move |()| Message::CamApply(seq),
+        )
+    }
+
+    /// Formato que os chips marcam: com a câmara ligada e o telemóvel a
+    /// reportar (`webcam.state`), o EFETIVO; senão a preferência.
+    pub fn cam_shown(&self) -> WebcamConfig {
+        cam_shown(self.webcam, self.webcam_cfg)
+    }
+
+    /// Nota «o telemóvel ajustou: 720p30 H.264» quando o efetivo difere do
+    /// pedido e o telemóvel já teve tempo de aplicar a última escolha.
+    pub fn cam_adjusted_note(&self) -> Option<String> {
+        let f = self.webcam.and_then(|w| w.format)?;
+        let shown = self.cam_shown();
+        (shown != self.webcam_cfg && self.t >= self.cam_settle_until).then(|| {
+            format!(
+                "{}p{} {}",
+                f.height,
+                f.fps,
+                hyprlink_gui::fmt::cam_codec(f.codec)
+            )
+        })
+    }
+
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Tick(now) => {
@@ -1017,9 +1079,21 @@ impl App {
             Message::CamRes(w, h) => {
                 self.webcam_cfg.width = w;
                 self.webcam_cfg.height = h;
+                return self.cam_debounce();
             }
-            Message::CamFps(f) => self.webcam_cfg.fps = f,
-            Message::CamCodec(c) => self.webcam_cfg.codec = c,
+            Message::CamFps(f) => {
+                self.webcam_cfg.fps = f;
+                return self.cam_debounce();
+            }
+            Message::CamCodec(c) => {
+                self.webcam_cfg.codec = c;
+                return self.cam_debounce();
+            }
+            Message::CamApply(seq) => {
+                if seq == self.cam_seq {
+                    self.more(Command2::ConfigureWebcam(self.webcam_cfg));
+                }
+            }
             Message::WebcamStart => {
                 self.webcam_on = true;
                 self.more(Command2::StartWebcam(self.webcam_cfg));
@@ -1138,6 +1212,7 @@ impl App {
                 if shortcut_valid(&name, &command) && i < self.shortcuts.len() {
                     let mut list = self.shortcuts.clone();
                     list[i] = Shortcut {
+                        id: list[i].id.clone(),
                         label: name.trim().into(),
                         dispatch: command.trim().into(),
                     };
@@ -1162,6 +1237,7 @@ impl App {
                 {
                     let mut list = self.shortcuts.clone();
                     list.push(Shortcut {
+                        id: String::new(),
                         label: name.trim().into(),
                         dispatch: command.trim().into(),
                     });
@@ -1703,6 +1779,50 @@ async fn pick_files() -> Option<Vec<std::path::PathBuf>> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    fn pref() -> WebcamConfig {
+        WebcamConfig {
+            width: 1920,
+            height: 1080,
+            fps: 60,
+            codec: CamCodec::H265,
+        }
+    }
+
+    #[test]
+    fn chips_follow_the_effective_format_when_live() {
+        let live = WebcamStats {
+            mbps: 4.0,
+            fps: Some(30.0),
+            codec: Some(CamCodec::H264),
+            format: Some(link::WebcamFormat {
+                width: 1280,
+                height: 720,
+                fps: 30,
+                codec: CamCodec::H264,
+                lens: None,
+                rotation: 0,
+                mirror: false,
+            }),
+        };
+        let shown = cam_shown(Some(live), pref());
+        assert_eq!((shown.width, shown.height, shown.fps), (1280, 720, 30));
+        assert_eq!(shown.codec, CamCodec::H264);
+    }
+
+    #[test]
+    fn chips_fall_back_to_the_preference() {
+        // Sem câmara.
+        assert_eq!(cam_shown(None, pref()), pref());
+        // Telemóvel antigo: stream sem `webcam.state`.
+        let old = WebcamStats {
+            mbps: 4.0,
+            fps: None,
+            codec: Some(CamCodec::H264),
+            format: None,
+        };
+        assert_eq!(cam_shown(Some(old), pref()), pref());
+    }
 
     #[test]
     fn plan_send_skips_folders_keeps_order_and_repeats() {
