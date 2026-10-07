@@ -41,12 +41,17 @@ a app Android tem versões próprias (`versionName`).
 - Wake-on-LAN: o daemon envia o MAC do PC para o telemóvel o poder acordar.
 
 ### Paridade com a app Android
+- **Atalhos da GUI no telemóvel**: `shortcuts.list` (só `id` e rótulo, nunca o
+  comando) ao ligar e a cada alteração; `shortcut.run` com a identificação do
+  atalho, que o daemon executa se existir na config (máx. 5 por segundo por
+  ligação; o Diário leva só o rótulo). Os atalhos ganham um `id` estável (config
+  antiga migra sozinha).
 - **Responder a notificações** a partir do PC: a página Notificações mostra um
   campo de texto e «Responder» (Enter envia) nas notificações com ação de
   resposta; o daemon valida e envia `notification.reply`.
-- **Câmara pedida pelo telemóvel** (`webcam.request` → `webcam.request_result`):
-  o daemon arranca a câmara pelo mesmo caminho da GUI e recusa se já estiver
-  ativa.
+- **Câmara com formato sincronizado**: `webcam.state` e `webcam.configure`
+  sincronizam resolução, FPS e codec entre o telemóvel e o PC; arranque a frio
+  protegido e câmara pedida pelo telemóvel (`webcam.request`).
 - **Bateria do PC** no telemóvel com `charging` (a carregar de facto) e
   `plugged` (fio ligado) separados, e `present:false` sem bateria; empurrada
   quando muda e de 5 em 5 minutos, só com o telemóvel ligado.
@@ -58,6 +63,26 @@ a app Android tem versões próprias (`versionName`).
 - **Controlos por implementar** (espelhar ecrã, ponte de sensores, regras de
   presença) ficam desativados na GUI com a nota «em breve», em vez de darem
   erro ao carregar.
+
+### Compatibilidade de ambiente (hyprlink-env)
+- **`hyprlinkctl doctor`** (`--json`, `--report [ficheiro]`): relatório só de
+  leitura do que o daemon detetou (Hyprland e sintaxe do `dispatch`, shell,
+  CPU/GPU/temperatura, baterias, áudio, câmara virtual, ferramentas) e do que
+  vai fazer; sem nome de utilizador, máquina, MAC, IP, SSID nem pasta pessoal.
+- **EasyEffects e `tap_source`**: deteção automática do grafo PipeWire e do
+  `easyeffects_sink`; escolha configurável entre som antes dos efeitos
+  (`easyeffects_pre`), depois dos efeitos (`easyeffects_post`) ou da saída
+  predefinida (`default`).
+- **Opções de correção no `config.json`**: `lock_command`, `screenshot_tool`,
+  `temp_sensor`, `gpu_source`, `v4l2_device_nr`, `audio_backend`,
+  `hypr_dispatch_mode`, `tap_source`; valores em uso nas Definições da GUI.
+- `hyprctl dispatch`: o modo (clássico ou Lua) deteta-se uma vez; mapeamento
+  clássico→Lua completado e corrigido (`closewindow`, `fullscreen`, setas); o
+  prefixo `lua:` nos atalhos envia uma expressão Lua direta.
+- Bloqueio pela shell detetada (Noctalia v5, Ryoku, Caelestia) antes do
+  `hyprlock`; volume por `pactl` quando não há `wpctl`; baterias de periféricos
+  ignoradas; GPU Intel opcional (`intel_gpu_top`, só `i915`); mensagens claras
+  para o v4l2loopback e para o PulseAudio.
 
 ### PC
 - `hyprlink-daemon` sem janela; a **GUI** (`hyprlink-gui`, iced) é um processo

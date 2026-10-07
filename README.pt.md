@@ -70,17 +70,41 @@ O touchpad e o teclado remotos escrevem em `/dev/uinput`: o utilizador da sessã
 
 ## Instalação
 
+Existem duas formas de instalar o HyprLink em Linux:
+
+### 1. Pacote binário pré-compilado (qualquer Linux x86_64)
+
+Transfira `hyprlink-0.1.0-linux-x86_64.tar.gz` a partir dos [Releases](https://github.com/mastermaiolo/hyprlink/releases):
+
+```bash
+tar -xzf hyprlink-0.1.0-linux-x86_64.tar.gz
+cd hyprlink-0.1.0-linux-x86_64
+./install.sh                                     # instala em ~/.local (sem permissões de root)
+systemctl --user enable --now hyprlink-bridge   # o daemon, como serviço de utilizador
+hyprlink-gui                                     # abrir a GUI
+```
+
+O `./install.sh` aceita `--prefix DIR` (por omissão `~/.local`), `--dry-run`, e verifica as dependências em execução. O `./uninstall.sh` remove apenas o que o instalador colocou.
+
+### 2. Arch Linux (PKGBUILD)
+
 O pacote é um **PKGBUILD local** em `packaging/arch/`, chamado `hyprlink-bridge` (no AUR, «hyprlink» é outro projeto):
 
 ```bash
 git clone https://github.com/mastermaiolo/hyprlink.git
 cd hyprlink/packaging/arch
 makepkg -si
-systemctl --user enable --now hyprlink-bridge   # o daemon, como serviço de utilizador
-hyprlink-gui                                     # a GUI (também no menu de aplicações)
+systemctl --user enable --now hyprlink-bridge
+hyprlink-gui
 ```
 
 Instala `hyprlink-daemon`, `hyprlink-gui` e `hyprlinkctl` em `/usr/bin`, o serviço systemd de utilizador `hyprlink-bridge.service` e o atalho `.desktop`. Para testar a partir desta cópia do código, antes de existir a tag: `HYPRLINK_LOCAL=1 makepkg -si`.
+
+### Dependências em execução
+
+- **Base**: `hyprctl` (Hyprland), `pipewire`, `wireplumber` (`wpctl`), `libpulse` (`pactl`), `wl-clipboard` (`wl-copy`).
+- **Multimédia**: `gstreamer`, `gst-plugins-good` (v4l2sink), `gst-libav` (avdec_h264, avdec_h265), `gst-plugin-pipewire` (pipewiresrc).
+- **Opcionais**: `v4l2loopback-dkms` (telemóvel como `/dev/video42`), `grimblast` ou `grim` + `slurp` (captura de ecrã), `hyprlock` / `noctalia` (bloqueio).
 
 O serviço arranca com a sessão gráfica (`graphical-session.target`). Com uwsm isso é automático. Sem uwsm, esse alvo em geral não é ativado: no Hyprland, `exec-once = dbus-update-activation-environment --systemd --all` e depois `exec-once = systemctl --user start hyprlink-bridge`. Para a GUI arrancar na bandeja ao entrar na sessão: `cp /usr/share/hyprlink-bridge/hyprlink-bridge-autostart.desktop ~/.config/autostart/` (uwsm lê o autostart XDG) ou `exec-once = hyprlink-gui` no Hyprland.
 
@@ -102,13 +126,19 @@ A GUI mostra **primeiro o telemóvel**: o dispositivo ligado vem antes do própr
 Para scripts, atalhos e barras existe o `hyprlinkctl`:
 
 ```
-hyprlinkctl status         estado da ligação
-hyprlinkctl ping           tempo de ida e volta ao telemóvel
-hyprlinkctl mic toggle     microfone do telemóvel ligado/desligado   (on | off | toggle)
-hyprlinkctl tap toggle     enviar o áudio do PC para o telemóvel
-hyprlinkctl speaker toggle telemóvel como coluna do PC
-hyprlinkctl ws 3           mudar para o workspace 3
-hyprlinkctl open           abrir (ou focar) a GUI
+hyprlinkctl status             estado da ligação
+hyprlinkctl ping               tempo de ida e volta ao telemóvel
+hyprlinkctl watch --json       fluxo de instantâneos em linhas JSON
+hyprlinkctl clipboard          enviar área de transferência para o telemóvel
+hyprlinkctl pair               abrir janela de emparelhamento (120 s)
+hyprlinkctl mirror toggle      ligar/desligar espelho do ecrã
+hyprlinkctl doctor             relatório de ambiente e compatibilidade
+hyprlinkctl shortcuts          listar os atalhos configurados
+hyprlinkctl mic toggle         microfone do telemóvel ligado/desligado (on | off | toggle)
+hyprlinkctl tap toggle         enviar o áudio do PC para o telemóvel
+hyprlinkctl speaker toggle     telemóvel como coluna do PC
+hyprlinkctl ws 3               mudar para o workspace 3
+hyprlinkctl open               abrir (ou focar) a GUI
 ```
 
 O `hyprlinkctl --help` lista o resto. Em `contrib/` há um widget de Waybar e uma entrada `.desktop` «Enviar via HyprLink» para o menu de contexto do gestor de ficheiros; o `contrib/install.sh` instala-os.

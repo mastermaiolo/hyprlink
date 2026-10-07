@@ -70,17 +70,41 @@ The remote touchpad and keyboard write to `/dev/uinput`: the session user needs 
 
 ## Installation
 
+There are two ways to install HyprLink on Linux:
+
+### 1. Pre-built binary tarball (any Linux x86_64)
+
+Download `hyprlink-0.1.0-linux-x86_64.tar.gz` from [Releases](https://github.com/mastermaiolo/hyprlink/releases):
+
+```bash
+tar -xzf hyprlink-0.1.0-linux-x86_64.tar.gz
+cd hyprlink-0.1.0-linux-x86_64
+./install.sh                                     # installs to ~/.local (no root required)
+systemctl --user enable --now hyprlink-bridge   # daemon as a user service
+hyprlink-gui                                     # open GUI
+```
+
+`./install.sh` accepts `--prefix DIR` (defaults to `~/.local`), `--dry-run`, and verifies runtime dependencies. `./uninstall.sh` removes the installed files.
+
+### 2. Arch Linux (PKGBUILD)
+
 The package is a **local PKGBUILD** in `packaging/arch/`, named `hyprlink-bridge` (on the AUR, "hyprlink" is a different project):
 
 ```bash
 git clone https://github.com/mastermaiolo/hyprlink.git
 cd hyprlink/packaging/arch
 makepkg -si
-systemctl --user enable --now hyprlink-bridge   # the daemon, as a user service
-hyprlink-gui                                     # the GUI (also in your app menu)
+systemctl --user enable --now hyprlink-bridge
+hyprlink-gui
 ```
 
-It installs `hyprlink-daemon`, `hyprlink-gui` and `hyprlinkctl` into `/usr/bin`, the `hyprlink-bridge.service` user unit and a `.desktop` launcher. To try the current checkout before a tag exists: `HYPRLINK_LOCAL=1 makepkg -si`.
+It installs `hyprlink-daemon`, `hyprlink-gui` and `hyprlinkctl` into `/usr/bin`, the `hyprlink-bridge.service` user unit and a `.desktop` launcher. To test the current checkout before a tag exists: `HYPRLINK_LOCAL=1 makepkg -si`.
+
+### Runtime dependencies
+
+- **Core**: `hyprctl` (Hyprland), `pipewire`, `wireplumber` (`wpctl`), `libpulse` (`pactl`), `wl-clipboard` (`wl-copy`).
+- **Media**: `gstreamer`, `gst-plugins-good` (v4l2sink), `gst-libav` (avdec_h264, avdec_h265), `gst-plugin-pipewire` (pipewiresrc).
+- **Optional**: `v4l2loopback-dkms` (phone camera as `/dev/video42`), `grimblast` or `grim` + `slurp` (screenshots), `hyprlock` / `noctalia` (locking screen).
 
 The service starts with the graphical session (`graphical-session.target`). With uwsm that is automatic. Without uwsm that target is usually not activated: in Hyprland add `exec-once = dbus-update-activation-environment --systemd --all` and then `exec-once = systemctl --user start hyprlink-bridge`. To start the GUI in the tray at login: `cp /usr/share/hyprlink-bridge/hyprlink-bridge-autostart.desktop ~/.config/autostart/` (uwsm reads XDG autostart) or `exec-once = hyprlink-gui` in Hyprland.
 
@@ -102,13 +126,19 @@ The GUI keeps the **phone first**: it shows the connected device before the PC i
 For scripts, shortcuts and bars there is `hyprlinkctl`:
 
 ```
-hyprlinkctl status         connection state
-hyprlinkctl ping           round-trip to the phone
-hyprlinkctl mic toggle     phone microphone on/off     (on | off | toggle)
-hyprlinkctl tap toggle     send PC audio to the phone
-hyprlinkctl speaker toggle phone as the PC's speaker
-hyprlinkctl ws 3           switch to workspace 3
-hyprlinkctl open           open (or focus) the GUI
+hyprlinkctl status             connection state
+hyprlinkctl ping               round-trip to the phone
+hyprlinkctl watch --json       stream snapshots as JSON lines
+hyprlinkctl clipboard          send clipboard to phone
+hyprlinkctl pair               open pairing window (120 s)
+hyprlinkctl mirror toggle      toggle phone screen mirror
+hyprlinkctl doctor             environment and compatibility report
+hyprlinkctl shortcuts          list configured shortcuts
+hyprlinkctl mic toggle         phone microphone on/off (on | off | toggle)
+hyprlinkctl tap toggle         send PC audio to the phone
+hyprlinkctl speaker toggle     phone as the PC's speaker
+hyprlinkctl ws 3               switch to workspace 3
+hyprlinkctl open               open (or focus) the GUI
 ```
 
 `hyprlinkctl --help` lists the rest. `contrib/` has a Waybar widget and a "Send via HyprLink" `.desktop` entry for your file manager's context menu; `contrib/install.sh` installs them.

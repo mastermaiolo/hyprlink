@@ -70,17 +70,41 @@
 
 ## 安装
 
+在 Linux 上有两种安装 HyprLink 的方式：
+
+### 1. 预编译二进制压缩包（任何 Linux x86_64）
+
+从 [Releases](https://github.com/mastermaiolo/hyprlink/releases) 下载 `hyprlink-0.1.0-linux-x86_64.tar.gz`：
+
+```bash
+tar -xzf hyprlink-0.1.0-linux-x86_64.tar.gz
+cd hyprlink-0.1.0-linux-x86_64
+./install.sh                                     # 默认安装到 ~/.local（无需 root）
+systemctl --user enable --now hyprlink-bridge   # 守护进程作为用户服务启动
+hyprlink-gui                                     # 打开 GUI
+```
+
+`./install.sh` 支持 `--prefix DIR`（默认 `~/.local`）、`--dry-run`，并检查运行时依赖项。`./uninstall.sh` 会清理安装的文件。
+
+### 2. Arch Linux（PKGBUILD）
+
 软件包是 `packaging/arch/` 里的**本地 PKGBUILD**，名为 `hyprlink-bridge`（AUR 上的“hyprlink”是另一个项目）：
 
 ```bash
 git clone https://github.com/mastermaiolo/hyprlink.git
 cd hyprlink/packaging/arch
 makepkg -si
-systemctl --user enable --now hyprlink-bridge   # 守护进程，作为用户服务
-hyprlink-gui                                     # GUI（应用菜单里也有）
+systemctl --user enable --now hyprlink-bridge
+hyprlink-gui
 ```
 
 它会把 `hyprlink-daemon`、`hyprlink-gui` 和 `hyprlinkctl` 安装到 `/usr/bin`，同时安装用户服务 `hyprlink-bridge.service` 和 `.desktop` 启动项。在标签发布之前，想用当前代码试用：`HYPRLINK_LOCAL=1 makepkg -si`。
+
+### 运行时依赖
+
+- **核心**：`hyprctl`（Hyprland）、`pipewire`、`wireplumber`（`wpctl`）、`libpulse`（`pactl`）、`wl-clipboard`（`wl-copy`）。
+- **多媒体**：`gstreamer`、`gst-plugins-good`（v4l2sink）、`gst-libav`（avdec_h264、avdec_h265）、`gst-plugin-pipewire`（pipewiresrc）。
+- **可选**：`v4l2loopback-dkms`（手机作为 `/dev/video42` 摄像头）、`grimblast` 或 `grim` + `slurp`（截屏）、`hyprlock` / `noctalia`（锁屏）。
 
 该服务随图形会话启动（`graphical-session.target`）。使用 uwsm 时会自动完成。不用 uwsm 时通常不会激活这个 target：在 Hyprland 中加入 `exec-once = dbus-update-activation-environment --systemd --all`，再加 `exec-once = systemctl --user start hyprlink-bridge`。若想登录时让 GUI 在托盘中启动：`cp /usr/share/hyprlink-bridge/hyprlink-bridge-autostart.desktop ~/.config/autostart/`（uwsm 会读取 XDG 自启动），或在 Hyprland 中使用 `exec-once = hyprlink-gui`。
 
@@ -102,13 +126,19 @@ GUI 始终**先显示手机**：已连接的设备排在电脑本身之前。按
 脚本、快捷键和状态栏可以使用 `hyprlinkctl`：
 
 ```
-hyprlinkctl status         连接状态
-hyprlinkctl ping           到手机的往返延迟
-hyprlinkctl mic toggle     手机麦克风开/关   (on | off | toggle)
-hyprlinkctl tap toggle     把电脑音频发送到手机
-hyprlinkctl speaker toggle 手机作为电脑扬声器
-hyprlinkctl ws 3           切换到工作区 3
-hyprlinkctl open           打开（或聚焦）GUI
+hyprlinkctl status             连接状态
+hyprlinkctl ping               到手机的往返延迟
+hyprlinkctl watch --json       以 JSON 行流式输出状态快照
+hyprlinkctl clipboard          向手机发送剪贴板内容
+hyprlinkctl pair               开启配对窗口（120 秒）
+hyprlinkctl mirror toggle      开启/关闭屏幕镜像
+hyprlinkctl doctor             环境与兼容性诊断报告
+hyprlinkctl shortcuts          列出已配置的快捷键
+hyprlinkctl mic toggle         手机麦克风开/关   (on | off | toggle)
+hyprlinkctl tap toggle         把电脑音频发送到手机
+hyprlinkctl speaker toggle     手机作为电脑扬声器
+hyprlinkctl ws 3               切换到工作区 3
+hyprlinkctl open               打开（或聚焦）GUI
 ```
 
 `hyprlinkctl --help` 会列出其余命令。`contrib/` 里有 Waybar 小部件和文件管理器右键菜单用的“通过 HyprLink 发送”`.desktop` 条目；`contrib/install.sh` 可以安装它们。
