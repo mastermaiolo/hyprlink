@@ -72,6 +72,26 @@ Stack: [`quinn`](https://github.com/quinn-rs/quinn) (QUIC), `rustls` (TLS),
 (tray), `zbus` (D-Bus — MPRIS e notificações), `uinput` (touchpad/teclado),
 GStreamer/PipeWire (áudio e câmara).
 
+## Compilar
+
+O repositório traz `.cargo/config.toml` com **`clang` + `lld`** como ligador
+(`pacman -S clang lld`): o *link* de um build debug do daemon passa de ~5 s
+para ~2 s. No release o ganho é nulo (o tempo vai para o LTO e o codegen).
+
+```bash
+cargo build --profile fast -p hyprlinkd   # para iterar: sem LTO, 16 unidades de codegen
+cargo build --release -p hyprlinkd        # para distribuir (LTO, overflow-checks = true)
+```
+
+O perfil `fast` herda do `release` com `lto = false`, `codegen-units = 16` e
+`overflow-checks = false`; **não é para distribuir**. A primeira compilação
+depois de mudar o ligador recompila tudo (as `rustflags` mudam).
+
+Opcional, nada disto está ligado por omissão: `mold` (`paru -S mold`, depois
+`-C link-arg=-fuse-ld=mold` no lugar de `lld`) liga ainda mais depressa; e
+`sccache` (`paru -S sccache` + `RUSTC_WRAPPER=sccache`) só compensa com vários
+`target` ou depois de `cargo clean`, porque o `cargo` já guarda o que não mudou.
+
 ## App Android
 
 Em `app android hyprlink/` — projeto Kotlin/Jetpack Compose gerado e mantido

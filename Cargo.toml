@@ -25,6 +25,17 @@ lto = "thin"
 codegen-units = 4
 strip = true
 
+# Para ITERAR (`cargo build --profile fast -p hyprlinkd`): herda do release mas
+# sem LTO, com mais unidades de codegen e sem verificação de overflow.
+# **NÃO é para distribuir** — o `overflow-checks = true` do `release` acima é
+# deliberado e fica como está; aqui desliga-se só para compilar mais depressa.
+[profile.fast]
+inherits = "release"
+lto = false
+codegen-units = 16
+overflow-checks = false
+debug = false
+
 # A GUI (iced, tiny-skia) fica usável em debug.
 [profile.dev.package."*"]
 opt-level = 2

@@ -1,0 +1,6 @@
+# Ligador rápido: clang + lld (o `mold` é mais rápido ainda, mas não vem
+# instalado; ver «Compilar» no README.md). Só muda como se liga, não o que
+# se compila. Exige `clang` e `lld` instalados (pacman -S clang lld).
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
