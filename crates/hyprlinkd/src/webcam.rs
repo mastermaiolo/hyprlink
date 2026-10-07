@@ -287,3 +287,167 @@ pub async fn feed(
     let _ = appsrc.end_of_stream();
     stop(&handle, &hud);
 }
+
+/// Parâmetros de um `webcam.start`; o mesmo conjunto serve o comando da GUI
+/// (`Command2::StartWebcam`) e o pedido do telemóvel (`webcam.request`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StartParams {
+    pub width: i64,
+    pub height: i64,
+    pub fps: i64,
+    pub codec: &'static str,
+}
+
+impl Default for StartParams {
+    /// Os valores por omissão do `webcam.start` (PROTOCOL.md §webcam).
+    fn default() -> Self {
+        Self {
+            width: 1280,
+            height: 720,
+            fps: 24,
+            codec: "h264",
+        }
+    }
+}
+
+/// Lê o corpo de um `webcam.request` (`{width?, height?, fps?, codec?}`);
+/// o que faltar fica com o valor por omissão. O erro é curto e em inglês,
+/// para o `webcam.request_result`.
+pub fn parse_request(body: Option<&Value>) -> Result<StartParams, &'static str> {
+    let mut p = StartParams::default();
+    let Some(b) = body else { return Ok(p) };
+    let num = |key: &str, max: i64| -> Result<Option<i64>, &'static str> {
+        match crate::protocol::body_get(b, key) {
+            None => Ok(None),
+            Some(v) => v
+                .as_integer()
+                .and_then(|i| i64::try_from(i).ok())
+                .filter(|n| (1..=max).contains(n))
+                .map(Some)
+                .ok_or("invalid parameters"),
+        }
+    };
+    if let Some(w) = num("width", 7680)? {
+        p.width = w;
+    }
+    if let Some(h) = num("height", 4320)? {
+        p.height = h;
+    }
+    if let Some(f) = num("fps", 120)? {
+        p.fps = f;
+    }
+    if let Some(c) = crate::protocol::body_get(b, "codec") {
+        p.codec = match c.as_text() {
+            Some("h264") => "h264",
+            Some("h265") => "h265",
+            _ => return Err("unsupported codec"),
+        };
+    }
+    Ok(p)
+}
+
+/// `webcam.request` (P→D): valida o pedido e recusa se não houver telemóvel
+/// ligado ou se já houver câmara ativa (ou um `webcam.start` à espera do
+/// vídeo). Em caso de sucesso devolve os parâmetros; quem chama responde com
+/// `webcam.request_result` e só depois arranca por `request_start` — o mesmo
+/// caminho do `Command2::StartWebcam`. `Err(motivo)` vai no resultado.
+pub fn check_request(
+    body: Option<&Value>,
+    hud: &Arc<Mutex<HudState>>,
+    pending: &PendingWebcam,
+    phone_connected: bool,
+) -> Result<StartParams, &'static str> {
+    let params = parse_request(body)?;
+    if !phone_connected {
+        return Err("no phone connected");
+    }
+    if pending.lock().unwrap().is_some() || hud.lock().unwrap().modules.webcam_active {
+        return Err("already active");
+    }
+    Ok(params)
+}
+
+/// Corpo do `webcam.request_result`: `{ok, error?}`.
+pub fn request_result_body<T>(result: &Result<T, &str>) -> Value {
+    let mut map = vec![(Value::Text("ok".into()), Value::Bool(result.is_ok()))];
+    if let Err(e) = result {
+        map.push((Value::Text("error".into()), Value::Text((*e).into())));
+    }
+    Value::Map(map)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::{body_get, body_get_bool, body_get_str};
+
+    fn hud() -> Arc<Mutex<HudState>> {
+        HudState::new(String::new())
+    }
+
+    fn map(pairs: Vec<(&str, Value)>) -> Value {
+        Value::Map(
+            pairs
+                .into_iter()
+                .map(|(k, v)| (Value::Text(k.into()), v))
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn parse_uses_defaults_for_omitted_fields() {
+        assert_eq!(parse_request(None).unwrap(), StartParams::default());
+        let b = map(vec![("fps", Value::Integer(30.into()))]);
+        let p = parse_request(Some(&b)).unwrap();
+        assert_eq!((p.width, p.height, p.fps, p.codec), (1280, 720, 30, "h264"));
+    }
+
+    #[test]
+    fn parse_rejects_bad_values() {
+        let b = map(vec![("codec", Value::Text("mjpeg".into()))]);
+        assert_eq!(parse_request(Some(&b)), Err("unsupported codec"));
+        let b = map(vec![("width", Value::Integer(0.into()))]);
+        assert_eq!(parse_request(Some(&b)), Err("invalid parameters"));
+    }
+
+    #[test]
+    fn valid_request_carries_the_requested_params() {
+        let b = map(vec![
+            ("width", Value::Integer(1920.into())),
+            ("height", Value::Integer(1080.into())),
+            ("codec", Value::Text("h265".into())),
+        ]);
+        let r = check_request(Some(&b), &hud(), &new_pending(), true);
+        let p = r.clone().unwrap();
+        assert_eq!(
+            (p.width, p.height, p.fps, p.codec),
+            (1920, 1080, 24, "h265")
+        );
+        assert_eq!(body_get_bool(&request_result_body(&r), "ok"), Some(true));
+        assert!(body_get(&request_result_body(&r), "error").is_none());
+    }
+
+    #[test]
+    fn already_active_is_refused() {
+        let h = hud();
+        state::set_webcam_active(&h, true);
+        let r = check_request(None, &h, &new_pending(), true);
+        assert_eq!(r, Err("already active"));
+        // Um `webcam.start` ainda à espera do vídeo também conta como ativa.
+        let pending = new_pending();
+        *pending.lock().unwrap() = Some((7, 1280, 720));
+        let r = check_request(None, &hud(), &pending, true);
+        assert_eq!(r, Err("already active"));
+        let body = request_result_body(&r);
+        assert_eq!(body_get_bool(&body, "ok"), Some(false));
+        assert_eq!(body_get_str(&body, "error"), Some("already active"));
+    }
+
+    #[test]
+    fn no_phone_connected_is_reported() {
+        let r = check_request(None, &hud(), &new_pending(), false);
+        assert_eq!(r, Err("no phone connected"));
+        let body = request_result_body(&r);
+        assert_eq!(body_get_str(&body, "error"), Some("no phone connected"));
+    }
+}

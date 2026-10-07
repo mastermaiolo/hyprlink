@@ -643,6 +643,39 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
             state::push_log(hud, format!("[!] webcam (telemóvel): {message}"));
             webcam::stop(&ctx.webcam, hud);
         }
+        // O telemóvel pede a câmara (pedido/resposta): reutiliza o caminho do
+        // `Command2::StartWebcam`; em caso de sucesso o `webcam.start` normal
+        // segue por outra stream.
+        "webcam.request" => {
+            let connected = ctx.active.lock().unwrap().is_some();
+            let result = webcam::check_request(body, hud, &ctx.pending_webcam, connected);
+            let line = match &result {
+                Ok(_) => "[i] webcam.request · câmara pedida pelo telemóvel".to_string(),
+                Err(e) => format!("[!] webcam.request recusado · {e}"),
+            };
+            state::push_log(hud, line);
+            reply(
+                &mut send,
+                packet.id,
+                "webcam.request_result",
+                Some(webcam::request_result_body(&result)),
+            )
+            .await;
+            let _ = send.finish();
+            if let Ok(p) = result
+                && !webcam::request_start(
+                    &ctx.active,
+                    &ctx.pending_webcam,
+                    p.width,
+                    p.height,
+                    p.fps,
+                    p.codec,
+                )
+                .await
+            {
+                state::push_log(hud, "[!] webcam.request · telemóvel desligou".to_string());
+            }
+        }
         "webcam.transform" => {
             if let (Some(rotation), Some(mirror)) = (
                 body.and_then(|b| crate::protocol::body_get_i64(b, "rotation")),

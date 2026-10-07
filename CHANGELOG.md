@@ -44,6 +44,9 @@ a app Android tem versões próprias (`versionName`).
 - **Responder a notificações** a partir do PC: a página Notificações mostra um
   campo de texto e «Responder» (Enter envia) nas notificações com ação de
   resposta; o daemon valida e envia `notification.reply`.
+- **Câmara pedida pelo telemóvel** (`webcam.request` → `webcam.request_result`):
+  o daemon arranca a câmara pelo mesmo caminho da GUI e recusa se já estiver
+  ativa.
 
 ### PC
 - `hyprlink-daemon` sem janela; a **GUI** (`hyprlink-gui`, iced) é um processo

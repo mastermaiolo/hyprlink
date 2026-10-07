@@ -115,7 +115,7 @@ completamente diferentes, e confundir os dois já causou bugs reais:
   completa na mesma stream, com timeout de 10s (maioria) ou 5s
   (`audio.set_volume`, `audio.set_mute`, `audio.set_default_sink`,
   `audio.tap_stop`). Usado por: `core.ping`, `hypr.workspaces/clients/dispatch`,
-  `battery.request`, `audio.state/set_volume/set_mute/set_default_sink/tap_start/tap_stop`.
+  `battery.request`, `webcam.request`, `audio.state/set_volume/set_mute/set_default_sink/tap_start/tap_stop`.
   **O daemon precisa terminar de escrever a resposta típica e fechar/half-close
   a stream logo em seguida** — se não fechar, o app trava até o timeout e
   desiste (era o bug do daemon antigo travando 10s no controlo de mídia/áudio).
@@ -372,6 +372,8 @@ dispositivos pareados.
 | type | dir | body |
 |---|---|---|
 | `webcam.start` | D→P push | `{width(def 1280), height(def 720), fps(def 24), codec:"h264"\|"h265"(def h264)}` — `id` do pacote correlaciona o uni-stream de vídeo |
+| `webcam.request` | P→D pedido/resposta | `{width?, height?, fps?, codec?}` — o telemóvel pede a câmara; omitidos = valores por omissão do `webcam.start`. Resposta `webcam.request_result`. Só aceita `codec` `"h264"` ou `"h265"`. |
+| `webcam.request_result` | D→P resposta | `{ok: Bool, error?: String}` — erro curto em inglês: `"already active"` (câmara ativa ou `webcam.start` à espera do vídeo; não reinicia), `"no phone connected"`, `"invalid parameters"`, `"unsupported codec"`. Em caso de `ok:true`, o daemon envia logo a seguir o `webcam.start` normal (D→P), pelo mesmo caminho do botão «Iniciar» da GUI. |
 | `webcam.stop` | D→P push | body irrelevante |
 | `webcam.error` | P→D one-way | `{message}` |
 | `webcam.transform` | P→D one-way | `{rotation:0\|90\|180\|270, mirror:Bool}` |
