@@ -1,12 +1,14 @@
 //! Transferência de ficheiros (Fase 5): telemóvel→PC e PC→telemóvel.
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use ciborium::Value;
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::{Semaphore, SemaphorePermit};
 
 use crate::active::{ActiveConn, announce, push};
 use crate::config::{self, SharedConfig};
@@ -197,6 +199,37 @@ pub async fn receive_uni_stream(
     push(&active, "share.done", Some(body)).await;
 }
 
+/// Fila dos envios PC→telemóvel: **um ficheiro de cada vez**. O estado só tem
+/// um espaço de transferência ativa (`HudState::file_transfer`/`file_cancel`);
+/// com N envios em paralelo o progresso trocava-se, só o último se podia
+/// cancelar e o histórico ficava com uma só entrada. A `Semaphore` do tokio é
+/// justa (FIFO): os ficheiros saem pela ordem em que chegaram. A **receção**
+/// (telemóvel→PC) não passa por aqui — as capturas automáticas do telemóvel não
+/// podem esperar por um envio longo (a app dá uma transferência a 0 % > 30 s
+/// por falhada).
+static SEND_QUEUE: Semaphore = Semaphore::const_new(1);
+
+/// Espera a vez na fila `queue`. `None` se `closed` terminar primeiro (a
+/// ligação caiu enquanto esperava): o envio desiste sem erro e **sem ficar
+/// com a permissão** — nunca foi adquirida. A permissão devolvida larga-se
+/// sozinha (RAII) em qualquer saída do envio: fim, erro de rede, cancelado.
+async fn acquire_slot<'a>(
+    queue: &'a Semaphore,
+    closed: impl Future<Output = ()>,
+    on_queued: impl FnOnce(),
+) -> Option<SemaphorePermit<'a>> {
+    match queue.try_acquire() {
+        Ok(p) => Some(p),
+        Err(_) => {
+            on_queued();
+            tokio::select! {
+                p = queue.acquire() => p.ok(),
+                _ = closed => None,
+            }
+        }
+    }
+}
+
 /// Envia um ficheiro do PC pro telemóvel: anuncia (`share.file`, D→P) pra
 /// ganhar um `id`, depois abre um uni-stream próprio (8 bytes de id + bytes
 /// crus, mesmo formato que o telemóvel usa na direção inversa) e transmite
@@ -208,6 +241,30 @@ pub async fn send_file(active: &ActiveConn, hud: &Arc<Mutex<HudState>>, path: &s
         .and_then(|n| n.to_str())
         .unwrap_or("arquivo")
         .to_string();
+    // Um de cada vez, ANTES de anunciar: o telemóvel só espera uns 10 s pelo
+    // uni-stream depois do `share.file`, e um anúncio na fila expirava.
+    let Some(connection) = active.lock().unwrap().clone() else {
+        push_log(
+            hud,
+            "[!] share.file: sem conexão ativa pra enviar".to_string(),
+        );
+        return;
+    };
+    let Some(_slot) = acquire_slot(
+        &SEND_QUEUE,
+        async {
+            let _ = connection.closed().await;
+        },
+        || push_log(hud, format!("[i] share.file · {name} em fila")),
+    )
+    .await
+    else {
+        push_log(
+            hud,
+            format!("[i] share.file · {name} desistiu da fila (a ligação caiu)"),
+        );
+        return;
+    };
     let size = match tokio::fs::metadata(path).await {
         Ok(m) => m.len(),
         Err(e) => {
@@ -331,4 +388,137 @@ pub async fn send_file(active: &ActiveConn, hud: &Arc<Mutex<HudState>>, path: &s
         hud,
         format!("[+] ficheiro enviado: {name} ({total} bytes) · sha256 {sha_hex}"),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::future::pending;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Duration;
+
+    type Log = Arc<Mutex<Vec<String>>>;
+
+    /// Um «envio» de teste: espera a vez, regista início e fim, e demora `ms`.
+    /// `fail` = sai a meio (como um erro de rede) sem chegar ao fim.
+    async fn job(q: Arc<Semaphore>, log: Log, id: usize, ms: u64, fail: bool) {
+        let Some(_slot) = acquire_slot(&q, pending::<()>(), || {}).await else {
+            return;
+        };
+        log.lock().unwrap().push(format!("start {id}"));
+        tokio::time::sleep(Duration::from_millis(ms)).await;
+        if fail {
+            log.lock().unwrap().push(format!("fail {id}"));
+            return; // a permissão larga-se aqui, como num `return` antecipado
+        }
+        log.lock().unwrap().push(format!("end {id}"));
+    }
+
+    #[tokio::test]
+    async fn dois_envios_em_simultaneo_correm_um_depois_do_outro() {
+        let q = Arc::new(Semaphore::new(1));
+        let log: Log = Arc::default();
+        let a = tokio::spawn(job(q.clone(), log.clone(), 0, 40, false));
+        let b = tokio::spawn(job(q.clone(), log.clone(), 1, 10, false));
+        a.await.unwrap();
+        b.await.unwrap();
+        // O segundo só começa depois de o primeiro acabar (sem sobreposição),
+        // mesmo sendo mais curto.
+        assert_eq!(
+            *log.lock().unwrap(),
+            ["start 0", "end 0", "start 1", "end 1"]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_permissao_volta_quando_o_envio_falha() {
+        let q = Arc::new(Semaphore::new(1));
+        let log: Log = Arc::default();
+        job(q.clone(), log.clone(), 0, 1, true).await;
+        assert_eq!(q.available_permits(), 1, "a falha não prende a fila");
+        // E o seguinte corre normalmente.
+        job(q.clone(), log.clone(), 1, 1, false).await;
+        assert_eq!(
+            *log.lock().unwrap(),
+            ["start 0", "fail 0", "start 1", "end 1"]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_ordem_de_chegada_e_respeitada() {
+        let q = Arc::new(Semaphore::new(1));
+        let log: Log = Arc::default();
+        // O 0 segura a fila enquanto os outros se enfileiram, um a um.
+        let mut hs = vec![tokio::spawn(job(q.clone(), log.clone(), 0, 60, false))];
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        for id in 1..6 {
+            hs.push(tokio::spawn(job(q.clone(), log.clone(), id, 1, false)));
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        for h in hs {
+            h.await.unwrap();
+        }
+        let starts: Vec<String> = log
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|l| l.starts_with("start"))
+            .cloned()
+            .collect();
+        assert_eq!(
+            starts,
+            [
+                "start 0", "start 1", "start 2", "start 3", "start 4", "start 5"
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn ligacao_a_cair_na_fila_desiste_sem_prender_a_permissao() {
+        let q = Arc::new(Semaphore::new(1));
+        // Alguém segura a vez.
+        let holder = q.clone().acquire_owned().await.unwrap();
+        let (drop_conn, closed) = tokio::sync::oneshot::channel::<()>();
+        let queued = Arc::new(AtomicUsize::new(0));
+        let waiter = {
+            let (q, queued) = (q.clone(), queued.clone());
+            tokio::spawn(async move {
+                acquire_slot(
+                    &q,
+                    async {
+                        let _ = closed.await;
+                    },
+                    || {
+                        queued.fetch_add(1, Ordering::SeqCst);
+                    },
+                )
+                .await
+                .is_none()
+            })
+        };
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        assert_eq!(queued.load(Ordering::SeqCst), 1, "avisou que ficou em fila");
+        assert!(!waiter.is_finished(), "ainda à espera da vez");
+        let _ = drop_conn.send(()); // a ligação caiu
+        assert!(waiter.await.unwrap(), "desistiu (None)");
+        // O dono larga a vez: está livre, nada ficou preso pelo que desistiu.
+        drop(holder);
+        assert_eq!(q.available_permits(), 1);
+        assert!(q.try_acquire().is_ok());
+    }
+
+    #[tokio::test]
+    async fn fila_vazia_nao_avisa_nem_espera() {
+        let q = Semaphore::new(1);
+        let avisou = AtomicUsize::new(0);
+        let slot = acquire_slot(&q, pending::<()>(), || {
+            avisou.fetch_add(1, Ordering::SeqCst);
+        })
+        .await;
+        assert!(slot.is_some());
+        assert_eq!(avisou.load(Ordering::SeqCst), 0);
+        assert_eq!(q.available_permits(), 0, "a permissão está em uso");
+        drop(slot);
+        assert_eq!(q.available_permits(), 1);
+    }
 }

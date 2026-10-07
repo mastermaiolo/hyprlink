@@ -222,6 +222,16 @@ de mandar um). **Telemóvel→PC**: telemóvel anuncia+envia, PC recebe e manda
 final (calculando o próprio SHA-256 dos bytes enviados) — sem isso o
 telemóvel espera 15s à toa e marca "não verificado".
 
+**Fila (PC→telemóvel): o daemon envia um ficheiro de cada vez**, pela ordem
+em que os pedidos chegam (`SendFile` seguidos ficam em fila, FIFO). O
+`share.file` de um ficheiro só é anunciado quando chega a sua vez — o
+telemóvel só espera uns 10 s pelo uni-stream depois do anúncio, por isso não
+pode haver anúncios à espera. Se a ligação cair com ficheiros em fila, esses
+desistem sem erro. Um ficheiro **ainda em fila não se pode cancelar** (só tem
+`id` depois de começar; `CancelTransfer` cancela o que está a decorrer). A
+**receção** (telemóvel→PC) não entra na fila: as capturas automáticas do
+telemóvel chegam logo, mesmo com um envio longo em curso.
+
 ### audio
 | type | dir | body |
 |---|---|---|
