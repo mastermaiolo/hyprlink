@@ -225,10 +225,34 @@ pub fn ringer(r: Ringer) -> &'static str {
     }
 }
 
+/// Rótulo de um gesto do telemóvel (`link::GESTURES`); um nome que não
+/// conhecemos aparece tal e qual.
+pub fn gesture(name: &str) -> String {
+    match name {
+        "swipe_left_3" => t("Deslizar ←  (3 dedos)"),
+        "swipe_right_3" => t("Deslizar →  (3 dedos)"),
+        "double_tap_back" => t("Toque duplo no verso"),
+        "rotate_landscape" => t("Rodar para horizontal"),
+        "volume" => t("Volume + / −"),
+        other => other,
+    }
+    .to_string()
+}
+
+/// A ação de um gesto como a vê quem configura: `hyprctl dispatch …`, ou, com
+/// o prefixo `pc:`, a ação do daemon (`{dir}` = up/down). Código, não se traduz.
+pub fn gesture_action(action: &str) -> String {
+    match action.strip_prefix("pc:") {
+        Some(a) => format!("pc.action {}", a.replace("{dir}", "up|down")),
+        None => format!("hyprctl dispatch {action}"),
+    }
+}
+
 pub fn cam_codec(c: CamCodec) -> &'static str {
     match c {
         CamCodec::Mjpeg => "MJPEG",
         CamCodec::H264 => "H.264",
+        CamCodec::H265 => "H.265",
     }
 }
 
@@ -316,4 +340,36 @@ pub fn ago(unix: u64) -> String {
 pub fn clock(ms: u64) -> String {
     let s = ms / 1000;
     format!("{}:{:02}", s / 60, s % 60)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::link::GESTURES;
+
+    #[test]
+    fn every_gesture_has_a_label_and_unknown_ones_pass_through() {
+        for n in GESTURES {
+            assert_ne!(gesture(n), n, "{n} sem rótulo");
+        }
+        assert_eq!(gesture("pinch"), "pinch");
+    }
+
+    #[test]
+    fn gesture_actions_read_like_the_commands_they_run() {
+        assert_eq!(
+            gesture_action("workspace e-1"),
+            "hyprctl dispatch workspace e-1"
+        );
+        assert_eq!(
+            gesture_action("pc:volume_{dir}"),
+            "pc.action volume_up|down"
+        );
+    }
+
+    #[test]
+    fn cam_codec_labels() {
+        assert_eq!(cam_codec(CamCodec::H264), "H.264");
+        assert_eq!(cam_codec(CamCodec::H265), "H.265");
+    }
 }

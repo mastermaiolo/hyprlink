@@ -746,6 +746,16 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                 }
             }
         }
+        // O telemóvel fez um gesto (one-way): ver `gesture.rs` e PROTOCOL.md.
+        "gesture" => {
+            if let Some(name) = body.and_then(|b| body_get_str(b, "name")) {
+                let dir = body.and_then(|b| body_get_str(b, "dir"));
+                let line = crate::gesture::handle(&ctx.config, name, dir).await;
+                state::push_log(hud, line);
+                // O «último gesto» vai logo para a GUI.
+                crate::hub::global().publish(crate::bridge::gestures_event(&ctx.config));
+            }
+        }
         "notification.dismissed" => {
             if let Some(key) = body.and_then(|b| body_get_str(b, "key")) {
                 state::remove_active_notif(hud, key);

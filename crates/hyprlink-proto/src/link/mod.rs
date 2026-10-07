@@ -379,6 +379,49 @@ pub struct ActiveWindow {
     pub workspace: u8,
 }
 
+/// Nomes dos gestos do telemóvel (`gesture {name}`, P→D, ver PROTOCOL.md).
+pub const GESTURES: [&str; 5] = [
+    "swipe_left_3",
+    "swipe_right_3",
+    "double_tap_back",
+    "rotate_landscape",
+    "volume",
+];
+
+/// Um gesto do telemóvel e o que faz no PC. `action` é um `hyprctl dispatch`
+/// ("workspace e-1") ou, com o prefixo `pc:`, uma ação do daemon
+/// ("pc:volume_up"; `{dir}` vira `up`/`down` no gesto `volume`).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct GestureRule {
+    pub name: String,
+    pub on: bool,
+    pub action: String,
+}
+
+/// As regras de origem, pela ordem de `GESTURES`. As ações de PC já são as
+/// que existem no Hyprland (config Lua incluída) e em `pc.action`.
+pub fn default_gesture_rules() -> Vec<GestureRule> {
+    let r = |name: &str, on: bool, action: &str| GestureRule {
+        name: name.into(),
+        on,
+        action: action.into(),
+    };
+    vec![
+        r("swipe_left_3", true, "workspace e-1"),
+        r("swipe_right_3", true, "workspace e+1"),
+        r("double_tap_back", true, "togglespecialworkspace"),
+        r("rotate_landscape", false, "fullscreen 1"),
+        r("volume", true, "pc:volume_{dir}"),
+    ]
+}
+
+/// O último gesto recebido do telemóvel nesta sessão do daemon.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct GestureLast {
+    pub name: String,
+    pub at_unix: u64,
+}
+
 /// A user-defined `hyprctl dispatch`, also offered on the phone.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Shortcut {
@@ -400,12 +443,19 @@ pub struct TrackpadConfig {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CamCodec {
+    /// Já não se oferece: o telemóvel só codifica H.264/H.265 e o daemon
+    /// responde `NotImplemented`. Fica na variante para um pedido antigo ainda
+    /// descodificar.
     Mjpeg,
     H264,
+    /// HEVC: poupa débito; o telemóvel volta a H.264 se não tiver encoder
+    /// por hardware (o codec efetivo vem em `WebcamStats::codec`).
+    H265,
 }
 
 impl CamCodec {
-    pub const ALL: [CamCodec; 2] = [CamCodec::Mjpeg, CamCodec::H264];
+    /// O que o seletor da GUI oferece.
+    pub const ALL: [CamCodec; 2] = [CamCodec::H264, CamCodec::H265];
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -421,6 +471,11 @@ pub struct WebcamStats {
     pub mbps: f32,
     /// The daemon does not know this yet.
     pub fps: Option<f32>,
+    /// Codec **efetivo** do stream (o byte que o telemóvel envia), que pode
+    /// diferir do pedido (H.265 → H.264 sem encoder HEVC). `None` = ainda não
+    /// chegou o primeiro byte, ou daemon antigo.
+    #[serde(default)]
+    pub codec: Option<CamCodec>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
@@ -617,6 +672,11 @@ pub enum Command2 {
     /// telemóvel envia). Guardado no daemon, por certificado.
     RenameDevice(DeviceId, String),
     RestartDaemon,
+    /// Liga/desliga um gesto do telemóvel (persistido no daemon).
+    SetGesture(String, bool),
+    /// Esvazia o histórico de ficheiros. Não apaga nada do disco nem cancela
+    /// o envio/receção em curso.
+    ClearFileHistory,
 }
 
 /// Events for the new pages.
@@ -639,4 +699,9 @@ pub enum Event2 {
     Transfers(Vec<Transfer>),
     Players(Vec<Player>),
     Settings(Settings),
+    /// Gestos do telemóvel: regras persistidas + o último recebido.
+    Gestures {
+        rules: Vec<GestureRule>,
+        last: Option<GestureLast>,
+    },
 }

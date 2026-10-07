@@ -173,6 +173,8 @@ fn all_commands2() -> Vec<Command2> {
         SetDownloadsDir("~/Transferências/HyprLink".into()),
         RenameDevice(7, "Poco F4".into()),
         RestartDaemon,
+        SetGesture("swipe_left_3".into(), false),
+        ClearFileHistory,
     ]
 }
 
@@ -314,4 +316,53 @@ fn notice_has_no_prose() {
         v,
         serde_json::json!({"Failed": {"op": "speaker", "error": "refused"}})
     );
+}
+
+/// O seletor da webcam: só o que o telemóvel codifica. MJPEG fica na variante
+/// (um pedido antigo ainda descodifica) mas já não se oferece.
+#[test]
+fn camera_codecs_offered_and_wire_names() {
+    assert_eq!(CamCodec::ALL, [CamCodec::H264, CamCodec::H265]);
+    assert!(!CamCodec::ALL.contains(&CamCodec::Mjpeg));
+    for (c, name) in [
+        (CamCodec::H264, "h264"),
+        (CamCodec::H265, "h265"),
+        (CamCodec::Mjpeg, "mjpeg"),
+    ] {
+        assert_eq!(serde_json::to_value(c).unwrap(), serde_json::json!(name));
+        same(&c);
+    }
+}
+
+/// `codec` em `WebcamStats` é aditivo: um daemon antigo, sem a chave, ainda
+/// descodifica (`None`); e o novo leva o codec efetivo.
+#[test]
+fn webcam_stats_codec_is_additive() {
+    let old: WebcamStats = serde_json::from_str(r#"{"mbps": 6.2, "fps": null}"#).unwrap();
+    assert_eq!(old.codec, None);
+    let now = WebcamStats {
+        mbps: 6.2,
+        fps: None,
+        codec: Some(CamCodec::H265),
+    };
+    same(&now);
+    assert_eq!(serde_json::to_value(now).unwrap()["codec"], "h265");
+}
+
+#[test]
+fn gestures_contract() {
+    let rules = default_gesture_rules();
+    let names: Vec<&str> = rules.iter().map(|r| r.name.as_str()).collect();
+    assert_eq!(names, GESTURES, "as regras de origem seguem GESTURES");
+    same(&Event2::Gestures {
+        rules,
+        last: Some(GestureLast {
+            name: "volume".into(),
+            at_unix: 1_791_100_000,
+        }),
+    });
+    same(&Event2::Gestures {
+        rules: vec![],
+        last: None,
+    });
 }

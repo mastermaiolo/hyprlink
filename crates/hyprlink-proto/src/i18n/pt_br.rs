@@ -109,7 +109,6 @@ pub const TABLE: &[(&str, &str)] = &[
     ("CÂMARA & ECRÃ", "CÂMERA & TELA"),
     ("Escolhe o formato e liga. Aparece no PC como /dev/video42.", "Escolha o formato e ligue. Aparece no PC como /dev/video42."),
     ("o telemóvel pode baixar", "o celular pode reduzir"),
-    ("MJPEG é mais leve para o telemóvel", "MJPEG é mais leve para o celular"),
     ("■  DESLIGAR CÂMARA", "■  DESLIGAR CÂMERA"),
     ("▶  LIGAR CÂMARA", "▶  LIGAR CÂMERA"),
     ("CÂMARA DO TELEMÓVEL", "CÂMERA DO CELULAR"),
@@ -154,4 +153,5 @@ pub const TABLE: &[(&str, &str)] = &[
     ("fechar a janela deixa a app no tray", "fechar a janela deixa o app na bandeja"),
     ("hyprctl dispatch …  (ex.: workspace 5, exec kitty)", "hyprctl dispatch …  (ex.: workspace 5, exec kitty)"),
     ("fp | host:porta | token", "fp | host:porta | token"),
+    ("H.265 poupa débito; o telemóvel volta a H.264 se não tiver encoder HEVC", "H.265 economiza banda; o celular volta para H.264 se não tiver encoder HEVC"),
 ];

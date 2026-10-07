@@ -1138,14 +1138,22 @@ pub fn desk(app: &App) -> El<'_> {
         }
     }
 
+    // Estado real: o que o daemon guardou, e o último gesto que chegou.
     let mut gestures = column![subhead("A", t("Gestos no telemóvel"))];
     for (i, g) in app.gestures.iter().enumerate() {
         gestures = gestures.push(setting(
-            t(g.gesture),
-            format!("hyprctl dispatch {}", g.action),
+            fmt::gesture(&g.name),
+            fmt::gesture_action(&g.action),
             switch(g.on, move |b| Message::Gesture(i, b)),
         ));
     }
+    gestures = gestures.push(kv_text(
+        t("ÚLTIMO GESTO"),
+        match &app.last_gesture {
+            Some(l) => tr!("{} · {}", fmt::gesture(&l.name), fmt::ago(l.at_unix)),
+            None => fmt::DASH.into(),
+        },
+    ));
 
     let active_clients = app
         .workspaces

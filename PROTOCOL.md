@@ -154,6 +154,25 @@ mesma lógica do guard de texto). Do lado P→D, o uni-stream é roteado pelo
 `input.move {dx,dy}` · `input.scroll {dx,dy}` · `input.click {button}` (left/right/middle)
 · `input.type {text}` · `input.key {key}` (ex: "Return", "BackSpace", "Escape", "Tab")
 
+### gesture (P→D, one-way)
+`gesture {name, dir?}` — o telemóvel diz que o utilizador fez um gesto; o PC faz o que
+o utilizador ligou para esse gesto (Definições do daemon, `config.json` → `gestures`;
+a GUI mostra e liga/desliga cada um). Sem resposta.
+
+| `name` | quando | `dir` | ação de origem no PC |
+|---|---|---|---|
+| `swipe_left_3` | deslizar ← com 3 dedos | — | `hyprctl dispatch workspace e-1` |
+| `swipe_right_3` | deslizar → com 3 dedos | — | `hyprctl dispatch workspace e+1` |
+| `double_tap_back` | toque duplo no verso | — | `togglespecialworkspace` |
+| `rotate_landscape` | rodar para horizontal | — | `fullscreen 1` (desligado de origem) |
+| `volume` | tecla de volume | **obrigatório**: `"up"` ou `"down"` | `pc.action volume_up` / `volume_down` |
+
+O daemon só reage a gestos que o utilizador ligou; um gesto desligado ou desconhecido
+fica no Diário (`[i] gesture … (desligado)`) e **conta como «último gesto recebido»** na
+GUI mesmo assim. `volume` sem `dir` válido é ignorado. A app só **emite**; nunca decide
+o que o PC faz. Estado para a GUI: `Event2::Gestures {rules, last}` no socket local.
+Ver `android-design-kit/prompts/29-gestos.md` (o que a app tem de emitir).
+
 ### hypr
 | type | dir | body |
 |---|---|---|
@@ -351,6 +370,8 @@ Uni-stream de vídeo (P→D): 8 bytes id + **1 byte codec efetivo**
 não o pedido; monta o pipeline a partir deste byte) + NALUs/Annex-B cru,
 contínuo. Uni-stream de mic (P→D): 8 bytes id + PCM cru **16-bit LE,
 48000Hz, mono**, sem mais framing.
+
+A GUI oferece **H.264** e **H.265** (MJPEG foi retirado: o telemóvel só codifica H.264/HEVC) e mostra o codec **efetivo** (o byte acima, via `WebcamStats.codec`), não o pedido.
 
 Codec HEVC só é usado pelo telemóvel se houver encoder de hardware
 disponível — pode divergir do que o `webcam.start` pediu; o byte indicador é

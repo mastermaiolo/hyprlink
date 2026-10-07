@@ -146,6 +146,7 @@ pub async fn feed(
         0x02 => ("avdec_h265", "H.265"),
         _ => ("avdec_h264", "H.264"),
     };
+    state::set_webcam_codec(&hud, label);
     let parser = if decoder == "avdec_h265" {
         "h265parse"
     } else {

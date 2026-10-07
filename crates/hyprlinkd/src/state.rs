@@ -138,6 +138,9 @@ pub struct ModuleStatus {
     /// Vazão medida da stream de vídeo atual (Mbps, janela de ~1s) — usado
     /// tanto pro teste de rede quanto exibido ao vivo durante um stream normal.
     pub webcam_mbps: Option<f64>,
+    /// Codec efetivo do stream de vídeo atual, pelo byte que o telemóvel
+    /// envia: `"H.264"` / `"H.265"`. `None` = ainda não chegou.
+    pub webcam_codec: Option<&'static str>,
 }
 
 #[derive(Debug, Clone)]
@@ -554,7 +557,18 @@ pub fn set_webcam_active(state: &Arc<Mutex<HudState>>, active: bool) {
     s.modules.webcam_active = active;
     if !active {
         s.modules.webcam_mbps = None;
+        s.modules.webcam_codec = None;
     }
+}
+
+pub fn set_webcam_codec(state: &Arc<Mutex<HudState>>, label: &'static str) {
+    state.lock().unwrap().modules.webcam_codec = Some(label);
+}
+
+/// Esvazia o histórico de ficheiros (a transferência em curso não está aqui:
+/// vive em `file_transfer` e só passa para o histórico quando acaba).
+pub fn clear_file_history(state: &Arc<Mutex<HudState>>) {
+    state.lock().unwrap().modules.file_history.clear();
 }
 
 pub fn set_webcam_mbps(state: &Arc<Mutex<HudState>>, mbps: f64) {
@@ -605,6 +619,48 @@ mod tests {
         finish_file_transfer(&h, false, Some("cancelado pelo usuário".into()));
         let r = h.lock().unwrap().modules.file_history[0].clone();
         assert!(r.cancelled && !r.ok && r.id == id);
+    }
+
+    #[test]
+    fn clear_file_history_keeps_the_transfer_in_progress() {
+        let h = hud();
+        for n in ["a.bin", "b.bin"] {
+            start_file_transfer(&h, n.into(), "enviando", 10);
+            finish_file_transfer(&h, true, None);
+        }
+        // Um terceiro ainda a decorrer.
+        start_file_transfer(&h, "c.bin".into(), "enviando", 10);
+        assert_eq!(h.lock().unwrap().modules.file_history.len(), 2);
+
+        clear_file_history(&h);
+
+        {
+            let s = h.lock().unwrap();
+            let m = &s.modules;
+            assert!(m.file_history.is_empty());
+            assert_eq!(
+                m.file_transfer.as_ref().map(|t| t.name.as_str()),
+                Some("c.bin")
+            );
+            assert!(m.file_cancel.is_some(), "a flag de cancelamento fica");
+        } // o guard cai aqui; `finish_file_transfer` volta a bloquear o Mutex
+        // Depois de acabar, o que estava em curso entra no histórico.
+        finish_file_transfer(&h, true, None);
+        assert_eq!(h.lock().unwrap().modules.file_history.len(), 1);
+        // Limpar o que já está vazio não faz mal.
+        clear_file_history(&h);
+        clear_file_history(&h);
+        assert!(h.lock().unwrap().modules.file_history.is_empty());
+    }
+
+    #[test]
+    fn webcam_codec_is_forgotten_when_the_stream_ends() {
+        let h = hud();
+        set_webcam_active(&h, true);
+        set_webcam_codec(&h, "H.265");
+        assert_eq!(h.lock().unwrap().modules.webcam_codec, Some("H.265"));
+        set_webcam_active(&h, false);
+        assert_eq!(h.lock().unwrap().modules.webcam_codec, None);
     }
 
     #[test]

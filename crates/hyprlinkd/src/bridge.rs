@@ -347,6 +347,11 @@ impl Bridge {
         hud.modules.webcam_active.then(|| WebcamStats {
             mbps: hud.modules.webcam_mbps.unwrap_or(0.0) as f32,
             fps: None,
+            codec: match hud.modules.webcam_codec {
+                Some("H.265") => Some(CamCodec::H265),
+                Some("H.264") => Some(CamCodec::H264),
+                _ => None,
+            },
         })
     }
 
@@ -378,6 +383,14 @@ impl Bridge {
             started_unix: crate::state::now_unix().saturating_sub(uptime_s() as u64),
         }
     }
+}
+
+/// Regras de gestos guardadas + o último gesto recebido, como evento.
+pub fn gestures_event(config: &config::SharedConfig) -> Event {
+    Event::More(Event2::Gestures {
+        rules: config::gesture_rules(config),
+        last: crate::gesture::last(),
+    })
 }
 
 /// `capabilities` do `core.hello` → capacidades do contrato. A app atual
@@ -611,6 +624,7 @@ async fn project_slow(b: Arc<Bridge>, hub: Hub) {
                 })
                 .collect(),
         )));
+        hub.publish(gestures_event(&b.ctx.config));
         let t = config::track_settings(&b.ctx.config);
         hub.publish(Event::More(Event2::Trackpad(TrackpadConfig {
             sensitivity: t.sensitivity,
@@ -865,6 +879,19 @@ async fn execute_more(b: &Arc<Bridge>, c: Command2) {
                 })
                 .collect(),
         ),
+        Command2::SetGesture(name, on) => {
+            if config::set_gesture_on(&ctx.config, &name, on) {
+                hub.publish(gestures_event(&ctx.config));
+            } else {
+                b.fail(Op::Dispatch, ErrorKind::Refused);
+            }
+        }
+        Command2::ClearFileHistory => {
+            // Só o histórico; a transferência em curso (`file_transfer`) e os
+            // ficheiros no disco ficam.
+            state::clear_file_history(&ctx.hud);
+            hub.publish(Event::More(Event2::Transfers(b.transfers())));
+        }
         Command2::SetTrackpad(t) => config::set_track_settings(
             &ctx.config,
             config::TrackSettings {
@@ -878,6 +905,9 @@ async fn execute_more(b: &Arc<Bridge>, c: Command2) {
         Command2::StartWebcam(cfg) => {
             let codec = match cfg.codec {
                 CamCodec::H264 => "h264",
+                // O telemóvel usa HEVC se tiver encoder por hardware, senão
+                // volta a H.264 (o efetivo vem no byte do stream).
+                CamCodec::H265 => "h265",
                 // O telemóvel só codifica H.264/H.265 (WebcamStreamer).
                 CamCodec::Mjpeg => {
                     b.fail(Op::Webcam, ErrorKind::NotImplemented);

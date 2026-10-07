@@ -376,7 +376,6 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Formato", "格式"),
     ("Resolução", "分辨率"),
     ("o telemóvel pode baixar", "手机可能会降低"),
-    ("MJPEG é mais leve para o telemóvel", "MJPEG 对手机更省资源"),
     ("Rede", "网络"),
     ("TESTAR REDE", "测试网络"),
     ("DISPOSITIVO", "设备"),
@@ -489,4 +488,10 @@ pub const TABLE: &[(&str, &str)] = &[
     ("QUIC · mTLS · porta 7443", "QUIC · mTLS · 端口 7443"),
     ("stream unidirecional QUIC dedicado", "专用单向 QUIC 流"),
     ("fp | host:porta | token", "fp | host:端口 | token"),
+    ("H.265 poupa débito; o telemóvel volta a H.264 se não tiver encoder HEVC", "H.265 更省带宽；手机没有 HEVC 编码器时会回退到 H.264"),
+    ("LIMPAR HISTÓRICO", "清除历史记录"),
+    ("Histórico limpo", "历史记录已清除"),
+    ("ÚLTIMO GESTO", "最近手势"),
+    ("CODEC EM USO", "使用中的编码"),
+    ("No PC", "在 PC 上"),
 ];

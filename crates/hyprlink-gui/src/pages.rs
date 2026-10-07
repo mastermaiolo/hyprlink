@@ -278,7 +278,14 @@ fn camera_body(app: &App) -> El<'_> {
     let frame = canvas(CameraFrame {
         t: app.t,
         live,
-        label: format!("{}P{} · {}", cfg.height, cfg.fps, fmt::cam_codec(cfg.codec)),
+        // O codec que está mesmo a chegar (o telemóvel pode ter voltado a
+        // H.264), não só o pedido.
+        label: format!(
+            "{}P{} · {}",
+            cfg.height,
+            cfg.fps,
+            fmt::cam_codec(app.webcam.and_then(|w| w.codec).unwrap_or(cfg.codec))
+        ),
         elapsed: app.t,
     })
     .width(Length::Fill)
@@ -370,7 +377,7 @@ fn camera_body(app: &App) -> El<'_> {
             res.into()
         ),
         setting(t("Imagens por segundo"), t("o telemóvel pode baixar"), fps.into()),
-        setting(t("Codec"), t("MJPEG é mais leve para o telemóvel"), codecs.into()),
+        setting(t("Codec"), t("H.265 poupa débito; o telemóvel volta a H.264 se não tiver encoder HEVC"), codecs.into()),
         gap(space::XL),
         subhead("B", t("Rede")),
         net,
@@ -381,10 +388,17 @@ fn camera_body(app: &App) -> El<'_> {
             Some(Message::Do(Command2::TestNetwork))
         ),
         gap(space::XL),
-        subhead("C", "No PC"),
+        subhead("C", t("No PC")),
         kv_text(t("DISPOSITIVO"), "/dev/video42"),
         kv_text(t("DRIVER"), "v4l2loopback"),
         kv_text(t("MÓDULO"), "webcam.rs"),
+        kv_text(
+            t("CODEC EM USO"),
+            match app.webcam.and_then(|w| w.codec) {
+                Some(c) => fmt::cam_codec(c).to_string(),
+                None => fmt::DASH.to_string(),
+            }
+        ),
         gap(space::XL),
         if live {
             btn(
@@ -1022,7 +1036,20 @@ pub fn share(app: &App) -> El<'_> {
         gap(space::L),
         active,
         gap(space::L),
-        kicker(t("HISTÓRICO")),
+        row![
+            kicker(t("HISTÓRICO")),
+            fill_x(),
+            // Só o histórico (não apaga nada do disco nem cancela envios em
+            // curso); sem histórico, desativado.
+            small_btn(
+                t("LIMPAR HISTÓRICO"),
+                app.transfers
+                    .iter()
+                    .any(|x| x.state != TransferState::Active)
+                    .then_some(Message::ClearFileHistory)
+            ),
+        ]
+        .align_y(Alignment::Center),
         gap(space::S),
         rule_c(PAPER, 1.0),
         history,

@@ -163,7 +163,7 @@ bandeja e toasts), sem reiniciar.
 - **O teste avisa:** `cargo test -p hyprlink-gui --test i18n_completeness` extrai todas as chaves
   de `t()` / `tr!` do código da GUI e de `fmt.rs` e **falha** se faltar uma em `en`, `es` ou `zh`,
   se houver chaves repetidas numa tabela ou se a tradução tiver outro número de `{}` / `{N}`.
-  Os dados de demonstração `gesture:` / `trigger:` / `detail:` de `app.rs` também contam.
+  Os dados de demonstração `trigger:` / `detail:` de `app.rs` também contam; os rótulos dos gestos estão em `fmt::gesture`.
 - **hyprlinkctl:** `--lang pt-PT|pt-BR|en|es|zh`; sem a flag usa o ambiente (`detect()`).
 - **Capturas:** `scripts/gui-capture-lang.sh` gera `docs/screenshots/lang-capa-*.png` e
   `lang-definicoes-*.png`, uma por idioma.

@@ -7,6 +7,7 @@ mod bridge;
 mod clip;
 mod config;
 mod ctl;
+mod gesture;
 mod hub;
 mod hypr;
 mod identity;

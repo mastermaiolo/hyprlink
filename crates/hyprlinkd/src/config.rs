@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use hyprlink_proto::link::{GestureRule, default_gesture_rules};
 use serde::{Deserialize, Serialize};
 
 pub type SharedConfig = Arc<Mutex<AppConfig>>;
@@ -121,6 +122,11 @@ pub struct AppConfig {
     /// do `pc.status`. Ausente = a pasta pessoal.
     #[serde(default)]
     pub disk_path: Option<PathBuf>,
+    /// Gestos do telemóvel (`gesture {name}`): ligado/desligado e a ação.
+    /// Só o que difere da origem precisa de estar aqui; `gesture_rules`
+    /// junta-o às regras de origem.
+    #[serde(default)]
+    pub gestures: Vec<GestureRule>,
 }
 
 fn default_download_dir() -> PathBuf {
@@ -141,6 +147,18 @@ fn config_path() -> PathBuf {
 }
 
 impl AppConfig {
+    /// Muda `on` de um gesto (materializa as regras de origem). `false` se o
+    /// nome não existe. Não grava.
+    fn set_gesture(&mut self, name: &str, on: bool) -> bool {
+        let mut rules = merge_gestures(&self.gestures);
+        let Some(r) = rules.iter_mut().find(|r| r.name == name) else {
+            return false;
+        };
+        r.on = on;
+        self.gestures = rules;
+        true
+    }
+
     fn load_from_disk() -> Self {
         std::fs::read_to_string(config_path())
             .ok()
@@ -154,6 +172,7 @@ impl AppConfig {
                 lang: default_lang(),
                 speaker_prev_sink: None,
                 disk_path: None,
+                gestures: Vec::new(),
             })
     }
 
@@ -194,9 +213,42 @@ pub fn track_settings(config: &SharedConfig) -> TrackSettings {
     config.lock().unwrap().track
 }
 
-/// Sink a restaurar quando o modo coluna desligar (ver `speaker.rs`).
 pub fn disk_path(config: &SharedConfig) -> Option<PathBuf> {
     config.lock().unwrap().disk_path.clone()
+}
+
+/// Sink a restaurar quando o modo coluna desligar (ver `speaker.rs`).
+/// As regras de origem com o que o utilizador guardou por cima (ligado e
+/// ação, por nome). Há sempre as cinco, pela ordem de `GESTURES`; nomes
+/// desconhecidos guardados (de uma versão futura) ficam no fim.
+pub fn gesture_rules(config: &SharedConfig) -> Vec<GestureRule> {
+    merge_gestures(&config.lock().unwrap().gestures)
+}
+
+fn merge_gestures(stored: &[GestureRule]) -> Vec<GestureRule> {
+    let mut rules = default_gesture_rules();
+    for s in stored {
+        match rules.iter_mut().find(|r| r.name == s.name) {
+            Some(r) => {
+                r.on = s.on;
+                if !s.action.trim().is_empty() {
+                    r.action = s.action.clone();
+                }
+            }
+            None => rules.push(s.clone()),
+        }
+    }
+    rules
+}
+
+/// Liga/desliga um gesto e guarda. `false` se o nome não existe.
+pub fn set_gesture_on(config: &SharedConfig, name: &str, on: bool) -> bool {
+    let mut c = config.lock().unwrap();
+    let found = c.set_gesture(name, on);
+    if found {
+        c.save();
+    }
+    found
 }
 
 pub fn speaker_prev_sink(config: &SharedConfig) -> Option<String> {
@@ -226,4 +278,70 @@ pub fn set_track_settings(config: &SharedConfig, track: TrackSettings) {
     let mut c = config.lock().unwrap();
     c.track = track;
     c.save();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cfg(json: &str) -> AppConfig {
+        serde_json::from_str(json).expect("config")
+    }
+
+    #[test]
+    fn config_antiga_sem_gestos_da_as_regras_de_origem() {
+        let c = cfg(r#"{"download_dir": "/x"}"#);
+        assert!(c.gestures.is_empty());
+        assert_eq!(merge_gestures(&c.gestures), default_gesture_rules());
+    }
+
+    #[test]
+    fn ligar_e_desligar_persiste_so_o_que_muda_e_sobrevive_a_recarregar() {
+        let mut c = cfg(r#"{"download_dir": "/x"}"#);
+        // `rotate_landscape` vem desligado de origem.
+        assert!(c.set_gesture("rotate_landscape", true));
+        assert!(c.set_gesture("swipe_left_3", false));
+        assert!(!c.set_gesture("nao_existe", true));
+
+        // Grava e relê, como o `save`/`load_from_disk`.
+        let json = serde_json::to_string_pretty(&c).unwrap();
+        let back: AppConfig = serde_json::from_str(&json).unwrap();
+        let rules = merge_gestures(&back.gestures);
+        let on = |n: &str| rules.iter().find(|r| r.name == n).unwrap().on;
+        assert!(on("rotate_landscape"));
+        assert!(!on("swipe_left_3"));
+        assert!(
+            on("swipe_right_3") && on("volume"),
+            "o resto fica como estava"
+        );
+        assert_eq!(rules.len(), 5);
+    }
+
+    #[test]
+    fn ordem_fixa_acao_editada_e_nomes_desconhecidos() {
+        // Guardado fora de ordem, com uma ação editada à mão e um nome futuro.
+        let c = cfg(r#"{"download_dir": "/x", "gestures": [
+                {"name": "volume", "on": false, "action": "pc:volume_{dir}"},
+                {"name": "swipe_left_3", "on": true, "action": "workspace 1"},
+                {"name": "futuro", "on": true, "action": "exec true"},
+                {"name": "double_tap_back", "on": true, "action": "  "}
+            ]}"#);
+        let r = merge_gestures(&c.gestures);
+        let names: Vec<&str> = r.iter().map(|g| g.name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "swipe_left_3",
+                "swipe_right_3",
+                "double_tap_back",
+                "rotate_landscape",
+                "volume",
+                "futuro"
+            ]
+        );
+        assert_eq!(r[0].action, "workspace 1", "ação editada respeitada");
+        assert!(!r[4].on);
+        // Ação vazia não apaga a de origem.
+        assert_eq!(r[2].action, "togglespecialworkspace");
+    }
 }

@@ -138,12 +138,6 @@ pub struct Rule {
     pub on: bool,
 }
 
-pub struct Gesture {
-    pub gesture: &'static str,
-    pub action: &'static str,
-    pub on: bool,
-}
-
 pub struct App {
     link: Box<dyn Transport>,
     pub section: Section,
@@ -155,7 +149,11 @@ pub struct App {
     pub workspaces: Vec<Workspace>,
     pub active_ws: u8,
     pub follow_phone: bool,
-    pub gestures: Vec<Gesture>,
+    /// Regras dos gestos do telemóvel, como o daemon as guarda (vazio até a
+    /// primeira `Event2::Gestures`).
+    pub gestures: Vec<link::GestureRule>,
+    /// O último gesto recebido do telemóvel, se algum.
+    pub last_gesture: Option<link::GestureLast>,
 
     pub latency: History,
     pub up: History,
@@ -269,6 +267,7 @@ pub enum Message {
     SwitchWs(u8),
     FollowPhone(bool),
     Gesture(usize, bool),
+    ClearFileHistory,
     /// Seletor de idioma em Definições: aplica na hora, grava `gui.json` e
     /// manda o idioma novo à bandeja.
     SetLang(hyprlink_gui::i18n::Lang),
@@ -349,33 +348,8 @@ impl App {
             workspaces: Vec::new(),
             active_ws: 1,
             follow_phone: true,
-            gestures: vec![
-                Gesture {
-                    gesture: "Deslizar ←  (3 dedos)",
-                    action: "workspace e-1",
-                    on: true,
-                },
-                Gesture {
-                    gesture: "Deslizar →  (3 dedos)",
-                    action: "workspace e+1",
-                    on: true,
-                },
-                Gesture {
-                    gesture: "Toque duplo no verso",
-                    action: "togglespecialworkspace",
-                    on: true,
-                },
-                Gesture {
-                    gesture: "Rodar para horizontal",
-                    action: "fullscreen 1",
-                    on: false,
-                },
-                Gesture {
-                    gesture: "Volume + / −",
-                    action: "wpctl set-volume @DEFAULT_SINK@",
-                    on: true,
-                },
-            ],
+            gestures: Vec::new(),
+            last_gesture: None,
             latency: History::new(90),
             up: History::new(90),
             down: History::new(90),
@@ -484,7 +458,7 @@ impl App {
                 width: 1280,
                 height: 720,
                 fps: 30,
-                codec: CamCodec::Mjpeg,
+                codec: CamCodec::H264,
             },
             webcam: None,
             webcam_on: false,
@@ -740,6 +714,10 @@ impl App {
             Event2::BatteryAlerts(a) => self.alerts = a,
             Event2::ActiveWindow(w) => self.active_window = w,
             Event2::Shortcuts(s) => self.shortcuts = s,
+            Event2::Gestures { rules, last } => {
+                self.gestures = rules;
+                self.last_gesture = last;
+            }
             Event2::Trackpad(c) => self.trackpad = c,
             Event2::Webcam(w) => self.webcam = w,
             Event2::NetTest(n) => self.nettest = Some(n),
@@ -909,9 +887,15 @@ impl App {
                 return self.push_tray();
             }
             Message::Gesture(i, b) => {
-                if let Some(g) = self.gestures.get_mut(i) {
-                    g.on = b;
+                // O daemon guarda e devolve o estado; aqui só se pede.
+                if let Some(g) = self.gestures.get(i) {
+                    let name = g.name.clone();
+                    self.more(Command2::SetGesture(name, b));
                 }
+            }
+            Message::ClearFileHistory => {
+                self.more(Command2::ClearFileHistory);
+                self.toast(t("Histórico limpo").to_string());
             }
             Message::Mic(b) => {
                 self.mic_on = b;

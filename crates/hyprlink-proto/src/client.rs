@@ -127,13 +127,15 @@ pub fn op_of(c: &Command) -> Option<Op> {
         Command::SetRule(..) => Op::Presence,
         Command::BeginPairing | Command::CancelPairing | Command::Unpair(_) => Op::Pairing,
         Command::More(m) => match m {
-            C2::RunDispatch(_) | C2::SetShortcuts(_) => Op::Dispatch,
+            C2::RunDispatch(_) | C2::SetShortcuts(_) | C2::SetGesture(..) => Op::Dispatch,
             C2::StartWebcam(_) | C2::StopWebcam | C2::TestNetwork => Op::Webcam,
             C2::SetPhoneVolume(..) | C2::SetRinger(_) | C2::SetDnd(_) => Op::PhoneAudio,
             C2::CopyClip(_) | C2::SendClipToPhone(_) | C2::PinClip(..) | C2::DeleteClip(_) => {
                 Op::Clipboard
             }
-            C2::SendFile(_) | C2::CancelTransfer(_) | C2::OpenDownloads => Op::Files,
+            C2::SendFile(_) | C2::CancelTransfer(_) | C2::OpenDownloads | C2::ClearFileHistory => {
+                Op::Files
+            }
             C2::Media { .. } | C2::PhoneMedia(_) => Op::Media,
             C2::SetHeadset(_) => Op::Speaker,
             C2::DismissNotification(_)

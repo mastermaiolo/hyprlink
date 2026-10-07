@@ -382,7 +382,6 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Formato", "Formato"),
     ("Resolução", "Resolución"),
     ("o telemóvel pode baixar", "el móvil puede bajarla"),
-    ("MJPEG é mais leve para o telemóvel", "MJPEG es más ligero para el móvil"),
     ("Rede", "Red"),
     ("TESTAR REDE", "PROBAR RED"),
     ("DISPOSITIVO", "DISPOSITIVO"),
@@ -495,4 +494,10 @@ pub const TABLE: &[(&str, &str)] = &[
     ("QUIC · mTLS · porta 7443", "QUIC · mTLS · puerto 7443"),
     ("stream unidirecional QUIC dedicado", "stream QUIC unidireccional dedicado"),
     ("fp | host:porta | token", "fp | host:puerto | token"),
+    ("H.265 poupa débito; o telemóvel volta a H.264 se não tiver encoder HEVC", "H.265 ahorra caudal; el móvil vuelve a H.264 si no tiene codificador HEVC"),
+    ("LIMPAR HISTÓRICO", "LIMPIAR HISTORIAL"),
+    ("Histórico limpo", "Historial limpiado"),
+    ("ÚLTIMO GESTO", "ÚLTIMO GESTO"),
+    ("CODEC EM USO", "CÓDEC EN USO"),
+    ("No PC", "En el PC"),
 ];

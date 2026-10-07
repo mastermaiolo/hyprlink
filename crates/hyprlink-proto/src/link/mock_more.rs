@@ -10,6 +10,8 @@ pub struct More {
     now: u64,
     alerts: BatteryAlerts,
     shortcuts: Vec<Shortcut>,
+    gestures: Vec<GestureRule>,
+    last_gesture: Option<GestureLast>,
     trackpad: TrackpadConfig,
     webcam: Option<WebcamConfig>,
     audio: PhoneAudio,
@@ -59,6 +61,8 @@ impl More {
                 low: Some(20),
                 full: true,
             },
+            gestures: default_gesture_rules(),
+            last_gesture: None,
             shortcuts: vec![
                 Shortcut {
                     label: "Terminal".into(),
@@ -334,6 +338,16 @@ impl More {
         }));
     }
 
+    fn gestures_event(&self, out: &mut Vec<Event>) {
+        Self::more(
+            out,
+            Event2::Gestures {
+                rules: self.gestures.clone(),
+                last: self.last_gesture.clone(),
+            },
+        );
+    }
+
     fn history(&self, battery: u8) -> Vec<BatteryPoint> {
         // 12 h, one point every 10 min: overnight charge, then a working day.
         // 12 h, one point every 10 min: an evening discharge, a charge,
@@ -372,6 +386,7 @@ impl More {
         Self::more(out, Event2::BatteryHistory(hist));
         Self::more(out, Event2::BatteryAlerts(self.alerts));
         Self::more(out, Event2::Shortcuts(self.shortcuts.clone()));
+        self.gestures_event(out);
         Self::more(out, Event2::Trackpad(self.trackpad));
         Self::more(out, Event2::PhoneAudio(self.audio.clone()));
         Self::more(
@@ -456,6 +471,17 @@ impl More {
                     48,
                     format!("{}x{} {}fps {:?}", c.width, c.height, c.fps, c.codec).to_lowercase(),
                 );
+            }
+            Command2::SetGesture(name, on) => {
+                if let Some(g) = self.gestures.iter_mut().find(|g| g.name == name) {
+                    g.on = on;
+                }
+                self.gestures_event(out);
+            }
+            Command2::ClearFileHistory => {
+                // Só o histórico: o que ainda está a decorrer fica.
+                self.transfers.retain(|t| t.state == TransferState::Active);
+                Self::more(out, Event2::Transfers(self.transfers.clone()));
             }
             Command2::StopWebcam => {
                 self.webcam = None;
@@ -649,7 +675,14 @@ impl More {
         // Webcam stats.
         if self.webcam.is_some() {
             let mbps = 6.2 + (t * 1.3).sin() * 0.6;
-            Self::more(out, Event2::Webcam(Some(WebcamStats { mbps, fps: None })));
+            Self::more(
+                out,
+                Event2::Webcam(Some(WebcamStats {
+                    mbps,
+                    fps: None,
+                    codec: self.webcam.map(|c| c.codec),
+                })),
+            );
         }
 
         // Active transfers progress (≈ 9 MB/s).
