@@ -896,7 +896,7 @@ pub fn notifications(app: &App) -> El<'_> {
                     gap(space::S),
                     deck(x.text.clone().unwrap_or_default()),
                     gap(space::M),
-                    reply_row(app, x).unwrap_or_else(|| gap(0.0).into()),
+                    reply_row(app, x).unwrap_or_else(|| gap(0.0)),
                     gap(space::XL),
                     rule_c(PAPER, 1.0),
                 ]
