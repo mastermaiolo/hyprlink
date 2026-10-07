@@ -275,8 +275,30 @@ fn nvidia_smi_busy() -> Option<f32> {
     parse_nvidia_smi(&out)
 }
 
+/// Há uma GPU NVIDIA **já acordada**? Lê só `power/runtime_status` de cada
+/// função de vídeo (classe `0x03…`, fabricante `0x10de`) em
+/// `sys/bus/pci/devices` — ler esse ficheiro não acorda a placa, ao contrário
+/// do `nvidia-smi`, que a tira do repouso num portátil híbrido. Sem
+/// `runtime_status` (placa sem gestão de energia em tempo de execução, por
+/// exemplo num desktop) conta como acordada: já está sempre ligada.
+/// Sem nenhuma placa NVIDIA → `false`.
+fn nvidia_awake(sys: &Path) -> bool {
+    let Ok(rd) = std::fs::read_dir(sys.join("bus/pci/devices")) else {
+        return false;
+    };
+    rd.filter_map(|e| e.ok()).any(|e| {
+        let d = e.path();
+        let is_nvidia_video = read_trim(&d.join("vendor")).as_deref() == Some("0x10de")
+            && read_trim(&d.join("class")).is_some_and(|c| c.starts_with("0x03"));
+        is_nvidia_video
+            && read_trim(&d.join("power/runtime_status")).is_none_or(|st| st == "active")
+    })
+}
+
 /// Carga da GPU: AMD pelo sysfs a cada ciclo (barato), NVIDIA pelo
-/// `nvidia-smi` de 6 em 6 s e fora do ciclo. Várias GPUs → a mais carregada.
+/// `nvidia-smi` de 6 em 6 s e fora do ciclo, **só com a placa já acordada**
+/// (a menos que a config `gpu_nvidia_wake` o force). Várias GPUs → a mais
+/// carregada.
 struct Gpu {
     nvidia: bool,
     nvidia_last: Option<f32>,
@@ -296,14 +318,16 @@ impl Gpu {
         }
     }
 
-    async fn sample(&mut self, sys: &Path) -> Option<f32> {
+    /// `wake`: consultar o `nvidia-smi` mesmo com a placa em repouso (pode
+    /// acordá-la). Por omissão `false`.
+    async fn sample(&mut self, sys: &Path, wake: bool) -> Option<f32> {
         let amd = amd_gpu_busy(sys);
         if !self.announced {
             self.announced = true;
             let how = match (amd.is_empty(), self.nvidia) {
-                (false, true) => "amdgpu (sysfs) + nvidia-smi",
+                (false, true) => "amdgpu (sysfs) + nvidia-smi (só com a placa acordada)",
                 (false, false) => "amdgpu (sysfs gpu_busy_percent)",
-                (true, true) => "nvidia-smi",
+                (true, true) => "nvidia-smi (só com a placa acordada)",
                 (true, false) => "nenhum (sem GPU AMD/NVIDIA compatível)",
             };
             eprintln!("[telemetry] GPU: {how}");
@@ -314,7 +338,11 @@ impl Gpu {
             {
                 self.nvidia_last = self.pending.take().unwrap().await.ok().flatten();
             }
-            if self.pending.is_none() && self.nvidia_at.is_none_or(|t| t.elapsed() >= NVIDIA_EVERY)
+            if !wake && !nvidia_awake(sys) {
+                // Em repouso: não a acordar. Sem valor (chave ausente).
+                self.nvidia_last = None;
+            } else if self.pending.is_none()
+                && self.nvidia_at.is_none_or(|t| t.elapsed() >= NVIDIA_EVERY)
             {
                 self.nvidia_at = Some(Instant::now());
                 self.pending = Some(tokio::task::spawn_blocking(nvidia_smi_busy));
@@ -433,7 +461,7 @@ pub async fn poll_and_push(active: ActiveConn, _hud: Arc<Mutex<HudState>>, confi
             disk = disk_path(&config).and_then(|p| disk_usage(&p));
         }
         s.disk = disk;
-        s.gpu_pct = gpu.sample(sys).await;
+        s.gpu_pct = gpu.sample(sys, config::gpu_nvidia_wake(&config)).await;
 
         let _ = crate::active::push(&active, "pc.status", Some(status_body(&host, &s))).await;
     }
@@ -722,10 +750,93 @@ mod tests {
         let sys = Path::new(SYS);
         println!("sensor = {:?}", find_cpu_sensor(sys));
         println!("temp   = {:?}", CpuTemp::default().read(sys));
-        println!("gpu    = {:?}", Gpu::new().sample(sys).await);
+        println!("gpu    = {:?}", Gpu::new().sample(sys, false).await);
+        println!("nvidia acordada = {}", nvidia_awake(sys));
         println!(
             "disco  = {:?}",
             dirs::home_dir().and_then(|h| disk_usage(&h))
         );
+    }
+
+    // ── NVIDIA: não acordar a placa ────────────────────────────────────
+
+    fn pci(sys: &Path, addr: &str, vendor: &str, class: &str, status: Option<&str>) {
+        let d = sys.join("bus/pci/devices").join(addr);
+        std::fs::create_dir_all(d.join("power")).unwrap();
+        std::fs::write(d.join("vendor"), format!("{vendor}\n")).unwrap();
+        std::fs::write(d.join("class"), format!("{class}\n")).unwrap();
+        if let Some(st) = status {
+            std::fs::write(d.join("power/runtime_status"), format!("{st}\n")).unwrap();
+        }
+    }
+
+    #[test]
+    fn nvidia_em_repouso_nao_conta_como_acordada() {
+        let sys = fake_sys("nv-sleep");
+        // O portátil híbrido típico: AMD iGPU ativa + NVIDIA suspensa.
+        pci(&sys, "0000:03:00.0", "0x1002", "0x030000", Some("active"));
+        pci(
+            &sys,
+            "0000:01:00.0",
+            "0x10de",
+            "0x030200",
+            Some("suspended"),
+        );
+        assert!(!nvidia_awake(&sys), "suspensa: o nvidia-smi ia acordá-la");
+        // Acorda (alguém usou a GPU): passa a poder consultar.
+        pci(&sys, "0000:01:00.0", "0x10de", "0x030200", Some("active"));
+        assert!(nvidia_awake(&sys));
+        std::fs::remove_dir_all(&sys).ok();
+    }
+
+    #[test]
+    fn nvidia_sem_gestao_de_energia_conta_como_acordada_e_o_resto_nao() {
+        let sys = fake_sys("nv-desktop");
+        assert!(!nvidia_awake(&sys), "sem placas");
+        // Só AMD: nada a consultar.
+        pci(&sys, "0000:03:00.0", "0x1002", "0x030000", Some("active"));
+        assert!(!nvidia_awake(&sys), "AMD não é NVIDIA");
+        // Desktop: sem `runtime_status` → sempre ligada.
+        pci(&sys, "0000:01:00.0", "0x10de", "0x030000", None);
+        assert!(nvidia_awake(&sys));
+        std::fs::remove_dir_all(&sys).ok();
+    }
+
+    #[test]
+    fn so_a_funcao_de_video_conta_nao_a_de_audio_hdmi() {
+        let sys = fake_sys("nv-audio");
+        pci(
+            &sys,
+            "0000:01:00.0",
+            "0x10de",
+            "0x030200",
+            Some("suspended"),
+        );
+        // A função de áudio HDMI da mesma placa pode estar «ativa» sozinha.
+        pci(&sys, "0000:01:00.1", "0x10de", "0x040300", Some("active"));
+        assert!(!nvidia_awake(&sys));
+        std::fs::remove_dir_all(&sys).ok();
+    }
+
+    /// Só AMD (a máquina do Maggio): a chave `gpu_pct` vem do sysfs e o ramo
+    /// NVIDIA nunca arranca nada, nem com a opção ligada (sem `nvidia-smi`).
+    #[tokio::test]
+    async fn so_amd_nunca_lanca_nvidia_smi() {
+        let sys = fake_sys("amd-only");
+        let d = sys.join("class/drm/card1/device");
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("gpu_busy_percent"), "42\n").unwrap();
+        let mut g = Gpu {
+            nvidia: false,
+            nvidia_last: None,
+            nvidia_at: None,
+            pending: None,
+            announced: true,
+        };
+        for wake in [false, true] {
+            assert_eq!(g.sample(&sys, wake).await, Some(42.0));
+            assert!(g.pending.is_none());
+        }
+        std::fs::remove_dir_all(&sys).ok();
     }
 }

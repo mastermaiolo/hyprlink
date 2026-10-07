@@ -351,7 +351,7 @@ Enviado a cada 2s enquanto ligado; tudo opcional — o que faltar mostra-se «�
 | `uptime_s` | uint | /proc/uptime |
 | `rtt_ms` | float | RTT do QUIC medido pela própria conexão |
 | `disk_free_b` / `disk_total_b` | uint (bytes) | `statvfs` do sistema de ficheiros da pasta pessoal (ou do `disk_path` da config): livre = `f_bavail × f_frsize`, total = `f_blocks × f_frsize`; lido de 30 em 30 s, o último valor repete-se nos ciclos intermédios; omitido se falhar (nunca 0) |
-| `gpu_pct` | float 0–100 | AMD: `/sys/class/drm/card*/device/gpu_busy_percent`; NVIDIA: `nvidia-smi --query-gpu=utilization.gpu` (de 6 em 6 s, fora do ciclo, timeout 1 s); várias GPUs → a mais carregada; Intel e sem GPU compatível → omitido |
+| `gpu_pct` | float 0–100 | AMD: `/sys/class/drm/card*/device/gpu_busy_percent`; NVIDIA: `nvidia-smi --query-gpu=utilization.gpu` (de 6 em 6 s, fora do ciclo, timeout 1 s, **só com a placa já acordada** — `power/runtime_status` = `active` em `/sys/bus/pci/devices` —, para não tirar uma GPU dedicada do repouso; a opção `gpu_nvidia_wake` da config força a consulta); várias GPUs → a mais carregada; Intel e sem GPU compatível → omitido |
 
 ### capabilities e hello enriquecidos
 

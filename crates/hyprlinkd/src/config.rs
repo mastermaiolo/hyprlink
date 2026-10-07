@@ -122,6 +122,12 @@ pub struct AppConfig {
     /// do `pc.status`. Ausente = a pasta pessoal.
     #[serde(default)]
     pub disk_path: Option<PathBuf>,
+    /// Consultar o `nvidia-smi` (carga da GPU NVIDIA em `pc.status`) mesmo com
+    /// a placa em repouso. Por omissão `false`: só se consulta com a placa já
+    /// acordada, porque o `nvidia-smi` tira uma GPU dedicada do repouso e
+    /// gasta bateria num portátil híbrido. Sem efeito em AMD/Intel.
+    #[serde(default)]
+    pub gpu_nvidia_wake: bool,
     /// Gestos do telemóvel (`gesture {name}`): ligado/desligado e a ação.
     /// Só o que difere da origem precisa de estar aqui; `gesture_rules`
     /// junta-o às regras de origem.
@@ -172,6 +178,7 @@ impl AppConfig {
                 lang: default_lang(),
                 speaker_prev_sink: None,
                 disk_path: None,
+                gpu_nvidia_wake: false,
                 gestures: Vec::new(),
             })
     }
@@ -211,6 +218,10 @@ pub fn battery_alerts(config: &SharedConfig) -> BatteryAlerts {
 
 pub fn track_settings(config: &SharedConfig) -> TrackSettings {
     config.lock().unwrap().track
+}
+
+pub fn gpu_nvidia_wake(config: &SharedConfig) -> bool {
+    config.lock().unwrap().gpu_nvidia_wake
 }
 
 pub fn disk_path(config: &SharedConfig) -> Option<PathBuf> {
@@ -286,6 +297,12 @@ mod tests {
 
     fn cfg(json: &str) -> AppConfig {
         serde_json::from_str(json).expect("config")
+    }
+
+    #[test]
+    fn nvidia_wake_vem_desligado_e_aceita_ser_ligado() {
+        assert!(!cfg(r#"{"download_dir": "/x"}"#).gpu_nvidia_wake);
+        assert!(cfg(r#"{"download_dir": "/x", "gpu_nvidia_wake": true}"#).gpu_nvidia_wake);
     }
 
     #[test]
