@@ -317,9 +317,11 @@ Enviado a cada 2s enquanto ligado; tudo opcional — o que faltar mostra-se «�
 | `hostname` | text | /etc/hostname |
 | `cpu_pct` | float 0–100 | delta de /proc/stat entre ciclos |
 | `ram_used_b` / `ram_total_b` | uint | /proc/meminfo (MemTotal − MemAvailable) |
-| `cpu_temp_c` | float | primeiro thermal zone plausível; omitido sem sensor |
+| `cpu_temp_c` | float | hwmon primeiro (`k10temp` Tdie/Tctl, `coretemp` Package id 0, `zenpower`, `cpu_thermal`/`soc_thermal`), depois thermal zones (`x86_pkg_temp`/`cpu*`, `acpitz` em último); 0 < t < 120 °C; omitido sem sensor |
 | `uptime_s` | uint | /proc/uptime |
 | `rtt_ms` | float | RTT do QUIC medido pela própria conexão |
+| `disk_free_b` / `disk_total_b` | uint (bytes) | `statvfs` do sistema de ficheiros da pasta pessoal (ou do `disk_path` da config): livre = `f_bavail × f_frsize`, total = `f_blocks × f_frsize`; lido de 30 em 30 s, o último valor repete-se nos ciclos intermédios; omitido se falhar (nunca 0) |
+| `gpu_pct` | float 0–100 | AMD: `/sys/class/drm/card*/device/gpu_busy_percent`; NVIDIA: `nvidia-smi --query-gpu=utilization.gpu` (de 6 em 6 s, fora do ciclo, timeout 1 s); várias GPUs → a mais carregada; Intel e sem GPU compatível → omitido |
 
 ### capabilities e hello enriquecidos
 

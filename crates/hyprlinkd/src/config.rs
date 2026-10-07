@@ -117,6 +117,10 @@ pub struct AppConfig {
     /// desligado (ou nunca usado).
     #[serde(default)]
     pub speaker_prev_sink: Option<String>,
+    /// Ponto cujo sistema de ficheiros alimenta `disk_free_b`/`disk_total_b`
+    /// do `pc.status`. Ausente = a pasta pessoal.
+    #[serde(default)]
+    pub disk_path: Option<PathBuf>,
 }
 
 fn default_download_dir() -> PathBuf {
@@ -149,6 +153,7 @@ impl AppConfig {
                 track: TrackSettings::default(),
                 lang: default_lang(),
                 speaker_prev_sink: None,
+                disk_path: None,
             })
     }
 
@@ -190,6 +195,10 @@ pub fn track_settings(config: &SharedConfig) -> TrackSettings {
 }
 
 /// Sink a restaurar quando o modo coluna desligar (ver `speaker.rs`).
+pub fn disk_path(config: &SharedConfig) -> Option<PathBuf> {
+    config.lock().unwrap().disk_path.clone()
+}
+
 pub fn speaker_prev_sink(config: &SharedConfig) -> Option<String> {
     config.lock().unwrap().speaker_prev_sink.clone()
 }

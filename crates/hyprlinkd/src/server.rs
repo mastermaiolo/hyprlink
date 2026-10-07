@@ -167,6 +167,7 @@ pub fn spawn_background_tasks(ctx: Ctx) {
     tokio::spawn(telemetry::poll_and_push(
         ctx.active.clone(),
         ctx.hud.clone(),
+        ctx.config.clone(),
     ));
     // Camada de ecossistema (hyprlinkctl/Waybar): socket de comandos +
     // status.json no $XDG_RUNTIME_DIR (ver ctl.rs).

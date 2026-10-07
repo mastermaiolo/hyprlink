@@ -1817,6 +1817,7 @@ dependencies = [
  "quinn",
  "rand 0.10.2",
  "rcgen",
+ "rustix 1.1.4",
  "rustls",
  "serde",
  "serde_json",
