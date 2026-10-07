@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=HyprLink
+GenericName=Phone link
+GenericName[pt_PT]=Ligação ao telemóvel
+GenericName[pt_BR]=Conexão com o celular
+GenericName[es_ES]=Enlace con el móvil
+GenericName[zh_CN]=手机连接
+Comment=Android phone ↔ Hyprland: notifications, clipboard, files, media, webcam
+Comment[pt_PT]=Telemóvel Android ↔ Hyprland: notificações, clipboard, ficheiros, multimédia, webcam
+Exec=hyprlink-gui
+Icon=hyprlink-bridge
+Terminal=false
+Categories=Network;
+Keywords=android;phone;kdeconnect;clipboard;notifications;webcam;
+StartupWMClass=dev.hyprlink.gui

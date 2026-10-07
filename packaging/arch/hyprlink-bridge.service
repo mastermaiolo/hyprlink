@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Daemon do HyprLink como serviço de utilizador. Precisa do ambiente da sessão
+# gráfica (WAYLAND_DISPLAY, HYPRLAND_INSTANCE_SIGNATURE). Com uwsm o
+# graphical-session.target trata disso; sem uwsm, ponha no Hyprland
+#   exec-once = dbus-update-activation-environment --systemd --all
+#   exec-once = systemctl --user start hyprlink-bridge
+[Unit]
+Description=HyprLink: ponte entre o telemóvel Android e o Hyprland (daemon)
+Documentation=https://github.com/mastermaiolo/hyprlink
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/hyprlink-daemon
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target

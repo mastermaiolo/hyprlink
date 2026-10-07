@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=HyprLink (bandeja)
+Comment=Abre a GUI do HyprLink na bandeja ao iniciar a sessão
+Exec=hyprlink-gui
+Icon=hyprlink-bridge
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

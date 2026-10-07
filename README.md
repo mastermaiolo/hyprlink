@@ -83,18 +83,29 @@ sessão precisa de permissão de escrita (confirme com `getfacl /dev/uinput`).
 
 ## Instalar (Arch / CachyOS)
 
-O pacote é um **PKGBUILD local** em `packaging/arch/` (ainda não está no AUR):
+O pacote é um **PKGBUILD local** em `packaging/arch/` e chama-se
+`hyprlink-bridge` (no AUR, «hyprlink» já é outro projeto, o `hyprlink-git`):
 
 ```bash
 git clone https://github.com/mastermaiolo/hyprlink.git
 cd hyprlink/packaging/arch
 makepkg -si
-systemctl --user enable --now hyprlink    # o daemon, como serviço de utilizador
-hyprlink-gui                              # a GUI (também no menu de aplicações)
+systemctl --user enable --now hyprlink-bridge   # o daemon, como serviço de utilizador
+hyprlink-gui                                     # a GUI (também no menu de aplicações)
 ```
 
 Instala `hyprlink-daemon`, `hyprlink-gui` e `hyprlinkctl` em `/usr/bin`, o
-serviço systemd de utilizador e o atalho `.desktop`.
+serviço systemd de utilizador `hyprlink-bridge.service` e o atalho `.desktop`.
+Para testar a partir desta cópia do código, antes de existir a tag:
+`HYPRLINK_LOCAL=1 makepkg -si`.
+
+O serviço arranca com a sessão gráfica (`graphical-session.target`). Com uwsm
+isso é automático. Sem uwsm, esse alvo em geral não é ativado: no Hyprland,
+`exec-once = dbus-update-activation-environment --systemd --all` e depois
+`exec-once = systemctl --user start hyprlink-bridge`.
+Para a GUI arrancar na bandeja ao entrar na sessão:
+`cp /usr/share/hyprlink-bridge/hyprlink-bridge-autostart.desktop ~/.config/autostart/`
+(uwsm lê o autostart XDG) ou `exec-once = hyprlink-gui` no Hyprland.
 
 ## Emparelhar o telemóvel
 
@@ -197,8 +208,9 @@ certificates, fingerprint pinning, CBOR protocol): no cloud, no relay server.
 - **Requirements:** Arch Linux / CachyOS, Hyprland, PipeWire + WirePlumber,
   GStreamer (base, good, bad, libav, pipewire), `wl-clipboard`; optional:
   `v4l2loopback-dkms`, `grimblast` or `grim` + `slurp`, `hyprlock`/`noctalia`.
-- **Install:** `cd packaging/arch && makepkg -si`, then
-  `systemctl --user enable --now hyprlink` and launch `hyprlink-gui`.
+- **Install:** `cd packaging/arch && makepkg -si` (package name
+  `hyprlink-bridge`), then `systemctl --user enable --now hyprlink-bridge`
+  and launch `hyprlink-gui`.
 - **Pairing:** install the Android APK from the releases page, open
   *Devices → Pair new* in the GUI and scan the QR code. Phone and PC must be
   on the same LAN; the daemon listens on **7443/UDP** only.

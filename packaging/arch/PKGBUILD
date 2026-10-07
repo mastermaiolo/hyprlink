@@ -1,0 +1,124 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Maintainer: MasterMaiolo <itsmejohnmaiolo@gmail.com>
+#
+# PKGBUILD local do HyprLink (lado do PC: daemon, GUI e hyprlinkctl).
+# O pacote chama-se hyprlink-bridge porque «hyprlink» é fornecido pelo
+# hyprlink-git do AUR, que é outro projeto; os ficheiros não colidem.
+#
+#   makepkg -si                  a partir do tarball da tag v$pkgver no GitHub
+#   HYPRLINK_LOCAL=1 makepkg -si a partir desta cópia do repositório (testar
+#                                antes de existir a tag); compila num target/
+#                                próprio em src/, sem tocar no target/ do repo
+
+pkgname=hyprlink-bridge
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Android phone ↔ Hyprland link over QUIC + mTLS: notifications, clipboard, files, media, webcam, mic'
+arch=('x86_64')
+url='https://github.com/mastermaiolo/hyprlink'
+license=('GPL-3.0-or-later' 'OFL-1.1')
+depends=(
+  'gcc-libs'
+  'glib2'
+  'glibc'
+  'gstreamer'
+  'gst-plugins-base-libs'
+  'gst-plugins-good'      # v4l2sink (webcam)
+  'gst-plugins-bad-libs'  # h265parse
+  'gst-libav'             # avdec_h264 / avdec_h265
+  'gst-plugin-pipewire'   # pipewiresrc (som do PC para o telemóvel)
+  'hyprland'              # hyprctl
+  'libpulse'              # pactl
+  'libxkbcommon'          # GUI (carregado em execução)
+  'pipewire'
+  'wayland'               # GUI (carregado em execução)
+  'wireplumber'           # wpctl
+  'wl-clipboard'
+)
+makedepends=('cargo' 'clang' 'lld' 'pkgconf')
+optdepends=(
+  'v4l2loopback-dkms: telemóvel como webcam do PC (/dev/video42)'
+  'xdg-desktop-portal-gtk: seletor de ficheiros da GUI'
+  'grimblast-git: capturas de ecrã a partir do telemóvel'
+  'grim: capturas de ecrã (alternativa ao grimblast)'
+  'slurp: captura de uma área (com grim)'
+  'hyprlock: bloquear o PC a partir do telemóvel'
+  'noctalia: bloqueio pelo ecrã de bloqueio do Noctalia'
+  'nvidia-utils: temperatura e uso da GPU NVIDIA na telemetria'
+  'vulkan-icd-loader: GUI desenhada pela GPU (sem isto usa o renderizador por software)'
+)
+# !lto: o makepkg compilaria o código C das dependências com LTO do GCC.
+options=('!lto' '!debug')
+source=(
+  "hyprlink-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz"
+  'hyprlink-bridge.service'
+  'hyprlink-bridge.desktop'
+  'hyprlink-bridge-autostart.desktop'
+  'hyprlink-bridge.svg'
+)
+sha256sums=('SKIP'
+            'cebbc61cb25a2306422a16b8fba244c4b7077d9b06cf092704cb9e5603519562'
+            '6f135c38214913bfea0d692b9ee7532ec02088e1c1236d3c03a31888d82c216f'
+            'c87c5e811a60b751a4914aed571908b863e9678ac282fb1ae009a601b2c394cb'
+            '2bb13699c413d5128bdb7199899bb8a22df0ab33102c6fff2747b3f152813942')
+
+if [[ -n ${HYPRLINK_LOCAL:-} ]]; then
+  source=("${source[@]:1}")
+  sha256sums=("${sha256sums[@]:1}")
+fi
+
+_srcroot() {
+  if [[ -n ${HYPRLINK_LOCAL:-} ]]; then
+    realpath "$startdir/../.."
+  else
+    echo "$srcdir/hyprlink-$pkgver"
+  fi
+}
+
+prepare() {
+  cd "$(_srcroot)"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd "$(_srcroot)"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR="$srcdir/target"
+  cargo build --frozen --release -p hyprlinkd -p hyprlink-gui -p hyprlinkctl
+}
+
+check() {
+  cd "$(_srcroot)"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR="$srcdir/target"
+  cargo test --frozen --release -p hyprlink-proto
+}
+
+package() {
+  local root
+  root="$(_srcroot)"
+
+  install -Dm755 -t "$pkgdir/usr/bin" \
+    "$srcdir/target/release/hyprlink-daemon" \
+    "$srcdir/target/release/hyprlink-gui" \
+    "$srcdir/target/release/hyprlinkctl"
+
+  install -Dm644 "$srcdir/hyprlink-bridge.service" \
+    "$pkgdir/usr/lib/systemd/user/hyprlink-bridge.service"
+  install -Dm644 "$srcdir/hyprlink-bridge.desktop" \
+    "$pkgdir/usr/share/applications/hyprlink-bridge.desktop"
+  install -Dm644 "$srcdir/hyprlink-bridge.svg" \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/hyprlink-bridge.svg"
+  # Autostart da GUI: não fica ativo por omissão; copiar para
+  # ~/.config/autostart/ (ver README).
+  install -Dm644 "$srcdir/hyprlink-bridge-autostart.desktop" \
+    "$pkgdir/usr/share/hyprlink-bridge/hyprlink-bridge-autostart.desktop"
+
+  install -Dm644 "$root/README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 "$root/CHANGELOG.md" "$pkgdir/usr/share/doc/$pkgname/CHANGELOG.md"
+
+  install -Dm644 "$root/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname" \
+    "$root"/crates/hyprlink-gui/assets/fonts/OFL-*.txt
+}
