@@ -500,15 +500,48 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                 .and_then(|b| body_get_str(b, "cmd"))
                 .unwrap_or("")
                 .to_string();
-            let data = hypr::dispatch(&cmd);
-            state::push_log(hud, format!("[i] hypr.dispatch {cmd}"));
-            reply(
-                &mut send,
-                packet.id,
-                "hypr.dispatch_result",
-                Some(ok_data(data)),
-            )
-            .await;
+            let result = hypr::dispatch_checked(&cmd);
+            match &result {
+                Ok(_) => state::push_log(hud, format!("[i] hypr.dispatch {cmd}")),
+                Err(e) => state::push_log(hud, format!("[!] hypr.dispatch {cmd}: {e}")),
+            }
+            let body = match result {
+                Ok(data) => ok_data(data),
+                // `ok:false` + `error` (curto, em inglês): a app já não fica
+                // sem saber que o botão não fez nada.
+                Err(e) => Value::Map(vec![
+                    (Value::Text("ok".into()), Value::Bool(false)),
+                    (
+                        Value::Text("data".into()),
+                        Value::Text(format!("erro: {e}")),
+                    ),
+                    (Value::Text("error".into()), Value::Text(e)),
+                ]),
+            };
+            reply(&mut send, packet.id, "hypr.dispatch_result", Some(body)).await;
+        }
+        // Ações rápidas do início (bloquear, suspender, captura, volume, media):
+        // a app diz o nome, o daemon escolhe o comando (ver `action.rs`).
+        "pc.action" => {
+            let name = body
+                .and_then(|b| body_get_str(b, "name"))
+                .unwrap_or("")
+                .to_string();
+            let result = crate::action::run(&name).await;
+            let body = match &result {
+                Ok(()) => {
+                    state::push_log(hud, format!("[i] pc.action {name}"));
+                    ok_bool(true)
+                }
+                Err(e) => {
+                    state::push_log(hud, format!("[!] pc.action {name}: {e}"));
+                    Value::Map(vec![
+                        (Value::Text("ok".into()), Value::Bool(false)),
+                        (Value::Text("error".into()), Value::Text(e.clone())),
+                    ])
+                }
+            };
+            reply(&mut send, packet.id, "pc.action_result", Some(body)).await;
         }
 
         "audio.state" => {

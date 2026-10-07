@@ -159,7 +159,8 @@ mesma lógica do guard de texto). Do lado P→D, o uni-stream é roteado pelo
 |---|---|---|
 | `hypr.workspaces` → `hypr.workspaces_state` | req/resp | resp: `{ok, data}` (data = JSON cru de `hyprctl workspaces -j`) |
 | `hypr.clients` → `hypr.clients_state` | req/resp | resp: `{ok, data}` (JSON cru de `hyprctl clients -j`) |
-| `hypr.dispatch` → `hypr.dispatch_result` | req/resp | req: `{cmd}` (ex: "workspace 2", "focuswindow address:0x..", "closewindow ..."); resp: `{ok, data}` |
+| `hypr.dispatch` → `hypr.dispatch_result` | req/resp | req: `{cmd}` (ex: "workspace 2", "focuswindow address:0x..", "closewindow ...", "exec <comando>"); resp: `{ok, data}`; **falha** = `{ok:false, data:"erro: …", error:"<texto curto em inglês>"}` (antes vinha `ok:true` com o erro em `data`) |
+| `pc.action` → `pc.action_result` | req/resp | req: `{name}`; resp: `{ok:true}` ou `{ok:false, error:"<texto curto em inglês>"}`. O daemon escolhe o comando (a app só diz o quê). Nomes: `lock`, `suspend`, `screenshot` (ecrã inteiro → ficheiro em `~/Imagens/Screenshots` + área de transferência), `screenshot_area` (o utilizador desenha a área no PC), `volume_up`/`volume_down` (±5 %, teto 100 %), `volume_mute` (alterna), `media_play_pause`, `media_next`, `media_previous` (MPRIS do PC). Desconhecido → `error:"unknown action: <name>"`; sem ferramenta → `error:"no <x> tool found"`; área cancelada → `error:"cancelled"`. `lock` tenta `noctalia msg session lock`, `hyprlock`, `loginctl lock-session` (o que existir); `suspend` → `systemctl suspend`. Comando ainda a correr passados 3 s (bloqueio ativo, a suspender) conta como `ok:true`; a área espera até 60 s. |
 | `hypr.event` | D→P push | `{event: String}` (ex: "workspace>>2") — lido de `/tmp/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock` |
 
 ### battery
@@ -379,6 +380,18 @@ início de sessão de streaming.
   - `workspace <n>` → `hl.dsp.focus({workspace = <n>})`
   - `focuswindow address:0x..` → `hl.dsp.focus({window = "address:0x.."})`
   - `closewindow address:0x..` → `hl.dsp.window.close({address = "address:0x.."})`
-  Isso cobre só os 3 dispatchers que o Mission Control do app realmente usa;
-  outros dispatchers (`exec`, `reload`, etc.) não têm tradução e falham em
-  forks assim — não é um problema pra usuários de Hyprland padrão.
+  - `exec <cmd>` → `hl.dsp.exec_cmd("<cmd>")` (o comando como literal Lua;
+    **o `hyprctl dispatch exec …` clássico falha com `')' expected`** neste
+    Hyprland 0.56.2 — medido em 2026-10-07)
+  - `workspace e-1` / `name:x` → `hl.dsp.focus({workspace = "e-1"})`,
+    `killactive` → `hl.dsp.window.close()`,
+    `togglespecialworkspace [nome]` → `hl.dsp.workspace.toggle_special("nome")`,
+    `fullscreen [0|1]` → `hl.dsp.window.fullscreen()` / `({mode = 1})`
+  Outros dispatchers (`reload`, …) continuam sem tradução e falham em forks
+  assim com `error:"Hyprland refused the classic syntax and `x` has no Lua
+  mapping"`. `wpctl`, `grimblast` e afins **não são dispatchers**: vão por
+  `exec` ou, melhor, por `pc.action`.
+- **Ambiente da sessão.** O daemon pode arrancar sem `WAYLAND_DISPLAY` nem
+  `HYPRLAND_INSTANCE_SIGNATURE` (systemd --user, `exec-once`); `action.rs`
+  descobre-os pelos sockets em `$XDG_RUNTIME_DIR` e passa-os ao `hyprctl` e às
+  ações.

@@ -13,6 +13,7 @@ use crate::state::{self, HudState, push_log};
 fn run_hyprctl(args: &[&str]) -> String {
     std::process::Command::new("hyprctl")
         .args(args)
+        .envs(crate::action::real_session_env())
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
         .unwrap_or_default()
@@ -25,6 +26,7 @@ fn run_hyprctl(args: &[&str]) -> String {
 fn run_hyprctl_checked(args: &[&str]) -> Option<String> {
     let output = std::process::Command::new("hyprctl")
         .args(args)
+        .envs(crate::action::real_session_env())
         .output()
         .ok()?;
     output
@@ -75,6 +77,12 @@ pub fn active_window_json() -> String {
 /// `cmd` vem como "workspace 2", "focuswindow address:0x..", etc — o primeiro
 /// espaço separa o dispatcher do argumento, igual ao app manda.
 pub fn dispatch(cmd: &str) -> String {
+    dispatch_checked(cmd).unwrap_or_else(|e| format!("erro: {e}"))
+}
+
+/// Como `dispatch`, mas diferencia o sucesso da falha (o texto do erro é
+/// curto, em inglês, para a app o poder mostrar).
+pub fn dispatch_checked(cmd: &str) -> Result<String, String> {
     let (disp, arg) = cmd.split_once(' ').unwrap_or((cmd, ""));
     let classic: Vec<&str> = if arg.is_empty() {
         vec!["dispatch", disp]
@@ -82,36 +90,70 @@ pub fn dispatch(cmd: &str) -> String {
         vec!["dispatch", disp, arg]
     };
     if let Some(out) = run_hyprctl_checked(&classic) {
-        return finish(out);
+        return Ok(finish(out));
     }
     // Fallback: forks tipo Hyprland-Lua ("ryoku") trocam o dispatch clássico
-    // por avaliação de `hl.dispatch(...)` — cobre os 3 dispatchers que o
-    // Mission Control do app realmente usa (workspace/focuswindow/closewindow).
-    // Ver PROTOCOL.md §6.
-    if let Some(lua_expr) = lua_fallback(disp, arg)
-        && let Some(out) = run_hyprctl_checked(&["dispatch", &lua_expr])
-    {
-        return finish(out);
+    // por avaliação de `hl.dispatch(...)` — traduz os dispatchers que a app
+    // usa (workspace/focuswindow/closewindow/movetoworkspacesilent e, desde
+    // 2026-10-07, exec/killactive/togglespecialworkspace/fullscreen). Ver
+    // PROTOCOL.md §6.
+    if let Some(lua_expr) = lua_fallback(disp, arg) {
+        return match run_hyprctl_checked(&["dispatch", &lua_expr]) {
+            Some(out) => Ok(finish(out)),
+            None => Err(format!(
+                "Hyprland refused `{disp}` (classic and Lua syntax)"
+            )),
+        };
     }
-    "erro: dispatch falhou (Hyprland recusou a sintaxe clássica e o fallback Lua)".to_string()
+    Err(format!(
+        "Hyprland refused the classic syntax and `{disp}` has no Lua mapping"
+    ))
 }
 
-fn finish(out: String) -> String {
-    let out = out.trim();
-    if out.is_empty() {
-        "ok".to_string()
-    } else {
-        out.to_string()
+/// Texto como literal de string Lua (entre aspas duplas).
+fn lua_quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\0' => {}
+            c => out.push(c),
+        }
     }
+    out.push('"');
+    out
 }
 
 fn lua_fallback(disp: &str, arg: &str) -> Option<String> {
     match disp {
+        // Número → posição; `e-1`, `+1`, `name:x`, `special:x` → texto.
         "workspace" if arg.parse::<i64>().is_ok() => {
             Some(format!("hl.dsp.focus({{workspace = {arg}}})"))
         }
+        "workspace" if !arg.is_empty() => {
+            Some(format!("hl.dsp.focus({{workspace = {}}})", lua_quote(arg)))
+        }
         "focuswindow" => Some(format!("hl.dsp.focus({{window = \"{arg}\"}})")),
         "closewindow" => Some(format!("hl.dsp.window.close({{address = \"{arg}\"}})")),
+        "killactive" => Some("hl.dsp.window.close()".to_string()),
+        // `exec` clássico: o comando inteiro vai como texto (sem interpretar).
+        "exec" if !arg.is_empty() => Some(format!("hl.dsp.exec_cmd({})", lua_quote(arg))),
+        "togglespecialworkspace" => Some(format!(
+            "hl.dsp.workspace.toggle_special({})",
+            lua_quote(if arg.is_empty() { "special" } else { arg })
+        )),
+        // 0/vazio = ecrã inteiro, 1 = maximizar (como as teclas do utilizador).
+        "fullscreen" => match arg.trim() {
+            "" | "0" => Some("hl.dsp.window.fullscreen()".to_string()),
+            m if m.parse::<u8>().is_ok() => {
+                Some(format!("hl.dsp.window.fullscreen({{mode = {m}}})"))
+            }
+            _ => None,
+        },
         // `follow = false` é o que faz o "silent" ser silent de verdade —
         // sem isso, o Hyprland-Lua foca a workspace de destino mesmo sem
         // mostrá-la (confirmado: github.com/hyprwm/Hyprland/issues/681 e
@@ -122,6 +164,15 @@ fn lua_fallback(disp: &str, arg: &str) -> Option<String> {
             "hl.dsp.window.move({{workspace = \"{arg}\", follow = false}})"
         )),
         _ => None,
+    }
+}
+
+fn finish(out: String) -> String {
+    let out = out.trim();
+    if out.is_empty() {
+        "ok".to_string()
+    } else {
+        out.to_string()
     }
 }
 
@@ -168,7 +219,7 @@ pub async fn watch_events(active: ActiveConn, hud: Arc<Mutex<HudState>>) {
 
 #[cfg(test)]
 mod tests {
-    use super::lua_fallback;
+    use super::{dispatch_checked, lua_fallback};
 
     /// Sintaxe confirmada ao vivo contra um Hyprland-Lua real (fork "ryoku")
     /// em 2026-09-03 — ver PROTOCOL.md §6. Se isso quebrar, o fallback
@@ -187,11 +238,64 @@ mod tests {
             lua_fallback("closewindow", "address:0x559fc0665c80").as_deref(),
             Some(r#"hl.dsp.window.close({address = "address:0x559fc0665c80"})"#)
         );
-        assert_eq!(lua_fallback("workspace", "e+1"), None); // não numérico, não arriscamos
-        assert_eq!(lua_fallback("exec", "kitty"), None); // dispatcher sem tradução conhecida
+        // Relativo e nomeado: texto (como em /usr/share/hypr/hyprland.lua, `workspace = "e-1"`).
+        assert_eq!(
+            lua_fallback("workspace", "e-1").as_deref(),
+            Some(r#"hl.dsp.focus({workspace = "e-1"})"#)
+        );
+        assert_eq!(lua_fallback("workspace", ""), None);
+        // `exec`: o comando inteiro como literal Lua — aspas e barras escapadas.
+        assert_eq!(
+            lua_fallback("exec", "hyprlock").as_deref(),
+            Some(r#"hl.dsp.exec_cmd("hyprlock")"#)
+        );
+        assert_eq!(
+            lua_fallback("exec", r#"sh -c "echo a\b""#).as_deref(),
+            Some(r#"hl.dsp.exec_cmd("sh -c \"echo a\\b\"")"#)
+        );
+        assert_eq!(lua_fallback("exec", ""), None);
+        assert_eq!(
+            lua_fallback("exec", "a\nb").as_deref(),
+            Some(r#"hl.dsp.exec_cmd("a\nb")"#),
+            "quebras de linha não escapam do literal"
+        );
+        assert_eq!(
+            lua_fallback("killactive", "").as_deref(),
+            Some("hl.dsp.window.close()")
+        );
+        assert_eq!(
+            lua_fallback("togglespecialworkspace", "magic").as_deref(),
+            Some(r#"hl.dsp.workspace.toggle_special("magic")"#)
+        );
+        assert_eq!(
+            lua_fallback("fullscreen", "1").as_deref(),
+            Some("hl.dsp.window.fullscreen({mode = 1})")
+        );
+        assert_eq!(
+            lua_fallback("fullscreen", "").as_deref(),
+            Some("hl.dsp.window.fullscreen()")
+        );
+        assert_eq!(lua_fallback("fullscreen", "x"), None);
+        assert_eq!(lua_fallback("dispatcher_inventado", "x"), None);
         assert_eq!(
             lua_fallback("movetoworkspacesilent", "special:hyprlinktray").as_deref(),
             Some(r#"hl.dsp.window.move({workspace = "special:hyprlinktray", follow = false})"#)
         );
+    }
+
+    /// À mão, no Hyprland real (config Lua): o `exec` clássico tem de funcionar
+    /// pelo fallback. `cargo test -p hyprlinkd -- --ignored manual_dispatch_exec`.
+    #[test]
+    #[ignore]
+    fn manual_dispatch_exec() {
+        let f = std::env::temp_dir().join(format!("hyprlink-exec-{}", std::process::id()));
+        let _ = std::fs::remove_file(&f);
+        let out = dispatch_checked(&format!("exec touch {}", f.display()));
+        println!("dispatch -> {out:?}");
+        std::thread::sleep(std::time::Duration::from_millis(800));
+        assert!(f.exists(), "o exec não correu");
+        std::fs::remove_file(&f).ok();
+        // Dispatcher sem tradução → erro claro.
+        assert!(dispatch_checked("grimblast copysave area").is_err());
     }
 }
