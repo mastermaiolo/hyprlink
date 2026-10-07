@@ -23,3 +23,6 @@ hyprlink.zip
 local.properties
 build/
 .gradle/
+
+# saída do scripts/release.sh
+/dist/

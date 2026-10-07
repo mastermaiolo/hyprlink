@@ -1,6 +1,6 @@
 [package]
 name = "hyprlink-proto"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Contrato entre o hyprlinkd, a GUI e o hyprlinkctl: Command/Event, JSON v1, nomes de pacotes"
