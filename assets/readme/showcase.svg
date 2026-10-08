@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 440" width="1200" height="440">
+<defs>
+  <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#FFFFFF" stroke-opacity=".035" stroke-width="1"/></pattern>
+</defs>
+<rect x="2" y="2" width="1196" height="436" rx="16" fill="#0B0D0F" stroke="#2A2D31" stroke-width="1"/>
+<rect x="3" y="3" width="1194" height="434" fill="url(#grid)"/>
+
+<!-- Header -->
+<text x="28" y="34" font-family="JetBrains Mono, monospace" font-size="12px" font-weight="600" fill="#8E8A82" letter-spacing="2">03 / SUBSYSTEM MATRIX</text>
+<text x="1170" y="34" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="600" fill="#00D2FF" text-anchor="end" letter-spacing="2">INTEGRATION TOPOLOGY</text>
+
+<!-- Row 1: 5 cards (Width: 220 each, gap: 15) -->
+<!-- Card 1: NOTIFICATIONS -->
+<rect x="28" y="58" width="220" height="170" rx="10" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="42" y="80" font-family="JetBrains Mono, monospace" font-size="8.5px" font-weight="700" fill="#00D2FF" letter-spacing="1">01 / D-BUS</text>
+<text x="234" y="80" font-family="JetBrains Mono, monospace" font-size="8px" font-weight="700" fill="#22C55E" text-anchor="end">READY</text>
+<text x="42" y="104" font-family="Inter, Segoe UI, sans-serif" font-size="13px" font-weight="700" fill="#E9E5DC">Notifications</text>
+<text x="42" y="124" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Mirror phone alerts</text>
+<text x="42" y="139" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Trigger remote actions</text>
+<text x="42" y="154" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Restore active on rejoin</text>
+<line x1="42" y1="170" x2="234" y2="170" stroke="#2A2D31" stroke-width="1"/>
+<text x="42" y="196" font-family="JetBrains Mono, monospace" font-size="8px" fill="#38BDF8">CBOR STREAM · zbus</text>
+
+<!-- Card 2: CLIPBOARD -->
+<rect x="263" y="58" width="220" height="170" rx="10" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="277" y="80" font-family="JetBrains Mono, monospace" font-size="8.5px" font-weight="700" fill="#00D2FF" letter-spacing="1">02 / WAYLAND</text>
+<text x="469" y="80" font-family="JetBrains Mono, monospace" font-size="8px" font-weight="700" fill="#22C55E" text-anchor="end">READY</text>
+<text x="277" y="104" font-family="Inter, Segoe UI, sans-serif" font-size="13px" font-weight="700" fill="#E9E5DC">Clipboard</text>
+<text x="277" y="124" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Two-way synchronization</text>
+<text x="277" y="139" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Raw UTF-8 text payload</text>
+<text x="277" y="154" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Lossless PNG image buffers</text>
+<line x1="277" y1="170" x2="469" y2="170" stroke="#2A2D31" stroke-width="1"/>
+<text x="277" y="196" font-family="JetBrains Mono, monospace" font-size="8px" fill="#38BDF8">wl-clipboard · chunks</text>
+
+<!-- Card 3: FILE TRANSFER -->
+<rect x="498" y="58" width="220" height="170" rx="10" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="512" y="80" font-family="JetBrains Mono, monospace" font-size="8.5px" font-weight="700" fill="#00D2FF" letter-spacing="1">03 / STORAGE</text>
+<text x="704" y="80" font-family="JetBrains Mono, monospace" font-size="8px" font-weight="700" fill="#22C55E" text-anchor="end">READY</text>
+<text x="512" y="104" font-family="Inter, Segoe UI, sans-serif" font-size="13px" font-weight="700" fill="#E9E5DC">File Transfer</text>
+<text x="512" y="124" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Bidirectional stream queue</text>
+<text x="512" y="139" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Real-time progress bars</text>
+<text x="512" y="154" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Custom download paths</text>
+<line x1="512" y1="170" x2="704" y2="170" stroke="#2A2D31" stroke-width="1"/>
+<text x="512" y="196" font-family="JetBrains Mono, monospace" font-size="8px" fill="#38BDF8">UNIDIRECTIONAL STREAM</text>
+
+<!-- Card 4: MPRIS MEDIA -->
+<rect x="733" y="58" width="220" height="170" rx="10" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="747" y="80" font-family="JetBrains Mono, monospace" font-size="8.5px" font-weight="700" fill="#00D2FF" letter-spacing="1">04 / AUDIO IPC</text>
+<text x="939" y="80" font-family="JetBrains Mono, monospace" font-size="8px" font-weight="700" fill="#22C55E" text-anchor="end">READY</text>
+<text x="747" y="104" font-family="Inter, Segoe UI, sans-serif" font-size="13px" font-weight="700" fill="#E9E5DC">MPRIS Media</text>
+<text x="747" y="124" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Phone controls PC players</text>
+<text x="747" y="139" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Timeline &amp; position sync</text>
+<text x="747" y="154" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Album art on phone lock</text>
+<line x1="747" y1="170" x2="939" y2="170" stroke="#2A2D31" stroke-width="1"/>
+<text x="747" y="196" font-family="JetBrains Mono, monospace" font-size="8px" fill="#38BDF8">org.mpris.MediaPlayer2</text>
+
+<!-- Card 5: REMOTE INPUT -->
+<rect x="968" y="58" width="204" height="170" rx="10" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="982" y="80" font-family="JetBrains Mono, monospace" font-size="8.5px" font-weight="700" fill="#00D2FF" letter-spacing="1">05 / UINPUT</text>
+<text x="1158" y="80" font-family="JetBrains Mono, monospace" font-size="8px" font-weight="700" fill="#22C55E" text-anchor="end">READY</text>
+<text x="982" y="104" font-family="Inter, Segoe UI, sans-serif" font-size="13px" font-weight="700" fill="#E9E5DC">Touchpad &amp; Keys</text>
+<text x="982" y="124" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Mouse movement &amp; clicks</text>
+<text x="982" y="139" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Live keyboard stream</text>
+<text x="982" y="154" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Fail-safe key release</text>
+<line x1="982" y1="170" x2="1158" y2="170" stroke="#2A2D31" stroke-width="1"/>
+<text x="982" y="196" font-family="JetBrains Mono, monospace" font-size="8px" fill="#38BDF8">/dev/uinput · low latency</text>
+
+<!-- Row 2: 5 cards (y: 242) -->
+<!-- Card 6: QUICK ACTIONS -->
+<rect x="28" y="242" width="220" height="170" rx="10" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="42" y="264" font-family="JetBrains Mono, monospace" font-size="8.5px" font-weight="700" fill="#00D2FF" letter-spacing="1">06 / CONTROL</text>
+<text x="234" y="264" font-family="JetBrains Mono, monospace" font-size="8px" font-weight="700" fill="#22C55E" text-anchor="end">READY</text>
+<text x="42" y="288" font-family="Inter, Segoe UI, sans-serif" font-size="13px" font-weight="700" fill="#E9E5DC">Quick Actions</text>
+<text x="42" y="308" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Lock &amp; suspend dispatch</text>
+<text x="42" y="323" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Area / full screenshot</text>
+<text x="42" y="338" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Volume &amp; media key relays</text>
+<line x1="42" y1="354" x2="234" y2="354" stroke="#2A2D31" stroke-width="1"/>
+<text x="42" y="380" font-family="JetBrains Mono, monospace" font-size="8px" fill="#38BDF8">grim · slurp · loginctl</text>
+
+<!-- Card 7: HYPRLAND IPC -->
+<rect x="263" y="242" width="220" height="170" rx="10" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="277" y="264" font-family="JetBrains Mono, monospace" font-size="8.5px" font-weight="700" fill="#00D2FF" letter-spacing="1">07 / COMPOSITOR</text>
+<text x="469" y="264" font-family="JetBrains Mono, monospace" font-size="8px" font-weight="700" fill="#22C55E" text-anchor="end">READY</text>
+<text x="277" y="288" font-family="Inter, Segoe UI, sans-serif" font-size="13px" font-weight="700" fill="#E9E5DC">Hyprland IPC</text>
+<text x="277" y="308" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Workspace switching (ws)</text>
+<text x="277" y="323" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Window focus &amp; list sync</text>
+<text x="277" y="338" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Phone gesture mapping</text>
+<line x1="277" y1="354" x2="469" y2="354" stroke="#2A2D31" stroke-width="1"/>
+<text x="277" y="380" font-family="JetBrains Mono, monospace" font-size="8px" fill="#38BDF8">hyprctl · .socket2.sock</text>
+
+<!-- Card 8: TELEMETRY & WOL -->
+<rect x="498" y="242" width="220" height="170" rx="10" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="512" y="264" font-family="JetBrains Mono, monospace" font-size="8.5px" font-weight="700" fill="#00D2FF" letter-spacing="1">08 / SYSTEM</text>
+<text x="704" y="264" font-family="JetBrains Mono, monospace" font-size="8px" font-weight="700" fill="#22C55E" text-anchor="end">READY</text>
+<text x="512" y="288" font-family="Inter, Segoe UI, sans-serif" font-size="13px" font-weight="700" fill="#E9E5DC">Telemetry &amp; WOL</text>
+<text x="512" y="308" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Bidirectional battery state</text>
+<text x="512" y="323" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">CPU / RAM / hwmon temps</text>
+<text x="512" y="338" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Wake-on-LAN magic packet</text>
+<line x1="512" y1="354" x2="704" y2="354" stroke="#2A2D31" stroke-width="1"/>
+<text x="512" y="380" font-family="JetBrains Mono, monospace" font-size="8px" fill="#38BDF8">sysfs · hwmon · MAC sync</text>
+
+<!-- Card 9: AUDIO STREAMING -->
+<rect x="733" y="242" width="220" height="170" rx="10" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="747" y="264" font-family="JetBrains Mono, monospace" font-size="8.5px" font-weight="700" fill="#F59E0B" letter-spacing="1">09 / PIPEWIRE</text>
+<text x="939" y="264" font-family="JetBrains Mono, monospace" font-size="8px" font-weight="700" fill="#F59E0B" text-anchor="end">TESTING</text>
+<text x="747" y="288" font-family="Inter, Segoe UI, sans-serif" font-size="13px" font-weight="700" fill="#E9E5DC">Audio Bridge</text>
+<text x="747" y="308" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Phone mic as PC source</text>
+<text x="747" y="323" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Phone speaker as PC sink</text>
+<text x="747" y="338" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Low-latency tap streamer</text>
+<line x1="747" y1="354" x2="939" y2="354" stroke="#2A2D31" stroke-width="1"/>
+<text x="747" y="380" font-family="JetBrains Mono, monospace" font-size="8px" fill="#F59E0B">QUIC DATAGRAM · GStreamer</text>
+
+<!-- Card 10: VIRTUAL WEBCAM -->
+<rect x="968" y="242" width="204" height="170" rx="10" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="982" y="264" font-family="JetBrains Mono, monospace" font-size="8.5px" font-weight="700" fill="#F59E0B" letter-spacing="1">10 / V4L2</text>
+<text x="1158" y="264" font-family="JetBrains Mono, monospace" font-size="8px" font-weight="700" fill="#F59E0B" text-anchor="end">TESTING</text>
+<text x="982" y="288" font-family="Inter, Segoe UI, sans-serif" font-size="13px" font-weight="700" fill="#E9E5DC">Virtual Webcam</text>
+<text x="982" y="308" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Phone camera as webcam</text>
+<text x="982" y="323" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Hardware H.264 / H.265</text>
+<text x="982" y="338" font-family="JetBrains Mono, monospace" font-size="9px" fill="#8E8A82">Direct loopback pipe</text>
+<line x1="982" y1="354" x2="1158" y2="354" stroke="#2A2D31" stroke-width="1"/>
+<text x="982" y="380" font-family="JetBrains Mono, monospace" font-size="8px" fill="#F59E0B">/dev/video42 · v4l2loopback</text>
+</svg>

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 185" width="1200" height="185">
+<defs>
+  <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#FFFFFF" stroke-opacity=".035" stroke-width="1"/></pattern>
+</defs>
+<rect x="2" y="2" width="1196" height="181" rx="16" fill="#0B0D0F" stroke="#2A2D31" stroke-width="1"/>
+<rect x="3" y="3" width="1194" height="179" fill="url(#grid)"/>
+
+<!-- Header -->
+<text x="28" y="34" font-family="JetBrains Mono, monospace" font-size="12px" font-weight="600" fill="#8E8A82" letter-spacing="2">01 / AT A GLANCE</text>
+<text x="1170" y="34" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="600" fill="#B62B32" text-anchor="end" letter-spacing="2">SYSTEM PROFILE</text>
+
+<!-- Column 1: TRANSPORT -->
+<rect x="28" y="58" width="267" height="96" rx="12" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="44" y="80" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="600" fill="#8E8A82" letter-spacing="2">TRANSPORT</text>
+<text x="44" y="111" font-family="Inter, Segoe UI, sans-serif" font-size="18px" font-weight="700" fill="#E9E5DC">QUIC + mTLS</text>
+<text x="44" y="136" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="400" fill="#8E8A82">local UDP 7443 · zero relay</text>
+
+<line x1="301" y1="67" x2="301" y2="145" stroke="#2A2D31" stroke-width="1" opacity="0.6"/>
+
+<!-- Column 2: PROTOCOL -->
+<rect x="307" y="58" width="267" height="96" rx="12" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="323" y="80" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="600" fill="#8E8A82" letter-spacing="2">PROTOCOL</text>
+<text x="323" y="111" font-family="Inter, Segoe UI, sans-serif" font-size="18px" font-weight="700" fill="#E9E5DC">CBOR Streams</text>
+<text x="323" y="136" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="400" fill="#8E8A82">binary framed control + data</text>
+
+<line x1="580" y1="67" x2="580" y2="145" stroke="#2A2D31" stroke-width="1" opacity="0.6"/>
+
+<!-- Column 3: DESKTOP -->
+<rect x="586" y="58" width="267" height="96" rx="12" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="602" y="80" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="600" fill="#8E8A82" letter-spacing="2">DESKTOP</text>
+<text x="602" y="111" font-family="Inter, Segoe UI, sans-serif" font-size="18px" font-weight="700" fill="#E9E5DC">Rust + Iced</text>
+<text x="602" y="136" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="400" fill="#8E8A82">headless daemon + tray GUI</text>
+
+<line x1="859" y1="67" x2="859" y2="145" stroke="#2A2D31" stroke-width="1" opacity="0.6"/>
+
+<!-- Column 4: INTEGRATION -->
+<rect x="865" y="58" width="267" height="96" rx="12" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="881" y="80" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="600" fill="#8E8A82" letter-spacing="2">INTEGRATION</text>
+<text x="881" y="111" font-family="Inter, Segoe UI, sans-serif" font-size="18px" font-weight="700" fill="#E9E5DC">Linux / Wayland</text>
+<text x="881" y="136" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="400" fill="#8E8A82">uinput · PipeWire · Hyprland</text>
+</svg>

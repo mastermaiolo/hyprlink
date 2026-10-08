@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320">
+<defs>
+  <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#FFFFFF" stroke-opacity=".035" stroke-width="1"/></pattern>
+</defs>
+<rect x="2" y="2" width="1196" height="316" rx="16" fill="#0B0D0F" stroke="#2A2D31" stroke-width="1"/>
+<rect x="3" y="3" width="1194" height="314" fill="url(#grid)"/>
+
+<!-- Header -->
+<text x="28" y="34" font-family="JetBrains Mono, monospace" font-size="12px" font-weight="600" fill="#8E8A82" letter-spacing="2">07 / ARCHITECTURE</text>
+<text x="1170" y="34" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="600" fill="#00D2FF" text-anchor="end" letter-spacing="2">SYSTEM CRATES &amp; TRANSPORT</text>
+
+<!-- Crate 1: DAEMON -->
+<rect x="28" y="62" width="260" height="88" rx="12" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="44" y="82" font-family="JetBrains Mono, monospace" font-size="9px" font-weight="700" fill="#00D2FF" letter-spacing="2">HEADLESS DAEMON</text>
+<text x="44" y="106" font-family="JetBrains Mono, monospace" font-size="14px" font-weight="600" fill="#E9E5DC">crates/hyprlinkd</text>
+<text x="44" y="128" font-family="Inter, Segoe UI, sans-serif" font-size="9.5px" fill="#8E8A82">QUIC/mTLS server · 7443/UDP · zero UI</text>
+
+<!-- Arrow 1 -->
+<text x="303" y="112" font-family="Georgia, serif" font-size="20px" fill="#8E8A82">→</text>
+
+<!-- Crate 2: PROTOCOL -->
+<rect x="330" y="62" width="260" height="88" rx="12" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="346" y="82" font-family="JetBrains Mono, monospace" font-size="9px" font-weight="700" fill="#00D2FF" letter-spacing="2">SHARED CONTRACT</text>
+<text x="346" y="106" font-family="JetBrains Mono, monospace" font-size="14px" font-weight="600" fill="#E9E5DC">hyprlink-proto</text>
+<text x="346" y="128" font-family="Inter, Segoe UI, sans-serif" font-size="9.5px" fill="#8E8A82">CBOR framing · wire types · RPC schema</text>
+
+<!-- Arrow 2 -->
+<text x="605" y="112" font-family="Georgia, serif" font-size="20px" fill="#8E8A82">→</text>
+
+<!-- Crate 3: DESKTOP CLIENTS -->
+<rect x="632" y="62" width="260" height="88" rx="12" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="648" y="82" font-family="JetBrains Mono, monospace" font-size="9px" font-weight="700" fill="#00D2FF" letter-spacing="2">USER SURFACES</text>
+<text x="648" y="106" font-family="JetBrains Mono, monospace" font-size="14px" font-weight="600" fill="#E9E5DC">gui + hyprlinkctl</text>
+<text x="648" y="128" font-family="Inter, Segoe UI, sans-serif" font-size="9.5px" fill="#8E8A82">Iced desktop app · tray icon · UNIX CLI</text>
+
+<!-- Arrow 3 -->
+<text x="907" y="112" font-family="Georgia, serif" font-size="20px" fill="#8E8A82">→</text>
+
+<!-- Crate 4: ANDROID -->
+<rect x="934" y="62" width="238" height="88" rx="12" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="950" y="82" font-family="JetBrains Mono, monospace" font-size="9px" font-weight="700" fill="#B62B32" letter-spacing="2">MOBILE CLIENT</text>
+<text x="950" y="106" font-family="JetBrains Mono, monospace" font-size="14px" font-weight="600" fill="#E9E5DC">Android App</text>
+<text x="950" y="128" font-family="Inter, Segoe UI, sans-serif" font-size="9.5px" fill="#8E8A82">Kotlin · Jetpack Compose · Direct QUIC</text>
+
+<!-- Lower Integration Layer (Row 2) -->
+<rect x="28" y="170" width="1144" height="82" rx="12" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="44" y="192" font-family="JetBrains Mono, monospace" font-size="9px" font-weight="700" fill="#8E8A82" letter-spacing="2">LINUX KERNEL &amp; SESSION INTERFACES</text>
+
+<!-- Subsystem tags -->
+<rect x="44" y="206" width="170" height="32" rx="6" fill="#181B20" stroke="#2A2D31" stroke-width="1"/>
+<text x="54" y="226" font-family="JetBrains Mono, monospace" font-size="9px" fill="#E9E5DC">/dev/uinput (Trackpad)</text>
+
+<rect x="228" y="206" width="180" height="32" rx="6" fill="#181B20" stroke="#2A2D31" stroke-width="1"/>
+<text x="238" y="226" font-family="JetBrains Mono, monospace" font-size="9px" fill="#E9E5DC">/dev/video42 (v4l2loop)</text>
+
+<rect x="422" y="206" width="170" height="32" rx="6" fill="#181B20" stroke="#2A2D31" stroke-width="1"/>
+<text x="432" y="226" font-family="JetBrains Mono, monospace" font-size="9px" fill="#E9E5DC">PipeWire &amp; GStreamer</text>
+
+<rect x="606" y="206" width="170" height="32" rx="6" fill="#181B20" stroke="#2A2D31" stroke-width="1"/>
+<text x="616" y="226" font-family="JetBrains Mono, monospace" font-size="9px" fill="#E9E5DC">zbus (MPRIS &amp; Notifs)</text>
+
+<rect x="790" y="206" width="170" height="32" rx="6" fill="#181B20" stroke="#2A2D31" stroke-width="1"/>
+<text x="800" y="226" font-family="JetBrains Mono, monospace" font-size="9px" fill="#E9E5DC">wl-clipboard (Wayland)</text>
+
+<rect x="974" y="206" width="184" height="32" rx="6" fill="#181B20" stroke="#2A2D31" stroke-width="1"/>
+<text x="984" y="226" font-family="JetBrains Mono, monospace" font-size="9px" fill="#E9E5DC">hyprctl (Compositor IPC)</text>
+
+<!-- Bottom Metadata Bar -->
+<line x1="140" y1="274" x2="1060" y2="274" stroke="#2A2D31" stroke-width="1"/>
+<text x="140" y="296" font-family="JetBrains Mono, monospace" font-size="9.5px" fill="#8E8A82">IPC: $XDG_RUNTIME_DIR/hyprlink.sock</text>
+<text x="600" y="296" font-family="JetBrains Mono, monospace" font-size="9.5px" fill="#8E8A82" text-anchor="middle">WIRE: 7443/UDP QUIC (CBOR + DATAGRAM)</text>
+<text x="1060" y="296" font-family="JetBrains Mono, monospace" font-size="9.5px" fill="#8E8A82" text-anchor="end">CONFIG: ~/.config/hyprlink/</text>
+</svg>

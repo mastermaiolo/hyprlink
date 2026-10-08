@@ -1,94 +1,127 @@
-# HyprLink
+<!-- MAIOLO / SYSTEMS LAB — HYPRLINK -->
 
-🇬🇧 **English** · [🇵🇹 Português](README.pt.md) · [🇨🇳 简体中文](README.zh.md)
+<p align="center">
+  <img src="assets/readme/hero.svg" width="100%" alt="HyprLink — Android ⇄ Hyprland Ecosystem Integration">
+</p>
 
-<p align="center"><img src="assets/banner.png" alt="HyprLink — your phone is the other half of your desk"></p>
+<p align="center"><sub><strong>ANDROID ⇄ LINUX/HYPRLAND · QUIC + mTLS · CBOR · CONTINUITY · UINPUT</strong></sub></p>
 
-**Android ⇄ Linux/Hyprland ecosystem integration** — in the spirit of Apple's Continuity/Handoff, but for people who run Hyprland. Clipboard, notifications, media, battery, remote touchpad and keyboard, file transfer, webcam, audio and Hyprland control, synced between your phone and your desktop in real time, with no cloud service in between.
+<p align="center">
+  🇬🇧 <strong>English (UK)</strong>
+  · <a href="README.pt-br.md">🇧🇷 Português (BR)</a>
+  · <a href="README.pt-pt.md">🇵🇹 Português (PT)</a>
+  · <a href="README.es-es.md">🇪🇸 Español (ES)</a>
+  · <a href="README.zh-cn.md">🇨🇳 简体中文</a>
+  · <a href="CHANGELOG.md">CHANGELOG</a>
+  · <a href="PROTOCOL.md">PROTOCOL</a>
+</p>
 
-The link is direct on your local network over **QUIC + mTLS** (mutual authentication with self-signed certificates and fingerprint pinning); the control protocol is serialised in **CBOR**. No relay server: the phone talks straight to the PC.
+> **Android ⇄ Linux/Hyprland ecosystem integration** — in the spirit of Apple Continuity/Handoff, engineered specifically for Hyprland. Clipboard, notifications, media, battery, remote touchpad, keyboard, file transfer, webcam, audio and compositor control synced in real time over local QUIC + mTLS with zero cloud relay.
 
-> **Alpha (0.1.0).** It works day to day for the person who builds it, but the protocol may still change between versions and some modules are incomplete (see [Status](#status)). Use at your own risk; bug reports are welcome.
+> [!NOTE]
+> **Alpha (0.1.0).** Stable for everyday development use, but the wire protocol may evolve between releases and select modules remain in testing (see [03 / Subsystem Matrix](#03--subsystem-matrix)). Bug reports and contributions are welcome.
 
-<p align="center"><img src="assets/hyprlink_tour.gif" alt="A tour of the HyprLink desktop app: cover, devices, desk, camera, audio, notifications, sharing, media, sensors and diary" width="720"></p>
+<p align="center">
+  <img src="assets/hyprlink_tour.gif" width="720" alt="Tour of the HyprLink desktop application: cover, devices, desk, camera, audio, notifications, sharing, media, sensors and diary">
+</p>
 
-## Contents
+---
 
-[Features](#features) · [Status](#status) · [Requirements](#requirements) · [Installation](#installation) · [Pairing](#pairing-your-phone) · [Usage](#usage) · [Configuration](#configuration) · [Troubleshooting](#troubleshooting) · [Architecture](#architecture) · [Building from source](#building-from-source) · [Android app](#android-app) · [Credits](#credits) · [Licence](#licence)
+## 01 / AT A GLANCE
 
-## Features
+<p align="center">
+  <img src="assets/readme/at-a-glance.svg" width="100%" alt="HyprLink system profile at a glance">
+</p>
 
-- **Notifications** from the phone on the PC: mirror, actions, dismiss, and the list of active ones restored when the phone reconnects
-- **Two-way clipboard**, including PNG images
-- **File transfer** both ways: send queue, progress, history and a configurable download folder
-- **Media**: control the PC's MPRIS players from the phone, with position and album cover; the PC player also appears as a notification on the phone
-- **Phone as a webcam** for the PC (`/dev/video42` via v4l2loopback) in H.264 or H.265
-- **Audio**: the phone's microphone as a PC input, the phone as the PC's speaker, and PC sound sent to the phone
-- **Remote touchpad and keyboard** through `/dev/uinput`: live typing, Enter, shortcut keys and mouse buttons (press/release, with a safety release if the link drops)
-- **Quick actions**: lock, suspend, screenshot (full screen or area, copied to the clipboard and saved), volume, media keys and `hyprctl dispatch`
-- **Hyprland**: workspaces, windows and live events; phone gestures mapped to dispatches. Works with the Lua config (`hyprland.lua`) as well as the classic one
-- **Telemetry**: battery in both directions; the PC's CPU, RAM, temperature (hwmon), free disk space and GPU shown on the phone
-- **Wake-on-LAN**: the daemon sends the PC's MAC to the phone so it can wake the machine
-- **Desktop GUI** (iced) in its own process, with a tray icon and five languages: English, Portuguese (PT and BR), Spanish and Chinese
+The link is established directly on your local network over **QUIC + mTLS** (mutual authentication using self-signed certificates and fingerprint pinning); the control protocol is serialised in **CBOR**. There is no relay server: your phone communicates straight to your PC on **7443/UDP**.
 
-## Status
+---
 
-| Module | State |
+## 02 / CAPABILITIES
+
+<p align="center">
+  <img src="assets/readme/capabilities.svg" width="100%" alt="HyprLink capabilities matrix">
+</p>
+
+### What is actually happening?
+
+- **Notifications**: phone alerts mirrored to desktop with action triggers, remote dismissal, and active list restored upon reconnection.
+- **Two-way clipboard**: seamless clipboard sync, including raw UTF-8 text and lossless PNG image buffers.
+- **File transfer**: bidirectional transfer queue, real-time progress tracking, transfer history, and configurable download destination.
+- **Media**: control desktop MPRIS players from your phone with playback progress and album artwork; desktop playback is mirrored to phone notifications.
+- **Phone as webcam**: stream phone camera as a virtual video device (`/dev/video42` via `v4l2loopback`) using hardware H.264 or H.265.
+- **Audio bridge**: phone microphone as PC input, phone as desktop speaker, and PC audio streamed to phone.
+- **Remote touchpad & keyboard**: `/dev/uinput` integration providing cursor movement, click/drag, live typing, Enter, and hotkeys with fail-safe key release on disconnect.
+- **Quick actions**: lock screen, suspend, full/area screenshot (copied to clipboard and stored), volume adjustment, media keys, and arbitrary `hyprctl dispatch` triggers.
+- **Hyprland IPC**: workspace switching, active window lists, and live event monitoring; phone gestures mapped to dispatches (supports both classic and `hyprland.lua` configurations).
+- **Telemetry & Wake-on-LAN**: bidirectional battery indicators; PC CPU, RAM, hwmon temperatures, free disk space and GPU metrics displayed on mobile; PC MAC address broadcast for remote wake.
+- **Desktop GUI**: standalone reactive interface (`iced`) with system tray integration and multilingual localisation (English UK, PT-BR, PT-PT, ES-ES, ZH-CN).
+
+---
+
+## 03 / SUBSYSTEM MATRIX
+
+<p align="center">
+  <img src="assets/readme/showcase.svg" width="100%" alt="HyprLink subsystem integration matrix">
+</p>
+
+| Subsystem | State | Notes |
+|---|---|---|
+| **Connectivity** (QUIC/mTLS, QR pairing) | ✅ Ready | Mutual certificate pinning on 7443/UDP |
+| **Desktop GUI** (iced, separate daemon, tray) | ✅ Ready | Dedicated process, system tray via ksni |
+| **Two-way clipboard** | ✅ Ready | UTF-8 text and PNG images |
+| **Hyprland IPC** (workspaces, windows, dispatch) | ✅ Ready | Socket2 event integration |
+| **Battery sync** (PC ⇄ Phone) | ✅ Ready | Bidirectional telemetry and alerts |
+| **Media** (MPRIS control, art, notifications) | ✅ Ready | D-Bus integration via zbus |
+| **Remote touchpad & keyboard** | ✅ Ready | Direct /dev/uinput driver emulation |
+| **Quick actions** (lock, suspend, screenshot) | ✅ Ready | Integration with hyprlock, noctalia, grim |
+| **Notifications** (mirror, actions, dismiss) | ✅ Ready | Restores active notifications on reconnect |
+| **File transfer** (queue, history, custom folder) | ✅ Ready | QUIC unidirectional binary stream |
+| **Telemetry on phone** (CPU, RAM, temp, GPU, disk) | 🚧 Testing | Hwmon/NVIDIA GPU sleep states under validation |
+| **Mouse buttons & drag** (`input.button`) | 🚧 Testing | Daemon and Android ready; pending field verification |
+| **Phone gestures** (`gesture`) | 🚧 Testing | Daemon, GUI and Android ready; pending verification |
+| **Audio bridge** (mic, speaker, tap stream) | 🚧 Testing | PipeWire and GStreamer pipeline verification |
+| **Virtual webcam** (H.264 / H.265 on /dev/video42) | 🚧 Testing | v4l2loopback module loading via pkexec |
+
+Full protocol details are documented in [`PROTOCOL.md`](PROTOCOL.md) and version history in [`CHANGELOG.md`](CHANGELOG.md).
+
+---
+
+## 04 / INSTALL
+
+### Requirements
+
+Tested on **Arch Linux / CachyOS** with **Hyprland** (Wayland). The package identifiers below reflect Arch Linux:
+
+| Domain | Required Packages (Arch Linux) |
 |---|---|
-| Connectivity (QUIC/mTLS, QR pairing) | ✅ |
-| Desktop GUI (iced, separate from the daemon, tray icon) | ✅ |
-| Two-way clipboard | ✅ |
-| Hyprland (workspaces, windows, dispatch, live events) | ✅ |
-| Battery (PC ↔ phone) | ✅ |
-| Media (MPRIS: control, now playing, cover art, phone notification) | ✅ |
-| Remote touchpad / keyboard (live typing, Enter, shortcuts) | ✅ |
-| Quick actions (lock, suspend, screenshot/area, volume, media) | ✅ |
-| Notifications (mirror, actions, dismiss) | ✅ |
-| File transfer (send queue, history, open folder) | ✅ |
-| Telemetry on the phone (CPU, RAM, temperature, GPU, disk) | 🚧 temperature/GPU still to validate |
-| Mouse buttons and drag (`input.button`) | 🚧 daemon and Android app ready; still to test on a phone |
-| Phone gestures (`gesture`) | 🚧 daemon, GUI and Android app ready; still to test on a phone |
-| Audio (mixer, hear the PC on the phone, virtual microphone) | 🚧 |
-| Webcam (phone as PC camera/microphone; H.264 and H.265) | 🚧 |
+| **Base / Core** | `hyprland`, `pipewire`, `wireplumber`, `libpulse` (`pactl`), `wl-clipboard` |
+| **Audio & Camera (GStreamer)** | `gst-plugins-base-libs`, `gst-plugins-good`, `gst-plugins-bad-libs` (H.265), `gst-libav` (H.264/H.265), `gst-plugin-pipewire` |
+| **Virtual Webcam** | `v4l2loopback-dkms` (loaded onto `/dev/video42` via `pkexec`) |
+| **GUI File Picker** | `xdg-desktop-portal` + `xdg-desktop-portal-gtk` |
+| **Quick Actions (Optional)** | Lock: `noctalia`, `hyprlock`, or `loginctl`; Screenshots: `grimblast` or `grim` + `slurp` |
+| **Build Toolchain** | `rust`, `clang`, `lld`, `pkgconf` |
 
-Full detail is in [`CHANGELOG.md`](CHANGELOG.md) and [`PROTOCOL.md`](PROTOCOL.md).
+> [!IMPORTANT]
+> The remote touchpad and keyboard write directly to `/dev/uinput`. Ensure your user has write access (verify with `getfacl /dev/uinput`).
 
-## Requirements
+### Fast path: Pre-built binary tarball (x86_64)
 
-Tested on **Arch Linux / CachyOS** with **Hyprland** (Wayland). Other distributions should work, but the package names below are Arch's.
-
-| For | Packages (Arch) |
-|---|---|
-| Base | `hyprland`, `pipewire`, `wireplumber`, `libpulse` (`pactl`), `wl-clipboard` |
-| Audio and camera (GStreamer) | `gst-plugins-base-libs`, `gst-plugins-good`, `gst-plugins-bad-libs` (H.265), `gst-libav` (H.264/H.265 decoding), `gst-plugin-pipewire` |
-| Virtual webcam | `v4l2loopback-dkms` (the daemon loads it on `/dev/video42` through `pkexec`) |
-| GUI file picker | `xdg-desktop-portal` + `xdg-desktop-portal-gtk` |
-| Quick actions (optional) | lock: `noctalia`, `hyprlock` or `loginctl`; screenshots: `grimblast` or `grim` + `slurp` |
-| Building | `rust`, `clang`, `lld`, `pkgconf` |
-
-The remote touchpad and keyboard write to `/dev/uinput`: the session user needs write permission (check with `getfacl /dev/uinput`).
-
-## Installation
-
-There are two ways to install HyprLink on Linux:
-
-### 1. Pre-built binary tarball (any Linux x86_64)
-
-Download `hyprlink-0.1.0-linux-x86_64.tar.gz` from [Releases](https://github.com/mastermaiolo/hyprlink/releases):
+Download `hyprlink-0.1.0-linux-x86_64.tar.gz` from [GitHub Releases](https://github.com/mastermaiolo/hyprlink/releases):
 
 ```bash
 tar -xzf hyprlink-0.1.0-linux-x86_64.tar.gz
 cd hyprlink-0.1.0-linux-x86_64
-./install.sh                                     # installs to ~/.local (no root required)
-systemctl --user enable --now hyprlink-bridge   # daemon as a user service
-hyprlink-gui                                     # open GUI
+./install.sh                                     # Installs to ~/.local (no root required)
+systemctl --user enable --now hyprlink-bridge   # Start daemon user unit
+hyprlink-gui                                     # Launch desktop GUI
 ```
 
-`./install.sh` accepts `--prefix DIR` (defaults to `~/.local`), `--dry-run`, and verifies runtime dependencies. `./uninstall.sh` removes the installed files.
+`./install.sh` supports `--prefix DIR` (defaults to `~/.local`), `--dry-run`, and validates dependencies. Run `./uninstall.sh` to remove installed files.
 
-### 2. Arch Linux (PKGBUILD)
+### Arch Linux (PKGBUILD)
 
-The package is a **local PKGBUILD** in `packaging/arch/`, named `hyprlink-bridge` (on the AUR, "hyprlink" is a different project):
+A dedicated local PKGBUILD is supplied in `packaging/arch/` under the name `hyprlink-bridge`:
 
 ```bash
 git clone https://github.com/mastermaiolo/hyprlink.git
@@ -98,123 +131,224 @@ systemctl --user enable --now hyprlink-bridge
 hyprlink-gui
 ```
 
-It installs `hyprlink-daemon`, `hyprlink-gui` and `hyprlinkctl` into `/usr/bin`, the `hyprlink-bridge.service` user unit and a `.desktop` launcher. To test the current checkout before a tag exists: `HYPRLINK_LOCAL=1 makepkg -si`.
+This installs `hyprlink-daemon`, `hyprlink-gui`, and `hyprlinkctl` into `/usr/bin`, registers the `hyprlink-bridge.service` unit, and adds desktop launchers. To build from current working tree before tagging: `HYPRLINK_LOCAL=1 makepkg -si`.
 
-### Runtime dependencies
+<details>
+<summary><strong>Session autostart and uwsm integration</strong></summary>
 
-- **Core**: `hyprctl` (Hyprland), `pipewire`, `wireplumber` (`wpctl`), `libpulse` (`pactl`), `wl-clipboard` (`wl-copy`).
-- **Media**: `gstreamer`, `gst-plugins-good` (v4l2sink), `gst-libav` (avdec_h264, avdec_h265), `gst-plugin-pipewire` (pipewiresrc).
-- **Optional**: `v4l2loopback-dkms` (phone camera as `/dev/video42`), `grimblast` or `grim` + `slurp` (screenshots), `hyprlock` / `noctalia` (locking screen).
+The background service targets `graphical-session.target`.
+- **With `uwsm`**: activation is automatic.
+- **Without `uwsm`**: ensure session environment variables are imported by placing in `hyprland.conf`:
+  ```ini
+  exec-once = dbus-update-activation-environment --systemd --all
+  exec-once = systemctl --user start hyprlink-bridge
+  ```
+- **GUI tray autostart at login**:
+  ```bash
+  cp /usr/share/hyprlink-bridge/hyprlink-bridge-autostart.desktop ~/.config/autostart/
+  ```
+  Or add `exec-once = hyprlink-gui` to `hyprland.conf`.
 
-The service starts with the graphical session (`graphical-session.target`). With uwsm that is automatic. Without uwsm that target is usually not activated: in Hyprland add `exec-once = dbus-update-activation-environment --systemd --all` and then `exec-once = systemctl --user start hyprlink-bridge`. To start the GUI in the tray at login: `cp /usr/share/hyprlink-bridge/hyprlink-bridge-autostart.desktop ~/.config/autostart/` (uwsm reads XDG autostart) or `exec-once = hyprlink-gui` in Hyprland.
+</details>
 
-## Pairing your phone
+---
 
-1. Install the Android app (the APK on the [releases page](https://github.com/mastermaiolo/hyprlink/releases); on the phone you must allow "Install unknown apps").
-2. With the daemon running, open the GUI on **Devices → Pair new** (or read the QR in the terminal if you started the daemon by hand).
-3. In the app, scan the QR. It carries the SHA-256 fingerprint of the PC's certificate, the `<PC-IP>:7443` address and a token that changes at every daemon start and after every pairing.
-4. From then on the link resumes by itself whenever both devices are on the same network.
+## 05 / CONTROL SURFACE
 
-**Network:** the PC and the phone must be on the same LAN. The daemon listens on a single port, **7443/UDP** (QUIC). If you run a firewall, open that port to the local network only.
+<p align="center">
+  <img src="assets/readme/control-surface.svg" width="100%" alt="HyprLink control surface: GUI and CLI">
+</p>
 
-The PC's identity (certificate and key) lives in `~/.config/hyprlink/`; deleting that folder forces a new pairing.
+### Pairing your phone
 
-## Usage
+1. Install the companion Android app APK from [Releases](https://github.com/mastermaiolo/hyprlink/releases) (enable "Install unknown apps" on Android).
+2. With the daemon active, open the GUI to **Devices → Pair new** (or inspect terminal output if running daemon interactively).
+3. Scan the generated QR code in the app. The payload includes the SHA-256 certificate fingerprint, `<PC-IP>:7443` endpoint, and an ephemeral pairing token.
+4. The link automatically reconnects whenever both devices reside on the same local subnet.
 
-The GUI keeps the **phone first**: it shows the connected device before the PC itself. Keys `1`–`9` jump to a page and `0` opens Settings. The pages are Cover, Devices, Desk, Camera & Screen, Audio, Notifications, Sharing, Multimedia, Sensors & Presence and Diary.
+> [!NOTE]
+> Ensure port **7443/UDP** is accessible through your firewall. Local PC identity credentials reside in `~/.config/hyprlink/`; deleting this directory resets all pairings.
 
-For scripts, shortcuts and bars there is `hyprlinkctl`:
+### Desktop GUI navigation
 
+The desktop app prioritises the phone view over local desktop metrics:
+- Keys `1`–`9`: Direct page jump (Cover, Devices, Desk, Camera & Screen, Audio, Notifications, Sharing, Multimedia, Sensors & Presence, Diary).
+- Key `0`: Open Settings overlay.
+
+### Command-line interface (`hyprlinkctl`)
+
+```bash
+hyprlinkctl status             # Connection state and device details
+hyprlinkctl ping               # Round-trip latency check to phone
+hyprlinkctl watch --json       # Continuous JSON telemetry stream
+hyprlinkctl clipboard          # Push desktop clipboard buffer to phone
+hyprlinkctl pair               # Open 120-second discovery pairing window
+hyprlinkctl mirror toggle      # Toggle phone screen mirror stream
+hyprlinkctl mic toggle         # Toggle phone microphone input (on | off | toggle)
+hyprlinkctl tap toggle         # Toggle PC sound stream to phone
+hyprlinkctl speaker toggle     # Toggle phone as desktop output sink
+hyprlinkctl ws 3               # Switch Hyprland active workspace to 3
+hyprlinkctl open               # Open or focus the desktop GUI window
+hyprlinkctl doctor             # Diagnostic environment and compatibility audit
 ```
-hyprlinkctl status             connection state
-hyprlinkctl ping               round-trip to the phone
-hyprlinkctl watch --json       stream snapshots as JSON lines
-hyprlinkctl clipboard          send clipboard to phone
-hyprlinkctl pair               open pairing window (120 s)
-hyprlinkctl mirror toggle      toggle phone screen mirror
-hyprlinkctl doctor             environment and compatibility report
-hyprlinkctl shortcuts          list configured shortcuts
-hyprlinkctl mic toggle         phone microphone on/off (on | off | toggle)
-hyprlinkctl tap toggle         send PC audio to the phone
-hyprlinkctl speaker toggle     phone as the PC's speaker
-hyprlinkctl ws 3               switch to workspace 3
-hyprlinkctl open               open (or focus) the GUI
+
+Explore additional options with `hyprlinkctl --help`. A Waybar integration widget and a context-menu desktop action are supplied in `contrib/` (install via `contrib/install.sh`).
+
+---
+
+## 06 / CONFIGURATION
+
+Settings reside in `~/.config/hyprlink/config.json` and are manageable directly from the GUI:
+
+```json
+{
+  "download_dir": "~/Downloads",
+  "track": {
+    "sensitivity": 1.0,
+    "scroll_speed": 1.0,
+    "natural_scroll": true
+  },
+  "shortcuts": [],
+  "gestures": [],
+  "battery_alerts": {
+    "low": 20,
+    "full": 90
+  },
+  "disk_path": "/home/user",
+  "gpu_nvidia_wake": false,
+  "lang": "en-GB"
+}
 ```
 
-`hyprlinkctl --help` lists the rest. `contrib/` has a Waybar widget and a "Send via HyprLink" `.desktop` entry for your file manager's context menu; `contrib/install.sh` installs them.
+* `download_dir`: Destination directory for files sent from the phone.
+* `track`: Sensitivity, natural scrolling, acceleration, and virtual keyboard toggles.
+* `shortcuts` & `gestures`: Mappings between phone gesture events and `hyprctl dispatch` routines.
+* `battery_alerts`: Low and high threshold percentage boundaries.
+* `disk_path`: Mount point inspected for storage telemetry (defaults to `$HOME`).
+* `gpu_nvidia_wake`: When `false` (default), prevents telemetry scans from waking sleeping discrete NVIDIA GPUs.
+* `lang`: Interface language identifier (`en-GB`, `pt-BR`, `pt-PT`, `es-ES`, `zh-CN`).
 
-## Configuration
-
-Settings live in `~/.config/hyprlink/config.json` and are edited from the GUI (**Settings**, and **Desk** for gestures, shortcuts and trackpad). Worth knowing:
-
-- `download_dir` — where received files go
-- `track` — touchpad sensitivity, scroll speed, acceleration, natural scrolling and the phone-keyboard toggle
-- `shortcuts` and `gestures` — the `hyprctl dispatch` commands the phone can trigger
-- `battery_alerts` — low and full battery thresholds
-- `disk_path` — which mount's free space is shown on the phone (defaults to `$HOME`)
-- `gpu_nvidia_wake` — read NVIDIA GPU load even if the card is asleep (off by default, so telemetry never wakes it)
-- `lang` — GUI language
-
-`HYPRLINK_MOCK=1 hyprlink-gui` opens the GUI against a simulated daemon, with no phone.
-
-## Troubleshooting
-
-- **The phone can't connect.** Same LAN? Is **7443/UDP** open? Check `systemctl --user status hyprlink-bridge`. If it still fails, remove the device in the GUI and pair again.
-- **Touchpad or keyboard do nothing.** The session user needs write access to `/dev/uinput` (`getfacl /dev/uinput`).
-- **No webcam.** Install `v4l2loopback-dkms`; the daemon asks for permission (`pkexec`) to load it on `/dev/video42`.
-- **The service doesn't start at login.** Without uwsm, see the `graphical-session.target` note under [Installation](#installation).
-- **Lock or screenshot does nothing.** Install a lock command (`noctalia`, `hyprlock`) and `grimblast` or `grim` + `slurp`.
-- **Start over.** Delete `~/.config/hyprlink/` (this also forgets all pairings).
-
-## Architecture
-
+To test the GUI without an active daemon or phone, launch mock mode:
+```bash
+HYPRLINK_MOCK=1 hyprlink-gui
 ```
+
+---
+
+## 07 / ARCHITECTURE
+
+<p align="center">
+  <img src="assets/readme/architecture.svg" width="100%" alt="HyprLink system architecture and module tree">
+</p>
+
+```text
 ├── crates/
-│   ├── hyprlinkd/            Daemon (Rust, binary hyprlink-daemon) — no window
-│   ├── hyprlink-gui/         Desktop GUI (iced, with its own tray icon)
-│   ├── hyprlink-proto/       Contract between daemon, GUI and hyprlinkctl (+ texts in fmt.rs)
-│   └── hyprlinkctl/          Command line, for scripts and keybinds
-├── contrib/                  Waybar, .desktop, install script
-├── packaging/arch/           Local PKGBUILD (package hyprlink-bridge)
-├── scripts/                  hyprlink-start.sh / hyprlink-stop.sh (daemon + GUI), gui-capture.sh, release.sh
-├── CHANGELOG.md              Changes per version
-└── PROTOCOL.md               Protocol specification (source of truth)
+│   ├── hyprlinkd/            Headless daemon (binary: hyprlink-daemon, no window)
+│   ├── hyprlink-gui/         Desktop GUI (iced, independent process with tray icon)
+│   ├── hyprlink-proto/       Shared contract, CBOR framing, wire types, fmt.rs
+│   └── hyprlinkctl/          Command-line tool for keybindings, Waybar, shell scripts
+├── contrib/                  Waybar integration module, context menu .desktop entries
+├── packaging/arch/           Local PKGBUILD definition (package hyprlink-bridge)
+├── scripts/                  hyprlink-start.sh / stop, gui-capture.sh, release.sh
+├── CHANGELOG.md              Version history and release notes
+└── PROTOCOL.md               Formal network protocol specification
 ```
 
-The daemon has no window; the GUI is a separate process that talks to it over `$XDG_RUNTIME_DIR/hyprlink.sock`. Between PC and phone, a single QUIC connection on 7443/UDP carries control messages (CBOR over a bidirectional stream), data (unidirectional streams) and PC audio (QUIC DATAGRAM). The full wire specification — framing, CBOR format and the packet catalogue per module — is in [`PROTOCOL.md`](PROTOCOL.md).
+The daemon runs headlessly; the GUI communicates with it via a local UNIX domain socket at `$XDG_RUNTIME_DIR/hyprlink.sock`. 
 
-Stack: [`quinn`](https://github.com/quinn-rs/quinn) (QUIC), `rustls` (TLS), `ciborium` (CBOR), [`iced`](https://github.com/iced-rs/iced) (GUI), `ksni` (tray), `zbus` (D-Bus — MPRIS and notifications), `uinput` (touchpad/keyboard), GStreamer/PipeWire (audio and camera).
+Over the local network, a single QUIC connection on **7443/UDP** multiplexes:
+- **Control messages**: Bidirectional CBOR stream.
+- **Bulk data**: Unidirectional streams for file payloads and clipboard images.
+- **Audio stream**: Low-latency loss-tolerant QUIC DATAGRAM frames.
 
-## Building from source
+**Core stack**: [`quinn`](https://github.com/quinn-rs/quinn) (QUIC), `rustls` (TLS), `ciborium` (CBOR), [`iced`](https://github.com/iced-rs/iced) (GUI runtime), `ksni` (StatusNotifierItem tray), `zbus` (D-Bus MPRIS & notifications), `uinput` (kernel input emulation), GStreamer / PipeWire (multimedia pipelines).
+
+---
+
+## 08 / FAILURE MODES
+
+<p align="center">
+  <img src="assets/readme/failure-modes.svg" width="100%" alt="HyprLink failure modes and recovery matrix">
+</p>
+
+<details>
+<summary><strong>Detailed troubleshooting procedures</strong></summary>
+
+1. **Phone fails to connect**:
+   - Verify both devices share the exact same local network subnet.
+   - Confirm firewall allows incoming traffic on port **7443/UDP**.
+   - Check daemon service logs: `systemctl --user status hyprlink-bridge`.
+   - Remove the paired device in the desktop GUI and perform a fresh QR scan.
+2. **Touchpad or keyboard inputs produce no effect**:
+   - Verify write permission to the virtual input character device: `getfacl /dev/uinput`.
+   - Grant user access via udev rule if missing.
+3. **Virtual webcam device absent**:
+   - Ensure `v4l2loopback-dkms` is installed.
+   - The daemon invokes `pkexec` to initialise `/dev/video42`.
+4. **Service does not start upon graphical login**:
+   - If running without `uwsm`, verify `graphical-session.target` activation.
+   - Insert `exec-once = dbus-update-activation-environment --systemd --all` in `hyprland.conf`.
+5. **Lock screen or screenshot commands fail**:
+   - Ensure an active screen lock utility (`noctalia`, `hyprlock`, `loginctl`) is installed.
+   - Ensure screenshot utilities (`grimblast` or `grim` + `slurp`) are present on `$PATH`.
+6. **Full configuration reset**:
+   - Stop daemon and purge configuration state: `rm -rf ~/.config/hyprlink/`.
+   - A clean cryptographic identity and pairing database will be generated on next launch.
+
+</details>
+
+---
+
+<details>
+<summary><strong>Supplementary reference & building from source</strong></summary>
+
+### Building from source
 
 ```bash
-# the easy way: starts the daemon and the GUI (uses the binaries in target/release)
-scripts/hyprlink-start.sh            # --restart to restart; hyprlink-stop.sh to stop
+# Automated launch (builds and runs daemon + GUI using target/release binaries)
+scripts/hyprlink-start.sh            # Use --restart to bounce; hyprlink-stop.sh to terminate
 
-# or by hand, in two terminals
-cargo run --release -p hyprlinkd     # the daemon (prints the pairing QR)
-cargo run --release -p hyprlink-gui  # the GUI
+# Manual launch in dedicated terminals
+cargo run --release -p hyprlinkd     # Daemon (outputs pairing QR in terminal)
+cargo run --release -p hyprlink-gui  # Desktop GUI
 ```
 
-The repo ships a `.cargo/config.toml` using **`clang` + `lld`** as the linker (`pacman -S clang lld`): linking a debug daemon drops from ~5 s to ~2 s.
+The repository includes `.cargo/config.toml` configured to leverage **`clang` + `lld`** linker acceleration (`pacman -S clang lld`), cutting debug daemon link times from ~5s down to ~2s.
 
+Compilation profiles:
 ```bash
-cargo build --profile fast -p hyprlinkd   # to iterate: no LTO, 16 codegen units
-cargo build --release -p hyprlinkd        # to distribute (LTO, overflow-checks = true)
+cargo build --profile fast -p hyprlinkd   # Development iteration: no LTO, 16 codegen units
+cargo build --release -p hyprlinkd        # Release distribution: LTO enabled, overflow checks on
 ```
 
-The `fast` profile inherits from `release` with `lto = false`, `codegen-units = 16` and `overflow-checks = false`; **it is not for distribution**.
+The `fast` profile inherits from `release` with `lto = false`, `codegen-units = 16`, and `overflow-checks = false`; it is not intended for release distribution.
 
-## Android app
+### Companion Android client
 
-The Android app (Kotlin/Jetpack Compose) is developed and distributed separately; this repository holds only the PC side: daemon, GUI and `hyprlinkctl`. For now the app will be offered as a signed APK on this repository's [Releases](https://github.com/mastermaiolo/hyprlink/releases) page (not published yet). If you want to write another client, the full protocol is in [`PROTOCOL.md`](PROTOCOL.md).
+The companion mobile application (Kotlin / Jetpack Compose) is versioned in a dedicated workspace. Pre-compiled signed APKs are released on the [GitHub Releases](https://github.com/mastermaiolo/hyprlink/releases) page. Developers seeking to implement alternative mobile or desktop clients should refer to [`PROTOCOL.md`](PROTOCOL.md).
 
-## Credits
+</details>
 
-[`quinn`](https://github.com/quinn-rs/quinn), [`rustls`](https://github.com/rustls/rustls), [`iced`](https://github.com/iced-rs/iced), `ciborium`, `ksni` and `zbus` do the heavy lifting. The fonts bundled in the GUI and the app — Anton, Instrument Serif, Inter, IBM Plex Mono and Noto Sans SC — are under the SIL Open Font License 1.1; their texts are in `crates/hyprlink-gui/assets/fonts/OFL-*.txt`.
+---
 
-## Licence
+## 09 / PROVENANCE
+
+<p align="center">
+  <img src="assets/readme/provenance.svg" width="100%" alt="HyprLink provenance and attribution">
+</p>
+
+Core engineering builds upon [`quinn`](https://github.com/quinn-rs/quinn), [`rustls`](https://github.com/rustls/rustls), [`iced`](https://github.com/iced-rs/iced), `ciborium`, `ksni`, and `zbus`.
+
+Typefaces bundled with the desktop and mobile clients — Anton, Instrument Serif, Inter, IBM Plex Mono, and Noto Sans SC — are distributed under the SIL Open Font License 1.1; licensing statements reside in `crates/hyprlink-gui/assets/fonts/OFL-*.txt`.
+
+---
+
+## 10 / LICENCE
 
 **GPL-3.0-or-later** — see [`LICENSE`](LICENSE).
 
-**Relicensing:** up to 0.1.0 the code was published under MIT. Since the project has a single author, from 0.1.0 it is GPL-3.0-or-later. Anyone who received earlier versions can keep using them under MIT's terms.
+**Relicensing notice**: Up to version 0.1.0, earlier code snapshots were distributed under the MIT licence. With single-author provenance established, releases starting from 0.1.0 are published under GNU GPL v3.0 or later. Recipients of earlier MIT-tagged builds retain their rights under MIT terms.
+
+---
+
+<p align="center"><sub>MAIOLO / SYSTEMS LAB · HYPRLINK · HL / 01 · 食</sub></p>

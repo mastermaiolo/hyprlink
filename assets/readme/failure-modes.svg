@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 310" width="1200" height="310">
+<defs>
+  <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#FFFFFF" stroke-opacity=".035" stroke-width="1"/></pattern>
+</defs>
+<rect x="2" y="2" width="1196" height="306" rx="16" fill="#0B0D0F" stroke="#2A2D31" stroke-width="1"/>
+<rect x="3" y="3" width="1194" height="304" fill="url(#grid)"/>
+
+<!-- Header -->
+<text x="28" y="34" font-family="JetBrains Mono, monospace" font-size="12px" font-weight="600" fill="#8E8A82" letter-spacing="2">08 / FAILURE MODES</text>
+<text x="1170" y="34" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="600" fill="#B62B32" text-anchor="end" letter-spacing="2">RECOVERY MATRIX</text>
+
+<!-- Mode 01 -->
+<text x="28" y="72" font-family="JetBrains Mono, monospace" font-size="9px" font-weight="700" fill="#B62B32" letter-spacing="1">01</text>
+<text x="65" y="72" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="700" fill="#E9E5DC" letter-spacing="1">PHONE CANNOT CONNECT</text>
+<text x="320" y="72" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">Ensure identical LAN subnet · open 7443/UDP · check systemctl --user status hyprlink-bridge</text>
+<line x1="28" y1="86" x2="1170" y2="86" stroke="#2A2D31" stroke-width="1" opacity="0.8"/>
+
+<!-- Mode 02 -->
+<text x="28" y="112" font-family="JetBrains Mono, monospace" font-size="9px" font-weight="700" fill="#B62B32" letter-spacing="1">02</text>
+<text x="65" y="112" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="700" fill="#E9E5DC" letter-spacing="1">TOUCHPAD / KEYS INERT</text>
+<text x="320" y="112" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">Session user requires write access to /dev/uinput · verify ACL permissions with getfacl /dev/uinput</text>
+<line x1="28" y1="126" x2="1170" y2="126" stroke="#2A2D31" stroke-width="1" opacity="0.8"/>
+
+<!-- Mode 03 -->
+<text x="28" y="152" font-family="JetBrains Mono, monospace" font-size="9px" font-weight="700" fill="#B62B32" letter-spacing="1">03</text>
+<text x="65" y="152" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="700" fill="#E9E5DC" letter-spacing="1">NO VIRTUAL WEBCAM</text>
+<text x="320" y="152" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">Install v4l2loopback-dkms · daemon invokes pkexec to create loopback device node on /dev/video42</text>
+<line x1="28" y1="166" x2="1170" y2="166" stroke="#2A2D31" stroke-width="1" opacity="0.8"/>
+
+<!-- Mode 04 -->
+<text x="28" y="192" font-family="JetBrains Mono, monospace" font-size="9px" font-weight="700" fill="#B62B32" letter-spacing="1">04</text>
+<text x="65" y="192" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="700" fill="#E9E5DC" letter-spacing="1">SERVICE INERT AT LOGIN</text>
+<text x="320" y="192" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">Without uwsm: add dbus-update-activation-environment --systemd --all in hyprland.conf before bridge start</text>
+<line x1="28" y1="206" x2="1170" y2="206" stroke="#2A2D31" stroke-width="1" opacity="0.8"/>
+
+<!-- Mode 05 -->
+<text x="28" y="232" font-family="JetBrains Mono, monospace" font-size="9px" font-weight="700" fill="#B62B32" letter-spacing="1">05</text>
+<text x="65" y="232" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="700" fill="#E9E5DC" letter-spacing="1">LOCK / SCREENSHOT NO-OP</text>
+<text x="320" y="232" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">Ensure lock binary (noctalia, hyprlock) and screenshot tool (grimblast or grim + slurp) are on PATH</text>
+<line x1="28" y1="246" x2="1170" y2="246" stroke="#2A2D31" stroke-width="1" opacity="0.8"/>
+
+<!-- Mode 06 -->
+<text x="28" y="272" font-family="JetBrains Mono, monospace" font-size="9px" font-weight="700" fill="#B62B32" letter-spacing="1">06</text>
+<text x="65" y="272" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="700" fill="#E9E5DC" letter-spacing="1">START OVER / PURGE</text>
+<text x="320" y="272" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">Delete ~/.config/hyprlink/ · resets local cryptographic keypair and clears all trusted phone pairings</text>
+<line x1="28" y1="286" x2="1170" y2="286" stroke="#2A2D31" stroke-width="1" opacity="0.8"/>
+</svg>

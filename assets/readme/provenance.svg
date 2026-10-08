@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 215" width="1200" height="215">
+<defs>
+  <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#FFFFFF" stroke-opacity=".035" stroke-width="1"/></pattern>
+</defs>
+<rect x="2" y="2" width="1196" height="211" rx="16" fill="#0B0D0F" stroke="#2A2D31" stroke-width="1"/>
+<rect x="3" y="3" width="1194" height="209" fill="url(#grid)"/>
+
+<!-- Header -->
+<text x="28" y="34" font-family="JetBrains Mono, monospace" font-size="12px" font-weight="600" fill="#8E8A82" letter-spacing="2">09 / PROVENANCE</text>
+<text x="1170" y="34" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="600" fill="#00D2FF" text-anchor="end" letter-spacing="2">OPEN SOURCE FOUNDATION</text>
+
+<!-- Row 1: Core Rust Crates -->
+<text x="28" y="65" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="700" fill="#E9E5DC">quinn + rustls</text>
+<text x="175" y="65" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="600" fill="#8E8A82">network transport</text>
+<text x="345" y="65" font-family="Inter, Segoe UI, sans-serif" font-size="9.5px" fill="#8E8A82">QUIC implementation · mutual TLS handshake · certificate fingerprint pinning · zero cloud dependencies</text>
+
+<!-- Row 2: Desktop GUI & Serialization -->
+<text x="28" y="93" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="700" fill="#E9E5DC">iced + ciborium</text>
+<text x="175" y="93" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="600" fill="#8E8A82">interface &amp; wire</text>
+<text x="345" y="93" font-family="Inter, Segoe UI, sans-serif" font-size="9.5px" fill="#8E8A82">Modern reactive GUI runtime (iced) · binary CBOR serialization · structured RPC streams</text>
+
+<!-- Row 3: Linux Desktop IPC -->
+<text x="28" y="121" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="700" fill="#E9E5DC">zbus + ksni</text>
+<text x="175" y="121" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="600" fill="#8E8A82">system integration</text>
+<text x="345" y="121" font-family="Inter, Segoe UI, sans-serif" font-size="9.5px" fill="#8E8A82">Async D-Bus (zbus) for MPRIS &amp; notification relay · StatusNotifierItem tray menu (ksni)</text>
+
+<!-- Row 4: Typography -->
+<text x="28" y="149" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="700" fill="#E9E5DC">Typefaces</text>
+<text x="175" y="149" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="600" fill="#8E8A82">SIL OFL 1.1</text>
+<text x="345" y="149" font-family="Inter, Segoe UI, sans-serif" font-size="9.5px" fill="#8E8A82">Anton · Instrument Serif · Inter · IBM Plex Mono · Noto Sans SC (crates/hyprlink-gui/assets/fonts/)</text>
+
+<!-- Rule & Footnote -->
+<line x1="28" y1="174" x2="1170" y2="174" stroke="#2A2D31" stroke-width="1"/>
+<text x="28" y="196" font-family="JetBrains Mono, monospace" font-size="9px" font-weight="500" fill="#8E8A82" letter-spacing="1">GPL-3.0-or-later (relicensed from MIT at 0.1.0) · PROTOCOL.md · CHANGELOG.md</text>
+<text x="1170" y="196" font-family="JetBrains Mono, monospace" font-size="9px" font-weight="600" fill="#E9E5DC" text-anchor="end" letter-spacing="1">MAIOLO / SYSTEMS LAB  ·  HL / 01  ·  食</text>
+</svg>

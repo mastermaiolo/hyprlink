@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300">
+<defs>
+  <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#FFFFFF" stroke-opacity=".035" stroke-width="1"/></pattern>
+</defs>
+<rect x="2" y="2" width="1196" height="296" rx="16" fill="#0B0D0F" stroke="#2A2D31" stroke-width="1"/>
+<rect x="3" y="3" width="1194" height="294" fill="url(#grid)"/>
+
+<text x="28" y="34" font-family="JetBrains Mono, monospace" font-size="12px" font-weight="600" fill="#8E8A82" letter-spacing="2">02 / CAPABILITIES</text>
+<text x="1170" y="34" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="600" fill="#38BDF8" text-anchor="end" letter-spacing="2">CONTINUITY ENGINE</text>
+
+<!-- Block 1: DEVICE SYNC -->
+<rect x="28" y="58" width="548" height="94" rx="12" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="44" y="80" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="700" fill="#E9E5DC" letter-spacing="2">DEVICE SYNC</text>
+<line x1="44" y1="89" x2="160" y2="89" stroke="#00D2FF" stroke-width="1" opacity="0.8"/>
+<text x="46" y="111" font-family="JetBrains Mono, monospace" font-size="7px" font-weight="700" fill="#00D2FF">●</text>
+<text x="60" y="112" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">Two-way clipboard synchronization (UTF-8 text + PNG images)</text>
+<text x="46" y="126" font-family="JetBrains Mono, monospace" font-size="7px" font-weight="700" fill="#00D2FF">●</text>
+<text x="60" y="127" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">Phone notification mirroring with action triggers and remote dismiss</text>
+<text x="46" y="141" font-family="JetBrains Mono, monospace" font-size="7px" font-weight="700" fill="#00D2FF">●</text>
+<text x="60" y="142" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">Bidirectional file transfer with queue, progress and history</text>
+
+<!-- Block 2: REMOTE CONTROL -->
+<rect x="602" y="58" width="548" height="94" rx="12" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="618" y="80" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="700" fill="#E9E5DC" letter-spacing="2">REMOTE CONTROL</text>
+<line x1="618" y1="89" x2="744" y2="89" stroke="#B62B32" stroke-width="1" opacity="0.8"/>
+<text x="620" y="111" font-family="JetBrains Mono, monospace" font-size="7px" font-weight="700" fill="#B62B32">●</text>
+<text x="634" y="112" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">Remote trackpad &amp; keyboard through /dev/uinput with fail-safe release</text>
+<text x="620" y="126" font-family="JetBrains Mono, monospace" font-size="7px" font-weight="700" fill="#B62B32">●</text>
+<text x="634" y="127" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">MPRIS player control, now-playing timeline and album cover feed</text>
+<text x="620" y="141" font-family="JetBrains Mono, monospace" font-size="7px" font-weight="700" fill="#B62B32">●</text>
+<text x="634" y="142" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">Quick dispatches: lock screen, suspend, area screenshot to clipboard</text>
+
+<!-- Block 3: AUDIO & CAMERA -->
+<rect x="28" y="170" width="548" height="94" rx="12" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="44" y="192" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="700" fill="#E9E5DC" letter-spacing="2">AUDIO &amp; CAMERA</text>
+<line x1="44" y1="201" x2="176" y2="201" stroke="#38BDF8" stroke-width="1" opacity="0.8"/>
+<text x="46" y="223" font-family="JetBrains Mono, monospace" font-size="7px" font-weight="700" fill="#38BDF8">●</text>
+<text x="60" y="224" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">Virtual webcam on /dev/video42 (v4l2loopback) in H.264 / H.265</text>
+<text x="46" y="238" font-family="JetBrains Mono, monospace" font-size="7px" font-weight="700" fill="#38BDF8">●</text>
+<text x="60" y="239" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">Phone mic as PC audio input · phone speaker as PC audio sink</text>
+<text x="46" y="253" font-family="JetBrains Mono, monospace" font-size="7px" font-weight="700" fill="#38BDF8">●</text>
+<text x="60" y="254" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">Low-latency PC sound streaming over QUIC DATAGRAM</text>
+
+<!-- Block 4: TELEMETRY & DESK -->
+<rect x="602" y="170" width="548" height="94" rx="12" fill="#111419" stroke="#2A2D31" stroke-width="1"/>
+<text x="618" y="192" font-family="JetBrains Mono, monospace" font-size="10px" font-weight="700" fill="#E9E5DC" letter-spacing="2">TELEMETRY &amp; DESK</text>
+<line x1="618" y1="201" x2="756" y2="201" stroke="#B62B32" stroke-width="1" opacity="0.8"/>
+<text x="620" y="223" font-family="JetBrains Mono, monospace" font-size="7px" font-weight="700" fill="#B62B32">●</text>
+<text x="634" y="224" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">Live hardware stats: CPU, RAM, hwmon temperatures, GPU, disk</text>
+<text x="620" y="238" font-family="JetBrains Mono, monospace" font-size="7px" font-weight="700" fill="#B62B32">●</text>
+<text x="634" y="239" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">Dual battery levels with alerts + Wake-on-LAN MAC distribution</text>
+<text x="620" y="253" font-family="JetBrains Mono, monospace" font-size="7px" font-weight="700" fill="#B62B32">●</text>
+<text x="634" y="254" font-family="Inter, Segoe UI, sans-serif" font-size="10px" fill="#8E8A82">Hyprland workspace dispatches &amp; live window event listeners</text>
+</svg>
