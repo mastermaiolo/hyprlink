@@ -553,23 +553,34 @@ fn camera_body(app: &App) -> El<'_> {
             )
         },
     ]
-    .width(440);
+    .width(if app.is_compact() { Length::Fill } else { Length::Fixed(440.0) });
 
-    row![
-        column![
-            frame,
-            gap(space::S),
-            row![
-                kicker(t("CÂMARA DO TELEMÓVEL")),
-                fill_x(),
-                kicker(format!("{}×{} · {} FPS", cfg.width, cfg.height, cfg.fps)),
-            ],
-        ]
-        .width(Length::Fill),
-        hgap(space::GUTTER),
-        controls,
+    let preview = column![
+        frame,
+        gap(space::S),
+        row![
+            kicker(t("CÂMARA DO TELEMÓVEL")),
+            fill_x(),
+            kicker(format!("{}×{} · {} FPS", cfg.width, cfg.height, cfg.fps)),
+        ],
     ]
-    .into()
+    .width(Length::Fill);
+
+    if app.is_compact() {
+        column![
+            preview,
+            gap(space::XXL),
+            controls,
+        ]
+        .into()
+    } else {
+        row![
+            preview,
+            hgap(space::GUTTER),
+            controls,
+        ]
+        .into()
+    }
 }
 
 // ═════════════════════════ 05 ÁUDIO · telemóvel e misturador ═════════════════════════
@@ -976,7 +987,7 @@ pub fn notifications(app: &App) -> El<'_> {
         .font(MONO)
         .size(12)
         .padding(Padding::from([8, 12]))
-        .width(360)
+        .width(if app.is_compact() { Length::Fill } else { Length::Fixed(360.0) })
         .style(theme::input),
         fill_x(),
         btn(
@@ -987,6 +998,22 @@ pub fn notifications(app: &App) -> El<'_> {
     ]
     .align_y(Alignment::Center);
 
+    let body: El = if app.is_compact() {
+        column![
+            container(index).width(Length::Fill),
+            gap(space::XL),
+            column![toolbar, gap(space::XL), list].width(Length::Fill),
+        ]
+        .into()
+    } else {
+        row![
+            container(index).width(240),
+            hgap(space::GUTTER),
+            column![toolbar, gap(space::XL), list].width(Length::Fill),
+        ]
+        .into()
+    };
+
     column![
         opener(
             "06",
@@ -994,11 +1021,7 @@ pub fn notifications(app: &App) -> El<'_> {
             headline_text,
             t("O que o telemóvel recebeu, sem lhe pegar.")
         ),
-        row![
-            container(index).width(240),
-            hgap(space::GUTTER),
-            column![toolbar, gap(space::XL), list].width(Length::Fill),
-        ],
+        body,
     ]
     .into()
 }
@@ -1161,7 +1184,7 @@ pub fn share(app: &App) -> El<'_> {
         gap(space::XXL),
         open_on_phone(app),
     ]
-    .width(fill_portion(1));
+    .width(if app.is_compact() { Length::Fill } else { fill_portion(1) });
 
     // ── files ──
     let linked = app.primary().is_some();
@@ -1328,7 +1351,18 @@ pub fn share(app: &App) -> El<'_> {
         ]
         .align_y(Alignment::Center),
     ]
-    .width(fill_portion(1));
+    .width(if app.is_compact() { Length::Fill } else { fill_portion(1) });
+
+    let body: El = if app.is_compact() {
+        column![
+            left,
+            gap(space::XXL),
+            right,
+        ]
+        .into()
+    } else {
+        row![left, hgap(space::GUTTER), right].into()
+    };
 
     column![
         opener(
@@ -1337,7 +1371,7 @@ pub fn share(app: &App) -> El<'_> {
             t("O QUE PASSA DE MÃO EM MÃO."),
             t("Texto pela área de transferência, ficheiros pelo fio. Larga um ficheiro na janela para o enviar.")
         ),
-        row![left, hgap(space::GUTTER), right],
+        body,
     ]
     .into()
 }

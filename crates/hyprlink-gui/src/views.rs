@@ -250,9 +250,18 @@ pub fn cover(app: &App) -> El<'_> {
             },
         ),
     ]
-    .width(fill_portion(2));
+    .width(if app.is_compact() { Length::Fill } else { fill_portion(2) });
 
-    let hero = row![hero_left, hgap(space::GUTTER), hero_right];
+    let hero: El = if app.is_compact() {
+        column![
+            hero_left.width(Length::Fill),
+            gap(space::XL),
+            hero_right,
+        ]
+        .into()
+    } else {
+        row![hero_left, hgap(space::GUTTER), hero_right].into()
+    };
 
     let ph = app.phone.as_ref();
     let diagram = canvas(LinkDiagram {
@@ -287,96 +296,113 @@ pub fn cover(app: &App) -> El<'_> {
             .width(Length::Fill)
             .padding(Padding::from([0.0, space::XL]))
     };
-    let phone_stats = row![
-        cell(
-            column![
-                stat(
-                    t("BATERIA"),
-                    fmt::opt(bat),
-                    if charging { t("% · a carregar") } else { "%" },
-                    if bat.is_some_and(|b| b < 20) {
-                        HOT
-                    } else {
-                        PAPER
-                    }
-                ),
-                gap(space::M),
-                container(bar(bat.unwrap_or(0) as f32 / 100.0, ACID, 6.0))
-                    .height(40)
-                    .align_y(Alignment::End)
-            ]
-            .into()
-        ),
-        vrule(),
-        cell(
-            column![
-                stat(
-                    t("REDE MÓVEL"),
-                    net_main.to_string(),
-                    net_rest.to_string(),
+    let cell_bat = cell(
+        column![
+            stat(
+                t("BATERIA"),
+                fmt::opt(bat),
+                if charging { t("% · a carregar") } else { "%" },
+                if bat.is_some_and(|b| b < 20) {
+                    HOT
+                } else {
                     PAPER
-                ),
-                gap(space::M),
-                container(
-                    row![
-                        signal_bars(ph.and_then(|p| p.signal_bars).unwrap_or(0)),
-                        hgap(space::M),
-                        mono(
-                            ph.and_then(|p| p.wifi.as_ref())
-                                .and_then(|w| w.ssid.clone())
-                                .map(|w| format!("Wi-Fi {w}"))
-                                .unwrap_or_default(),
-                            MUTED
-                        ),
-                    ]
-                    .align_y(Alignment::End)
-                )
+                }
+            ),
+            gap(space::M),
+            container(bar(bat.unwrap_or(0) as f32 / 100.0, ACID, 6.0))
                 .height(40)
                 .align_y(Alignment::End)
-            ]
-            .into()
-        ),
-        vrule(),
-        cell(
-            column![
-                stat(
-                    t("ARMAZENAMENTO"),
-                    sto_u
-                        .map(|u| format!("{u:.0}"))
-                        .unwrap_or_else(|| fmt::DASH.into()),
-                    sto_t.map(|t| format!("/ {t:.0} GB")).unwrap_or_default(),
-                    PAPER
-                ),
-                gap(space::M),
-                container(bar(
-                    match (sto_u, sto_t) {
-                        (Some(u), Some(t)) if t > 0.0 => u / t,
-                        _ => 0.0,
-                    },
-                    PAPER,
-                    6.0
-                ))
-                .height(40)
+        ]
+        .into()
+    );
+    let cell_net = cell(
+        column![
+            stat(
+                t("REDE MÓVEL"),
+                net_main.to_string(),
+                net_rest.to_string(),
+                PAPER
+            ),
+            gap(space::M),
+            container(
+                row![
+                    signal_bars(ph.and_then(|p| p.signal_bars).unwrap_or(0)),
+                    hgap(space::M),
+                    mono(
+                        ph.and_then(|p| p.wifi.as_ref())
+                            .and_then(|w| w.ssid.clone())
+                            .map(|w| format!("Wi-Fi {w}"))
+                            .unwrap_or_default(),
+                        MUTED
+                    ),
+                ]
                 .align_y(Alignment::End)
-            ]
-            .into()
-        ),
-        vrule(),
-        cell(
-            column![
-                stat(
-                    t("LATÊNCIA"),
-                    format!("{lat:.1}"),
-                    "ms",
-                    if lat > 100.0 { HOT } else { PAPER }
-                ),
-                gap(space::M),
-                spark(app.latency.to_vec(), ACID, 0.0, lat_max, 40.0)
-            ]
-            .into()
-        ),
-    ]
-    .height(130);
+            )
+            .height(40)
+            .align_y(Alignment::End)
+        ]
+        .into()
+    );
+    let cell_sto = cell(
+        column![
+            stat(
+                t("ARMAZENAMENTO"),
+                sto_u
+                    .map(|u| format!("{u:.0}"))
+                    .unwrap_or_else(|| fmt::DASH.into()),
+                sto_t.map(|t| format!("/ {t:.0} GB")).unwrap_or_default(),
+                PAPER
+            ),
+            gap(space::M),
+            container(bar(
+                match (sto_u, sto_t) {
+                    (Some(u), Some(t)) if t > 0.0 => u / t,
+                    _ => 0.0,
+                },
+                PAPER,
+                6.0
+            ))
+            .height(40)
+            .align_y(Alignment::End)
+        ]
+        .into()
+    );
+    let cell_lat = cell(
+        column![
+            stat(
+                t("LATÊNCIA"),
+                format!("{lat:.1}"),
+                "ms",
+                if lat > 100.0 { HOT } else { PAPER }
+            ),
+            gap(space::M),
+            spark(app.latency.to_vec(), ACID, 0.0, lat_max, 40.0)
+        ]
+        .into()
+    );
+
+    let phone_stats: El = if app.is_compact() {
+        column![
+            row![cell_bat, vrule(), cell_net].height(130),
+            gap(space::L),
+            rule(),
+            gap(space::L),
+            row![cell_sto, vrule(), cell_lat].height(130),
+        ]
+        .into()
+    } else {
+        row![
+            cell_bat,
+            vrule(),
+            cell_net,
+            vrule(),
+            cell_sto,
+            vrule(),
+            cell_lat,
+        ]
+        .height(130)
+        .into()
+    };
 
     // What the phone is doing right now.
     let now_playing: El = match ph.and_then(|p| p.now_playing.as_ref()) {
@@ -408,60 +434,99 @@ pub fn cover(app: &App) -> El<'_> {
         .into(),
     };
     let notif = ph.and_then(|p| p.notifications);
-    let phone_now = row![
-        container(now_playing).width(fill_portion(3)),
-        hgap(space::GUTTER),
-        column![
-            kicker(t("NOTIFICAÇÕES")),
-            gap(space::S),
-            text(fmt::opt(notif))
-                .font(DISPLAY)
-                .size(size::D3)
-                .color(if notif.unwrap_or(0) > 0 { ACID } else { FAINT })
-                .line_height(LineHeight::Relative(1.0)),
-        ]
-        .width(fill_portion(1)),
-        column![
-            kv(
-                t("ECRÃ"),
-                match ph.and_then(|p| p.screen_on) {
-                    Some(true) => tag(t("LIGADO"), PAPER, VOID),
-                    Some(false) => tag_outline(t("DESLIGADO"), MUTED),
-                    None => mono(fmt::DASH, MUTED).into(),
-                }
-            ),
-            kv_text(
-                t("MEMÓRIA"),
-                ph.map(ram_line).unwrap_or_else(|| fmt::DASH.into())
-            ),
-            kv_text(
-                t("TEMPERATURA"),
-                ph.and_then(|p| p.battery_temp_c)
-                    .map(|t| format!("{t:.1} °C"))
-                    .unwrap_or_else(|| fmt::DASH.into())
-            ),
-        ]
-        .width(fill_portion(2)),
+    let notif_col = column![
+        kicker(t("NOTIFICAÇÕES")),
+        gap(space::S),
+        text(fmt::opt(notif))
+            .font(DISPLAY)
+            .size(size::D3)
+            .color(if notif.unwrap_or(0) > 0 { ACID } else { FAINT })
+            .line_height(LineHeight::Relative(1.0)),
     ];
+    let meta_col = column![
+        kv(
+            t("ECRÃ"),
+            match ph.and_then(|p| p.screen_on) {
+                Some(true) => tag(t("LIGADO"), PAPER, VOID),
+                Some(false) => tag_outline(t("DESLIGADO"), MUTED),
+                None => mono(fmt::DASH, MUTED).into(),
+            }
+        ),
+        kv_text(
+            t("MEMÓRIA"),
+            ph.map(ram_line).unwrap_or_else(|| fmt::DASH.into())
+        ),
+        kv_text(
+            t("TEMPERATURA"),
+            ph.and_then(|p| p.battery_temp_c)
+                .map(|t| format!("{t:.1} °C"))
+                .unwrap_or_else(|| fmt::DASH.into())
+        ),
+    ];
+
+    let phone_now: El = if app.is_compact() {
+        column![
+            now_playing,
+            gap(space::XL),
+            row![
+                notif_col.width(fill_portion(1)),
+                hgap(space::GUTTER),
+                meta_col.width(fill_portion(2)),
+            ]
+        ]
+        .into()
+    } else {
+        row![
+            container(now_playing).width(fill_portion(3)),
+            hgap(space::GUTTER),
+            notif_col.width(fill_portion(1)),
+            meta_col.width(fill_portion(2)),
+        ]
+        .into()
+    };
 
     // ── Este PC: secondary, smaller, real. ──
     let h = &app.host;
     let up = h.uptime_s;
-    let pc = column![
-        row![
-            kicker(t("ESTE PC")),
-            hgap(space::M),
-            text(h.hostname.as_str())
-                .font(SANS_SEMI)
-                .size(14)
-                .color(PAPER),
-            fill_x(),
-            kicker(tr!("{} · LINUX {}", h.compositor.to_uppercase(), h.kernel)),
+    let pc_stats: El = if app.is_compact() {
+        column![
+            row![
+                container(column![
+                    small_stat("CPU", format!("{:.0}", h.cpu_pct), "%"),
+                    gap(space::S),
+                    spark(app.cpu_hist.to_vec(), SUB, 0.0, 100.0, 24.0),
+                ])
+                .width(Length::Fill),
+                hgap(space::XL),
+                container(small_stat(
+                    t("MEMÓRIA"),
+                    format!("{:.1}", h.ram_used_gb),
+                    format!("/ {:.0} GB", h.ram_total_gb)
+                ))
+                .width(Length::Fill),
+            ],
+            gap(space::L),
+            row![
+                container(match h.battery {
+                    Some((pct, chg)) => small_stat(
+                        t("BATERIA DO PC"),
+                        format!("{pct}"),
+                        if chg { t("% · a carregar") } else { "%" }
+                    ),
+                    None => small_stat(t("ALIMENTAÇÃO"), "CA".to_string(), ""),
+                })
+                .width(Length::Fill),
+                hgap(space::XL),
+                container(small_stat(
+                    t("LIGADO HÁ"),
+                    format!("{}h{:02}", up / 3600, (up / 60) % 60),
+                    ""
+                ))
+                .width(Length::Fill),
+            ],
         ]
-        .align_y(Alignment::Center),
-        gap(space::S),
-        rule(),
-        gap(space::L),
+        .into()
+    } else {
         row![
             container(column![
                 small_stat("CPU", format!("{:.0}", h.cpu_pct), "%"),
@@ -493,7 +558,25 @@ pub fn cover(app: &App) -> El<'_> {
                 ""
             ))
             .width(Length::Fill),
-        ],
+        ]
+        .into()
+    };
+    let pc = column![
+        row![
+            kicker(t("ESTE PC")),
+            hgap(space::M),
+            text(h.hostname.as_str())
+                .font(SANS_SEMI)
+                .size(14)
+                .color(PAPER),
+            fill_x(),
+            kicker(tr!("{} · LINUX {}", h.compositor.to_uppercase(), h.kernel)),
+        ]
+        .align_y(Alignment::Center),
+        gap(space::S),
+        rule(),
+        gap(space::L),
+        pc_stats,
         gap(space::S),
         mono(h.cpu_model.as_str(), FAINT),
     ];
@@ -555,13 +638,19 @@ pub fn cover(app: &App) -> El<'_> {
         gap(space::S),
         kicker(t("— NOTAS DE ARQUITETURA, HYPRLINK")),
     ]
-    .width(fill_portion(2));
+    .width(if app.is_compact() { Length::Fill } else { fill_portion(2) });
 
     let mut wire = column![subhead("B", t("O fio"))];
     for p in app.packets.iter().rev().take(7) {
         wire = wire.push(packet_row(p, true));
     }
-    let wire = wire.width(fill_portion(3));
+    let wire = wire.width(if app.is_compact() { Length::Fill } else { fill_portion(3) });
+
+    let bottom_split: El = if app.is_compact() {
+        column![actions, gap(space::XL), wire].into()
+    } else {
+        row![actions, hgap(space::GUTTER), wire].into()
+    };
 
     column![
         top,
@@ -584,7 +673,7 @@ pub fn cover(app: &App) -> El<'_> {
         gap(space::XL),
         phone_now,
         gap(space::XXL),
-        row![actions, hgap(space::GUTTER), wire],
+        bottom_split,
         gap(space::GUTTER),
         pc,
     ]
@@ -768,7 +857,7 @@ pub fn devices(app: &App) -> El<'_> {
         gap(space::S),
         mono(t("QUIC · mTLS · porta 7443"), FAINT),
     ]
-    .width(340);
+    .width(if app.is_compact() { Length::Fill } else { Length::Fixed(340.0) });
 
     let detail: El = match app.device() {
         Some(d) => device_detail(app, d),
@@ -777,6 +866,22 @@ pub fn devices(app: &App) -> El<'_> {
             deck_s(t("Emparelha um telemóvel para começar."))
         ]
         .into(),
+    };
+
+    let body: El = if app.is_compact() {
+        column![
+            list,
+            gap(space::XXL),
+            container(detail).width(Length::Fill),
+        ]
+        .into()
+    } else {
+        row![
+            list,
+            hgap(space::GUTTER),
+            container(detail).width(Length::Fill),
+        ]
+        .into()
     };
 
     column![
@@ -794,11 +899,7 @@ pub fn devices(app: &App) -> El<'_> {
             ),
             t("Cada um com o seu certificado. Nenhum sem a tua autorização."),
         ),
-        row![
-            list,
-            hgap(space::GUTTER),
-            container(detail).width(Length::Fill)
-        ],
+        body,
     ]
     .into()
 }
@@ -1206,6 +1307,38 @@ pub fn desk(app: &App) -> El<'_> {
         )),
     ];
 
+    let mid_split: El = if app.is_compact() {
+        column![
+            gestures.width(Length::Fill),
+            gap(space::XL),
+            compositor.width(Length::Fill),
+        ]
+        .into()
+    } else {
+        row![
+            gestures.width(fill_portion(3)),
+            hgap(space::GUTTER),
+            compositor.width(fill_portion(2)),
+        ]
+        .into()
+    };
+
+    let bottom_split: El = if app.is_compact() {
+        column![
+            container(crate::pages::shortcuts(app)).width(Length::Fill),
+            gap(space::XL),
+            container(crate::pages::trackpad(app)).width(Length::Fill),
+        ]
+        .into()
+    } else {
+        row![
+            container(crate::pages::shortcuts(app)).width(fill_portion(3)),
+            hgap(space::GUTTER),
+            container(crate::pages::trackpad(app)).width(fill_portion(2)),
+        ]
+        .into()
+    };
+
     column![
         opener(
             "03",
@@ -1217,17 +1350,9 @@ pub fn desk(app: &App) -> El<'_> {
         gap(space::S),
         r2,
         gap(space::XXL),
-        row![
-            gestures.width(fill_portion(3)),
-            hgap(space::GUTTER),
-            compositor.width(fill_portion(2))
-        ],
+        mid_split,
         gap(space::GUTTER),
-        row![
-            container(crate::pages::shortcuts(app)).width(fill_portion(3)),
-            hgap(space::GUTTER),
-            container(crate::pages::trackpad(app)).width(fill_portion(2)),
-        ],
+        bottom_split,
     ]
     .into()
 }
@@ -1409,22 +1534,35 @@ pub fn mirror_body(app: &App) -> El<'_> {
     ]
     .width(Length::Fill);
 
-    column![row![
+    let phone_preview = column![
+        phone,
+        gap(space::S),
+        kicker(format!(
+            "{} · {} FPS · {:.0} MB/S",
+            fmt::codec(cfg.codec),
+            cfg.max_fps,
+            cfg.bitrate_mbps
+        ))
+    ]
+    .align_x(Alignment::Center);
+
+    let body: El = if app.is_compact() {
         column![
-            phone,
-            gap(space::S),
-            kicker(format!(
-                "{} · {} FPS · {:.0} MB/S",
-                fmt::codec(cfg.codec),
-                cfg.max_fps,
-                cfg.bitrate_mbps
-            ))
+            phone_preview,
+            gap(space::XXL),
+            controls,
         ]
-        .align_x(Alignment::Center),
-        hgap(space::GUTTER),
-        controls
-    ],]
-    .into()
+        .into()
+    } else {
+        row![
+            phone_preview,
+            hgap(space::GUTTER),
+            controls,
+        ]
+        .into()
+    };
+
+    column![body].into()
 }
 
 // ═════════════════════════════ 05 ÁUDIO ═════════════════════════════
@@ -1640,7 +1778,14 @@ pub fn audio(app: &App) -> El<'_> {
             switch(app.speaker && app.mic_on, Message::Headset),
         ),
         gap(space::XXL),
-        row![mic, hgap(space::XL), tap],
+        {
+            let channels: El<'_> = if app.is_compact() {
+                column![mic, gap(space::XL), tap].into()
+            } else {
+                row![mic, hgap(space::XL), tap].into()
+            };
+            channels
+        },
         gap(space::GUTTER),
         crate::pages::mixer(app),
     ]
@@ -1779,10 +1924,25 @@ pub fn sensors_grid(app: &App) -> El<'_> {
         .into()
     };
     let k = SensorKind::ALL;
+    let grid: El = if app.is_compact() {
+        column![
+            row![card(k[0]), card(k[1])].spacing(space::L),
+            gap(space::L),
+            row![card(k[2]), card(k[3])].spacing(space::L),
+            gap(space::L),
+            row![card(k[4]), card(k[5])].spacing(space::L),
+        ]
+        .into()
+    } else {
+        column![
+            row![card(k[0]), card(k[1]), card(k[2])].spacing(space::L),
+            gap(space::L),
+            row![card(k[3]), card(k[4]), card(k[5])].spacing(space::L),
+        ]
+        .into()
+    };
     column![
-        row![card(k[0]), card(k[1]), card(k[2])].spacing(space::L),
-        gap(space::L),
-        row![card(k[3]), card(k[4]), card(k[5])].spacing(space::L),
+        grid,
         gap(space::XL),
         mono(
             tr!(
@@ -1912,9 +2072,32 @@ pub fn presence_body(app: &App) -> El<'_> {
         ]);
     }
 
-    column![
-        row![now, hgap(space::GUTTER), scale].align_y(Alignment::End),
-        gap(space::XXL),
+    let top_split: El = if app.is_compact() {
+        column![now, gap(space::XL), scale].into()
+    } else {
+        row![now, hgap(space::GUTTER), scale].align_y(Alignment::End).into()
+    };
+
+    let thresh_split: El = if app.is_compact() {
+        column![
+            threshold(
+                t("Limiar de bloqueio"),
+                t("abaixo disto durante 10 s → hyprlock"),
+                app.lock_at,
+                HOT,
+                Message::LockAt
+            ),
+            gap(space::L),
+            threshold(
+                t("Limiar de desbloqueio"),
+                t("acima disto, com mTLS válido → abre"),
+                app.unlock_at,
+                ACID,
+                Message::UnlockAt
+            ),
+        ]
+        .into()
+    } else {
         row![
             threshold(
                 t("Limiar de bloqueio"),
@@ -1931,7 +2114,14 @@ pub fn presence_body(app: &App) -> El<'_> {
                 ACID,
                 Message::UnlockAt
             ),
-        ],
+        ]
+        .into()
+    };
+
+    column![
+        top_split,
+        gap(space::XXL),
+        thresh_split,
         gap(space::XXL),
         rules,
     ]
@@ -2002,7 +2192,7 @@ pub fn journal(app: &App) -> El<'_> {
             .font(MONO)
             .size(12)
             .padding(Padding::from([8, 12]))
-            .width(340)
+            .width(if app.is_compact() { Length::Fill } else { Length::Fixed(340.0) })
             .style(theme::input),
         fill_x(),
         btn(

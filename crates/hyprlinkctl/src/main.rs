@@ -265,11 +265,13 @@ fn ok(json: bool, msg: &str, extra: serde_json::Value) -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "uso: hyprlinkctl <watch|status|ping|clipboard|pair|mic|tap|speaker|mirror|ws|open> [args] [--json] [--lang L]\n\
+        "uso: hyprlinkctl <watch|status|ping|clipboard|pair|mic|tap|speaker|mirror|ws|open|doctor|shortcuts> [args] [--json] [--lang L]\n\
          \n  sem --json, status|ping|mic|tap|speaker usam o protocolo de texto do daemon (ok …/erro: …)\
          \n  só texto: send <ficheiro> · dispatch <cmd> · lock · notif <título> [corpo] · url · phone-url · phone-app\n\
          \n  watch --json [--interval MS]   uma linha JSON por instantâneo (por omissão 500 ms)\
          \n  mic|tap|speaker on|off|toggle\n  mirror start|stop|toggle\n  ws <1-10>\
+         \n  doctor [--json] [--report [f]] relatório de compatibilidade (só lê)\
+         \n  shortcuts [--json]              lista os atalhos configurados\
          \n  --lang pt-PT|pt-BR|en|es|zh   idioma dos textos (por omissão, o do ambiente)"
     );
     ExitCode::from(2)
@@ -304,6 +306,14 @@ fn main() -> ExitCode {
             eprintln!("erro: --lang {v:?} desconhecido (pt-PT|pt-BR|en|es|zh)");
             return ExitCode::from(2);
         }
+    }
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        let _ = usage();
+        return ExitCode::SUCCESS;
+    }
+    if args.iter().any(|a| a == "--version" || a == "-V" || a == "-v") {
+        println!("hyprlinkctl {}", env!("CARGO_PKG_VERSION"));
+        return ExitCode::SUCCESS;
     }
     let json = args.iter().any(|a| a == "--json");
     if args.first().map(String::as_str) == Some("doctor") {
@@ -455,6 +465,39 @@ fn main() -> ExitCode {
                     ExitCode::from(1)
                 }
             }
+        }
+        Some("shortcuts") => {
+            let env = hyprlink_env::Env::real();
+            let config_path = env.hyprlink_config_path();
+            #[derive(serde::Deserialize)]
+            struct Cfg {
+                #[serde(default)]
+                shortcuts: Vec<ShortcutItem>,
+            }
+            #[derive(serde::Deserialize, serde::Serialize)]
+            struct ShortcutItem {
+                #[serde(default)]
+                id: String,
+                #[serde(default)]
+                name: String,
+                #[serde(default)]
+                command: String,
+            }
+            let list: Vec<ShortcutItem> = config_path
+                .and_then(|p| std::fs::read_to_string(p).ok())
+                .and_then(|s| serde_json::from_str::<Cfg>(&s).ok())
+                .map(|c| c.shortcuts)
+                .unwrap_or_default();
+            if json {
+                print_json(&serde_json::json!({ "shortcuts": list }));
+            } else if list.is_empty() {
+                println!("sem atalhos configurados");
+            } else {
+                for s in list {
+                    println!("{}: {} -> {}", s.id, s.name, s.command);
+                }
+            }
+            ExitCode::SUCCESS
         }
         _ => usage(),
     }

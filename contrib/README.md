@@ -41,13 +41,34 @@ Classes CSS disponíveis: `connected`, `disconnected`, `unknown`.
 O `install.sh` regista um `.desktop` com `%f` — aparece no menu de contexto
 de Nautilus/Nemo/Thunar/KDE pra qualquer tipo de ficheiro comum.
 
+## Regras de janela do Hyprland
+
+A GUI define o identificador Wayland `application_id = dev.hyprlink.gui` (mapeado para `class` no Hyprland e `StartupWMClass` no `.desktop`). Para que a janela abra flutuante e centrada quando acionada a partir da bandeja ou do lançador de aplicações:
+
+### Sintaxe clássica (`hyprland.conf`)
+```ini
+# Janela do HyprLink flutuante e centrada
+windowrulev2 = float, class:^(dev.hyprlink.gui)$
+windowrulev2 = center, class:^(dev.hyprlink.gui)$
+```
+
+### Sintaxe moderna Lua (`hyprland.lua`)
+```lua
+-- Janela do HyprLink flutuante e centrada
+hl.window_rule({
+    match = { class = "dev.hyprlink.gui" },
+    float = true,
+    center = true,
+})
+```
+
 ## Dependências opcionais
 
 | Pacote | Para quê |
 |---|---|
 | `xdg-desktop-portal-gtk` (ou `-kde`) | seletor de ficheiros do botão «ESCOLHER FICHEIROS…» da GUI; o `xdg-desktop-portal-hyprland` não o fornece |
 
-Não há PKGBUILD neste repositório; quando existir, entra em `optdepends`.
+Pacote Arch disponível em `packaging/arch/PKGBUILD` com todos os `optdepends` mapeados.
 
 ## Instalar tudo
 

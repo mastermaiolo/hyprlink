@@ -554,7 +554,7 @@ mod tests {
 
     #[test]
     fn predefinido_o_caso_do_maggio() {
-        let (g, s) = state("ee-predefinido");
+        let (_g, s) = state("ee-predefinido");
         assert!(s.running && s.default_is_ee_sink);
         let d = s.destination.as_ref().unwrap();
         assert_eq!((d.sink.as_str(), d.how), (ALSA, DestHow::Graph));
@@ -577,7 +577,7 @@ mod tests {
 
     #[test]
     fn saida_diferente_segue_o_destino_real() {
-        let (g, s) = state("ee-saida-diferente");
+        let (_g, s) = state("ee-saida-diferente");
         assert!(!s.default_is_ee_sink);
         assert_eq!(s.system_default.as_deref(), Some(ALSA));
         assert_eq!(s.destination.as_ref().unwrap().sink, BT);
@@ -598,7 +598,7 @@ mod tests {
 
     #[test]
     fn bypass_usa_a_saida_predefinida() {
-        let (g, s) = state("ee-bypass");
+        let (_g, s) = state("ee-bypass");
         assert_eq!(s.bypass, Some(true));
         let t = resolve_tap(TapChoice::Auto, &s).unwrap();
         assert_eq!(t.sink, EE_SINK, "a predefinida é o easyeffects_sink");
@@ -607,7 +607,7 @@ mod tests {
 
     #[test]
     fn sem_easyeffects() {
-        let (g, s) = state("sem-ee");
+        let (_g, s) = state("sem-ee");
         assert!(!s.running && s.destination.is_none());
         assert_eq!(resolve_tap(TapChoice::Auto, &s).unwrap().sink, ALSA);
         assert!(
@@ -620,7 +620,7 @@ mod tests {
 
     #[test]
     fn ocioso_sem_ligacoes_cai_no_sink_real_de_maior_prioridade() {
-        let (g, s) = state("ee-ocioso");
+        let (_g, s) = state("ee-ocioso");
         let d = s.destination.as_ref().unwrap();
         assert_eq!((d.sink.as_str(), d.how), (ALSA, DestHow::Priority));
         assert_eq!(

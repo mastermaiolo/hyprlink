@@ -232,6 +232,8 @@ pub struct App {
 
     /// The single main window, if open. The process lives on in the tray.
     pub window: Option<window::Id>,
+    /// Largura e altura atuais da janela (para layout responsivo).
+    pub window_size: iced::Size,
     tray: Option<tray::Link>,
     tray_failed: bool,
     tray_acc: f32,
@@ -328,6 +330,7 @@ pub enum Message {
     TrayFailed,
     Tray(tray::Action),
     WindowClosed(window::Id),
+    WindowResized(iced::Size),
     /// Anything that maps 1:1 to a daemon command on the new pages.
     Do(Command2),
     CamMode(CamMode),
@@ -495,6 +498,13 @@ impl App {
             cpu_hist: History::new(60),
             host_acc: 10.0,
             window: None,
+            window_size: iced::Size::new(
+                1480.0,
+                std::env::var("HYPRLINK_WINDOW_H")
+                    .ok()
+                    .and_then(|h| h.parse().ok())
+                    .unwrap_or(940.0),
+            ),
             tray: None,
             tray_failed: false,
             tray_acc: 0.0,
@@ -615,7 +625,7 @@ impl App {
                     .and_then(|h| h.parse().ok())
                     .unwrap_or(940.0),
             ),
-            min_size: Some(iced::Size::new(1240.0, 760.0)),
+            min_size: Some(iced::Size::new(780.0, 500.0)),
             platform_specific: window::settings::PlatformSpecific {
                 application_id: "dev.hyprlink.gui".into(),
                 ..Default::default()
@@ -666,6 +676,28 @@ impl App {
 
     pub fn title(&self, _window: window::Id) -> String {
         format!("HYPRLINK — {}", self.section.title())
+    }
+
+    /// Largura atual da janela.
+    #[allow(dead_code)]
+    pub fn width(&self) -> f32 {
+        self.window_size.width
+    }
+
+    /// Altura atual da janela.
+    #[allow(dead_code)]
+    pub fn height(&self) -> f32 {
+        self.window_size.height
+    }
+
+    /// `true` quando a janela está em modo compacto (< 960px, ex: tiling meio-ecrã em 1080p ou menor).
+    pub fn is_compact(&self) -> bool {
+        self.window_size.width < 960.0
+    }
+
+    /// `true` quando a janela está em largura média (< 1200px).
+    pub fn is_medium(&self) -> bool {
+        self.window_size.width < 1200.0
     }
 
     pub fn device(&self) -> Option<&link::Device> {
@@ -974,6 +1006,9 @@ impl App {
                     return iced::exit();
                 }
             }
+            Message::WindowResized(size) => {
+                self.window_size = size;
+            }
             Message::Nav(s) => self.section = s,
             Message::Key(keyboard::Event::KeyPressed { key, modifiers, .. }) => {
                 if let Key::Character(c) = key.as_ref() {
@@ -1279,6 +1314,7 @@ impl App {
             window::close_events().map(Message::WindowClosed),
             iced::event::listen_with(|e, _, _| match e {
                 iced::Event::Window(window::Event::FileDropped(p)) => Some(Message::FileDropped(p)),
+                iced::Event::Window(window::Event::Resized(size)) => Some(Message::WindowResized(size)),
                 _ => None,
             }),
             tray::subscription(),
@@ -1336,7 +1372,133 @@ impl App {
         stack(layers).into()
     }
 
+    fn slim_rail(&self) -> El<'_> {
+        let mark = column![
+            headline("HL", 26.0),
+            gap(4.0),
+            square(self.link_color(), 7.0),
+        ]
+        .align_x(Alignment::Center);
+
+        let mut nav = column![].spacing(2);
+        for s in Section::ALL {
+            let active = s == self.section;
+            let has_alert = match s {
+                Section::Camera => self.webcam.is_some() || self.mirror.is_some(),
+                Section::Notificacoes => !self.notifs.is_empty(),
+                Section::Audio => self.mic_on || self.tap_on,
+                Section::Partilha => {
+                    self.transfers
+                        .iter()
+                        .any(|t| t.state == link::TransferState::Active)
+                }
+                Section::Multimedia => self.players.iter().any(|p| p.playing),
+                _ => false,
+            };
+
+            let entry = row![
+                container(iced::widget::Space::new().width(2).height(18)).style(theme::fill(
+                    if active {
+                        ACID
+                    } else {
+                        Color::TRANSPARENT
+                    }
+                )),
+                fill_x(),
+                ui::t(
+                    s.num(),
+                    MONO_MEDIUM,
+                    11.0,
+                    if active {
+                        ACID
+                    } else if has_alert {
+                        HOT
+                    } else {
+                        FAINT
+                    }
+                ),
+                fill_x(),
+            ]
+            .align_y(Alignment::Center);
+
+            nav = nav.push(
+                button(entry)
+                    .width(Length::Fill)
+                    .padding(Padding {
+                        top: 7.0,
+                        right: 0.0,
+                        bottom: 7.0,
+                        left: 0.0,
+                    })
+                    .style(theme::nav(active))
+                    .on_press(Message::Nav(s)),
+            );
+        }
+
+        let settings_active = self.section == Section::Definicoes;
+        let settings = button(
+            row![
+                container(iced::widget::Space::new().width(2).height(18)).style(theme::fill(
+                    if settings_active {
+                        ACID
+                    } else {
+                        Color::TRANSPARENT
+                    }
+                )),
+                fill_x(),
+                ui::t(
+                    "00",
+                    MONO_MEDIUM,
+                    11.0,
+                    if settings_active { ACID } else { FAINT }
+                ),
+                fill_x(),
+            ]
+            .align_y(Alignment::Center),
+        )
+        .width(Length::Fill)
+        .padding(Padding {
+            top: 7.0,
+            right: 0.0,
+            bottom: 7.0,
+            left: 0.0,
+        })
+        .style(theme::nav(settings_active))
+        .on_press(Message::Nav(Section::Definicoes));
+
+        let daemon_dot = row![fill_x(), square(ACID, 6.0), fill_x(),]
+            .padding(Padding::from([space::L, 0.0]));
+
+        container(
+            column![
+                container(mark).width(Length::Fill).padding(Padding {
+                    top: space::XXL,
+                    right: 0.0,
+                    bottom: space::XL,
+                    left: 0.0,
+                }),
+                rule(),
+                gap(space::L),
+                nav,
+                iced::widget::space::vertical(),
+                settings,
+                gap(space::S),
+                rule(),
+                daemon_dot,
+            ]
+            .height(Length::Fill),
+        )
+        .width(60)
+        .height(Length::Fill)
+        .style(theme::rail)
+        .into()
+    }
+
     fn rail(&self) -> El<'_> {
+        if self.is_compact() {
+            return self.slim_rail();
+        }
+
         let mark = column![
             headline("HYPR", 52.0),
             row![
@@ -1536,30 +1698,35 @@ impl App {
 
     fn masthead(&self) -> El<'_> {
         let now = chrono::Local::now();
+        let compact = self.is_compact();
+        let medium = self.is_medium();
+
         let dev: El = match self.primary() {
-            Some(d) => row![
-                square(self.link_color(), 7.0),
-                hgap(8.0),
-                ui::t(fmt::name(d), MONO_SEMI, 11.5, PAPER),
-                hgap(space::M),
-                ui::mono(format!("{} ms", fmt::latency(d.latency_ms)), SUB),
-                hgap(space::M),
-                ui::mono(
-                    format!("{}%{}", fmt::battery(d), if d.charging { "+" } else { "" }),
-                    SUB
-                ),
-                hgap(space::M),
-                ui::mono(
-                    if self.rssi_known {
-                        format!("{:.0} dBm", self.rssi)
-                    } else {
-                        "— dBm".to_string()
-                    },
-                    SUB,
-                ),
-            ]
-            .align_y(Alignment::Center)
-            .into(),
+            Some(d) => {
+                let mut r = row![
+                    square(self.link_color(), 7.0),
+                    hgap(8.0),
+                    ui::t(fmt::name(d), MONO_SEMI, 11.5, PAPER),
+                    hgap(space::M),
+                    ui::mono(format!("{} ms", fmt::latency(d.latency_ms)), SUB),
+                    hgap(space::M),
+                    ui::mono(
+                        format!("{}%{}", fmt::battery(d), if d.charging { "+" } else { "" }),
+                        SUB
+                    ),
+                ];
+                if !compact {
+                    r = r.push(hgap(space::M)).push(ui::mono(
+                        if self.rssi_known {
+                            format!("{:.0} dBm", self.rssi)
+                        } else {
+                            "— dBm".to_string()
+                        },
+                        SUB,
+                    ));
+                }
+                r.align_y(Alignment::Center).into()
+            }
             None => row![
                 square(self.link_color(), 7.0),
                 hgap(8.0),
@@ -1574,29 +1741,49 @@ impl App {
             .align_y(Alignment::Center)
             .into(),
         };
+
+        let mut row_items = row![
+            kicker("HYPRLINK"),
+            hgap(space::S),
+            ui::t("/", MONO, 11.5, FAINT),
+            hgap(space::S),
+            ui::t(self.section.title(), SANS_SEMI, 13.0, PAPER),
+        ];
+
+        if !medium {
+            row_items = row_items
+                .push(hgap(space::L))
+                .push(kicker(t("TECLAS 1–9 · 0 PARA NAVEGAR")).color(FAINT));
+        }
+
+        row_items = row_items
+            .push(fill_x())
+            .push(dev)
+            .push(hgap(if compact { space::M } else { space::XL }))
+            .push(vrule())
+            .push(hgap(if compact { space::M } else { space::XL }))
+            .push(ui::t(
+                if compact {
+                    now.format("%H:%M").to_string()
+                } else {
+                    now.format("%H:%M:%S").to_string()
+                },
+                MONO_MEDIUM,
+                11.5,
+                PAPER
+            ));
+
+        if !compact {
+            row_items = row_items.push(hgap(6.0)).push(kicker("WEST"));
+        }
+
         container(
-            row![
-                kicker("HYPRLINK"),
-                hgap(space::S),
-                ui::t("/", MONO, 11.5, FAINT),
-                hgap(space::S),
-                ui::t(self.section.title(), SANS_SEMI, 13.0, PAPER),
-                hgap(space::L),
-                kicker(t("TECLAS 1–9 · 0 PARA NAVEGAR")).color(FAINT),
-                fill_x(),
-                dev,
-                hgap(space::XL),
-                vrule(),
-                hgap(space::XL),
-                ui::t(now.format("%H:%M:%S").to_string(), MONO_MEDIUM, 11.5, PAPER),
-                hgap(6.0),
-                kicker("WEST"),
-            ]
-            .align_y(Alignment::Center)
-            .height(Length::Fill),
+            row_items
+                .align_y(Alignment::Center)
+                .height(Length::Fill),
         )
         .height(52)
-        .padding(Padding::from([0.0, space::GUTTER]))
+        .padding(Padding::from([0.0, if compact { space::M } else { space::GUTTER }]))
         .into()
     }
 
@@ -1775,6 +1962,16 @@ async fn pick_files() -> Option<Vec<std::path::PathBuf>> {
     }
 }
 
+/// Mesmos limites do daemon (`config::validate_shortcuts`): nada vazio, nome
+/// até 40 e comando até 200 caracteres.
+pub fn shortcut_valid(name: &str, command: &str) -> bool {
+    let (n, c) = (name.trim(), command.trim());
+    !n.is_empty()
+        && !c.is_empty()
+        && n.chars().count() <= crate::link::SHORTCUT_NAME_MAX
+        && c.chars().count() <= crate::link::SHORTCUT_COMMAND_MAX
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1843,14 +2040,4 @@ mod tests {
         assert_eq!((none.files.len(), none.folders), (0, 0));
         let _ = std::fs::remove_dir_all(&dir);
     }
-}
-
-/// Mesmos limites do daemon (`config::validate_shortcuts`): nada vazio, nome
-/// até 40 e comando até 200 caracteres.
-pub fn shortcut_valid(name: &str, command: &str) -> bool {
-    let (n, c) = (name.trim(), command.trim());
-    !n.is_empty()
-        && !c.is_empty()
-        && n.chars().count() <= crate::link::SHORTCUT_NAME_MAX
-        && c.chars().count() <= crate::link::SHORTCUT_COMMAND_MAX
 }
