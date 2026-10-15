@@ -120,6 +120,28 @@ impl PairingStore {
         })
     }
 
+    /// Loja num diretório à escolha, com um token fixo (testes).
+    #[cfg(test)]
+    pub fn in_dir(dir: &std::path::Path, token_hex: &str) -> Self {
+        Self {
+            path: dir.join("paired_devices.json"),
+            devices: PairedDevicesFile::default(),
+            current_token_hex: token_hex.to_string(),
+        }
+    }
+
+    /// Junta `fingerprint` aos emparelhados sem token (testes).
+    #[cfg(test)]
+    pub fn insert_paired(&mut self, fingerprint: &str) {
+        self.devices.fingerprints.insert(fingerprint.to_string());
+    }
+
+    /// Troca o token desta sessão por um novo (demasiados tokens errados: ver
+    /// `gate.rs`). O antigo deixa de valer; a GUI lê o novo daqui.
+    pub fn rotate_token(&mut self) {
+        self.current_token_hex = random_token_hex();
+    }
+
     pub fn is_paired(&self, fingerprint: &str) -> bool {
         self.devices.fingerprints.contains(fingerprint)
     }

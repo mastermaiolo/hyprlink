@@ -6,7 +6,9 @@ license.workspace = true
 description = "CLI do HyprLink: texto (ok …/erro: …) para scripts antigos, JSON v1 com --json"
 
 [features]
-# A metade JSON fala com o simulador até o socket real existir (Fase 3).
+# A metade JSON fala com o daemon real. O simulador (`mock`) só entra com
+# `HYPRLINK_MOCK=1` ou `--mock` (capturas, fixtures do plugin, testes); a
+# feature fica ligada por omissão para esse modo existir no binário.
 default = ["mock"]
 mock = ["hyprlink-proto/mock"]
 

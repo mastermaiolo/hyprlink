@@ -15,9 +15,8 @@ use crate::active::{ActiveConn, push};
 use crate::state::{self, HudState, push_log};
 
 fn run_hyprctl(args: &[&str]) -> String {
-    std::process::Command::new("hyprctl")
+    crate::session::command("hyprctl")
         .args(args)
-        .envs(crate::action::real_session_env())
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
         .unwrap_or_default()
@@ -29,9 +28,8 @@ struct Hyprctl;
 
 impl Runner for Hyprctl {
     fn run(&self, _prog: &str, args: &[&str]) -> Option<RunOut> {
-        let output = std::process::Command::new("hyprctl")
+        let output = crate::session::command("hyprctl")
             .args(args)
-            .envs(crate::action::real_session_env())
             .output()
             .ok()?;
         Some(RunOut {
@@ -325,44 +323,91 @@ fn finish(out: String) -> String {
     }
 }
 
-fn socket2_path() -> Option<String> {
-    let sig = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").ok()?;
-    let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
-    let candidate = format!("{runtime_dir}/hypr/{sig}/.socket2.sock");
-    if std::path::Path::new(&candidate).exists() {
-        return Some(candidate);
-    }
-    let legacy = format!("/tmp/hypr/{sig}/.socket2.sock");
-    Some(legacy)
+/// Espera entre tentativas sem Hyprland: começa aqui e dobra…
+const WATCH_BACKOFF_MIN: std::time::Duration = std::time::Duration::from_secs(2);
+/// …até aqui.
+const WATCH_BACKOFF_MAX: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Escuta o IPC nativo do Hyprland e empurra `hypr.event` a cada linha.
+/// A instância descobre-se em cada tentativa (`hyprlink_env::instance`):
+/// sem Hyprland espera com recuo em vez de desistir, e se o Hyprland
+/// reiniciar (assinatura nova) liga-se à nova.
+pub async fn watch_events(active: ActiveConn, hud: Arc<Mutex<HudState>>) {
+    let on_line = |line: String| {
+        let (active, hud) = (active.clone(), hud.clone());
+        async move {
+            if let Some(ws) = line.strip_prefix("workspace>>") {
+                state::set_workspace(&hud, ws.to_string());
+            }
+            let body = Value::Map(vec![(Value::Text("event".into()), Value::Text(line))]);
+            push(&active, "hypr.event", Some(body)).await;
+        }
+    };
+    let locate = || hyprlink_env::instance::current().map(|i| (i.signature.clone(), i.socket2()));
+    watch_loop(
+        locate,
+        on_line,
+        &hud,
+        (WATCH_BACKOFF_MIN, WATCH_BACKOFF_MAX),
+    )
+    .await;
 }
 
-/// Escuta o IPC nativo do Hyprland e empurra `hypr.event` a cada linha —
-/// reconecta sozinho se o socket cair (ex: Hyprland reiniciou).
-pub async fn watch_events(active: ActiveConn, hud: Arc<Mutex<HudState>>) {
-    let Some(path) = socket2_path() else {
-        push_log(
-            &hud,
-            "[!] HYPRLAND_INSTANCE_SIGNATURE ausente — hypr.event desativado".to_string(),
-        );
-        return;
-    };
+/// O ciclo do `watch_events`, com a descoberta (`locate` → assinatura e
+/// caminho do socket2), o que fazer a cada linha e o recuo injetáveis (os
+/// testes usam um socket Unix falso e tempos curtos). Só regista mudanças
+/// de estado: à espera / ligado / instância nova.
+async fn watch_loop<L, F, Fut>(
+    mut locate: L,
+    mut on_line: F,
+    hud: &Arc<Mutex<HudState>>,
+    (min, max): (std::time::Duration, std::time::Duration),
+) where
+    L: FnMut() -> Option<(String, std::path::PathBuf)>,
+    F: FnMut(String) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    let mut backoff = min;
+    let mut waiting_logged = false;
+    let mut last_sig: Option<String> = None;
     loop {
-        match UnixStream::connect(&path).await {
-            Ok(stream) => {
-                let mut lines = tokio::io::BufReader::new(stream).lines();
-                // Sai quando o socket fecha (ou dá erro) e reconecta.
-                while let Ok(Some(line)) = lines.next_line().await {
-                    if let Some(ws) = line.strip_prefix("workspace>>") {
-                        state::set_workspace(&hud, ws.to_string());
-                    }
-                    let body = Value::Map(vec![(Value::Text("event".into()), Value::Text(line))]);
-                    push(&active, "hypr.event", Some(body)).await;
-                }
+        let stream = match locate() {
+            Some((sig, path)) => UnixStream::connect(&path).await.ok().map(|s| (sig, s)),
+            None => None,
+        };
+        let Some((sig, stream)) = stream else {
+            if !waiting_logged {
+                push_log(
+                    hud,
+                    "[!] hypr.event: Hyprland não encontrado — a tentar de novo".to_string(),
+                );
+                waiting_logged = true;
             }
-            Err(_) => {
-                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-            }
+            tokio::time::sleep(backoff).await;
+            backoff = (backoff * 2).min(max);
+            continue;
+        };
+        match &last_sig {
+            Some(old) if *old != sig => push_log(
+                hud,
+                "[i] hypr.event: o Hyprland reiniciou — ligado à instância nova".to_string(),
+            ),
+            None => push_log(hud, "[i] hypr.event: ligado ao Hyprland".to_string()),
+            _ if waiting_logged => push_log(hud, "[i] hypr.event: religado".to_string()),
+            _ => {}
         }
+        last_sig = Some(sig);
+        waiting_logged = false;
+        backoff = min;
+
+        let mut lines = tokio::io::BufReader::new(stream).lines();
+        // Sai quando o socket fecha (ou dá erro) e volta a descobrir.
+        while let Ok(Some(line)) = lines.next_line().await {
+            on_line(line).await;
+        }
+        // Dá tempo ao Hyprland para se ir embora (ou voltar) antes de
+        // procurar outra vez.
+        tokio::time::sleep(min).await;
     }
 }
 
@@ -413,6 +458,109 @@ mod tests {
 
     fn go(f: &Fake, c: &ModeCache, choice: DispatchChoice, cmd: &str) -> Result<String, String> {
         dispatch_with(f, c, choice, cmd)
+    }
+
+    /// O ciclo com um «Hyprland» falso: um socket Unix num diretório
+    /// temporário, descoberto pelo `hyprlink_env::instance` como no real.
+    #[tokio::test]
+    async fn eventos_esperam_pelo_hyprland_e_seguem_a_instancia_nova() {
+        use std::time::Duration;
+        use tokio::io::AsyncWriteExt;
+
+        let root = std::env::temp_dir().join(format!("hyprlink-watch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("run/hypr")).unwrap();
+        std::fs::create_dir_all(root.join("proc")).unwrap();
+        let roots = hyprlink_env::instance::Roots {
+            runtime_dir: Some(root.join("run")),
+            legacy: root.join("tmp-hypr"),
+            proc_dir: root.join("proc"),
+        };
+        // Uma instância «viva» com socket2 a ouvir.
+        let start = |sig: &str, pid: u32| {
+            let dir = root.join("run/hypr").join(sig);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join(".socket.sock"), b"").unwrap();
+            std::fs::write(dir.join("hyprland.lock"), format!("{pid}\nwayland-1\n")).unwrap();
+            std::fs::create_dir_all(root.join("proc").join(pid.to_string())).unwrap();
+            tokio::net::UnixListener::bind(dir.join(".socket2.sock")).unwrap()
+        };
+
+        let hud = crate::state::HudState::new(String::new());
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+        let locate = {
+            let roots = roots.clone();
+            move || {
+                hyprlink_env::instance::find(&roots, None)
+                    .map(|i| (i.signature.clone(), i.socket2()))
+            }
+        };
+        let task = tokio::spawn({
+            let hud = hud.clone();
+            async move {
+                let on_line = |l: String| {
+                    let tx = tx.clone();
+                    async move {
+                        let _ = tx.send(l);
+                    }
+                };
+                watch_loop(
+                    locate,
+                    on_line,
+                    &hud,
+                    (Duration::from_millis(10), Duration::from_millis(40)),
+                )
+                .await;
+            }
+        });
+
+        // Sem instância: não termina, fica à espera (várias voltas).
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(!task.is_finished());
+        // Sem spam: uma só linha de espera, por muitas voltas que o ciclo dê.
+        let waiting = hud
+            .lock()
+            .unwrap()
+            .logs
+            .iter()
+            .filter(|l| l.contains("Hyprland não encontrado"))
+            .count();
+        assert_eq!(waiting, 1);
+
+        // Aparece: liga e entrega as linhas.
+        let l1 = start("primeira_1_1", 101);
+        let (mut s1, _) = tokio::time::timeout(Duration::from_secs(2), l1.accept())
+            .await
+            .unwrap()
+            .unwrap();
+        s1.write_all(b"workspace>>2\n").await.unwrap();
+        let got = tokio::time::timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .unwrap();
+        assert_eq!(got.as_deref(), Some("workspace>>2"));
+
+        // O Hyprland «reinicia»: a velha morre (sai o diretório, fecha o
+        // socket) e aparece outra assinatura.
+        drop(s1);
+        drop(l1);
+        std::fs::remove_dir_all(root.join("run/hypr/primeira_1_1")).unwrap();
+        let l2 = start("segunda_2_1", 202);
+        let (mut s2, _) = tokio::time::timeout(Duration::from_secs(2), l2.accept())
+            .await
+            .unwrap()
+            .unwrap();
+        s2.write_all(b"activewindow>>kitty,~\n").await.unwrap();
+        let got = tokio::time::timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .unwrap();
+        assert_eq!(got.as_deref(), Some("activewindow>>kitty,~"));
+
+        task.abort();
+        let logs = hud.lock().unwrap().logs.clone();
+        let count = |needle: &str| logs.iter().filter(|l| l.contains(needle)).count();
+        assert_eq!(count("ligado ao Hyprland"), 1, "{logs:?}");
+        assert_eq!(count("instância nova"), 1, "{logs:?}");
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]

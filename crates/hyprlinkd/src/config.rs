@@ -143,6 +143,11 @@ pub struct AppConfig {
     /// junta-o às regras de origem.
     #[serde(default)]
     pub gestures: Vec<GestureRule>,
+    /// Teto (bytes) de um ficheiro recebido do telemóvel (`share.file`):
+    /// anúncios acima disto são recusados antes de criar o ficheiro. Por
+    /// omissão 4 GiB; `0` = sem limite (só se o utilizador o puser).
+    #[serde(default = "default_max_incoming_file_bytes")]
+    pub max_incoming_file_bytes: u64,
     /// Opções de correção do ambiente (`lock_command`, `screenshot_tool`,
     /// `temp_sensor`, `gpu_source`, `v4l2_device_nr`, `audio_backend`,
     /// `hypr_dispatch_mode`): ver `hyprlink_env::overrides`. Lidas sem rigidez
@@ -155,6 +160,12 @@ fn default_download_dir() -> PathBuf {
     dirs::download_dir()
         .unwrap_or_else(|| dirs::home_dir().unwrap_or_default())
         .join("HyprLink")
+}
+
+pub const DEFAULT_MAX_INCOMING_FILE_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+
+fn default_max_incoming_file_bytes() -> u64 {
+    DEFAULT_MAX_INCOMING_FILE_BYTES
 }
 
 fn default_tray_special_workspace() -> bool {
@@ -194,6 +205,7 @@ impl AppConfig {
             disk_path: None,
             gpu_nvidia_wake: false,
             gestures: Vec::new(),
+            max_incoming_file_bytes: default_max_incoming_file_bytes(),
             env: hyprlink_env::Overrides::default(),
         }
     }
@@ -234,6 +246,10 @@ pub fn test_config() -> SharedConfig {
 
 pub fn load() -> SharedConfig {
     Arc::new(Mutex::new(AppConfig::load_from_disk()))
+}
+
+pub fn max_incoming_file_bytes(config: &SharedConfig) -> u64 {
+    config.lock().unwrap().max_incoming_file_bytes
 }
 
 pub fn download_dir(config: &SharedConfig) -> PathBuf {
@@ -470,6 +486,16 @@ mod tests {
     fn nvidia_wake_vem_desligado_e_aceita_ser_ligado() {
         assert!(!cfg(r#"{"download_dir": "/x"}"#).gpu_nvidia_wake);
         assert!(cfg(r#"{"download_dir": "/x", "gpu_nvidia_wake": true}"#).gpu_nvidia_wake);
+    }
+
+    #[test]
+    fn teto_de_ficheiros_vem_a_4_gib_e_zero_so_se_explicito() {
+        assert_eq!(
+            cfg(r#"{"download_dir": "/x"}"#).max_incoming_file_bytes,
+            DEFAULT_MAX_INCOMING_FILE_BYTES
+        );
+        let c = cfg(r#"{"download_dir": "/x", "max_incoming_file_bytes": 0}"#);
+        assert_eq!(c.max_incoming_file_bytes, 0);
     }
 
     #[test]

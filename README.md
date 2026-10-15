@@ -19,7 +19,7 @@
 > **Android ⇄ Linux/Hyprland ecosystem integration** — in the spirit of Apple Continuity/Handoff, engineered specifically for Hyprland. Clipboard, notifications, media, battery, remote touchpad, keyboard, file transfer, webcam, audio and compositor control synced in real time over local QUIC + mTLS with zero cloud relay.
 
 > [!NOTE]
-> **Alpha (0.1.0).** Stable for everyday development use, but the wire protocol may evolve between releases and select modules remain in testing (see [03 / Subsystem Matrix](#03--subsystem-matrix)). Bug reports and contributions are welcome.
+> **Alpha (0.1.1).** Stable for everyday development use, but the wire protocol may evolve between releases and select modules remain in testing (see [03 / Subsystem Matrix](#03--subsystem-matrix)). Bug reports and contributions are welcome.
 
 <p align="center">
   <img src="assets/hyprlink_tour.gif" width="720" alt="Tour of the HyprLink desktop application: cover, devices, desk, camera, audio, notifications, sharing, media, sensors and diary">
@@ -107,11 +107,11 @@ Tested on **Arch Linux / CachyOS** with **Hyprland** (Wayland). The package iden
 
 ### Fast path: Pre-built binary tarball (x86_64)
 
-Download `hyprlink-0.1.0-linux-x86_64.tar.gz` from [GitHub Releases](https://github.com/mastermaiolo/hyprlink/releases):
+Download `hyprlink-0.1.1-linux-x86_64.tar.gz` from [GitHub Releases](https://github.com/mastermaiolo/hyprlink/releases):
 
 ```bash
-tar -xzf hyprlink-0.1.0-linux-x86_64.tar.gz
-cd hyprlink-0.1.0-linux-x86_64
+tar -xzf hyprlink-0.1.1-linux-x86_64.tar.gz
+cd hyprlink-0.1.1-linux-x86_64
 ./install.sh                                     # Installs to ~/.local (no root required)
 systemctl --user enable --now hyprlink-bridge   # Start daemon user unit
 hyprlink-gui                                     # Launch desktop GUI
@@ -183,13 +183,16 @@ hyprlinkctl ping               # Round-trip latency check to phone
 hyprlinkctl watch --json       # Continuous JSON telemetry stream
 hyprlinkctl clipboard          # Push desktop clipboard buffer to phone
 hyprlinkctl pair               # Open 120-second discovery pairing window
-hyprlinkctl mirror toggle      # Toggle phone screen mirror stream
+hyprlinkctl mirror toggle      # Phone screen mirror (planned, not yet in the daemon)
 hyprlinkctl mic toggle         # Toggle phone microphone input (on | off | toggle)
 hyprlinkctl tap toggle         # Toggle PC sound stream to phone
 hyprlinkctl speaker toggle     # Toggle phone as desktop output sink
 hyprlinkctl ws 3               # Switch Hyprland active workspace to 3
 hyprlinkctl open               # Open or focus the desktop GUI window
 hyprlinkctl doctor             # Diagnostic environment and compatibility audit
+hyprlinkctl doctor --no-dispatch  # Same audit, never runs hyprctl dispatch
+hyprlinkctl status --waybar    # One-line JSON for a Waybar custom module
+hyprlinkctl shortcuts          # List configured shortcuts (--json for scripts)
 ```
 
 Explore additional options with `hyprlinkctl --help`. A Waybar integration widget and a context-menu desktop action are supplied in `contrib/` (install via `contrib/install.sh`).

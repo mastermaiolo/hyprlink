@@ -58,6 +58,28 @@ pub async fn read_frame<R: tokio::io::AsyncRead + Unpin>(
     Ok(payload)
 }
 
+/// Como [`read_frame`], mas com um limite próprio (`max`), verificado logo
+/// a seguir aos 4 bytes do tamanho e antes de alocar o buffer. Serve para o
+/// `core.hello`, lido de um peer que ainda não se autenticou: um prefixo de
+/// 16 MiB é recusado sem se reservar memória nenhuma.
+pub async fn read_frame_limited<R: tokio::io::AsyncRead + Unpin>(
+    reader: &mut R,
+    max: u32,
+) -> std::io::Result<Vec<u8>> {
+    let mut len_buf = [0u8; 4];
+    reader.read_exact(&mut len_buf).await?;
+    let len = u32::from_be_bytes(len_buf);
+    if len == 0 || len > max.min(MAX_FRAME_SIZE) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("tamanho de frame inválido: {len} (máximo {max})"),
+        ));
+    }
+    let mut payload = vec![0u8; len as usize];
+    reader.read_exact(&mut payload).await?;
+    Ok(payload)
+}
+
 /// Escreve um frame num stream bidirecional (4 bytes BE + payload cru).
 pub async fn write_frame<W: tokio::io::AsyncWrite + Unpin>(
     writer: &mut W,
@@ -131,6 +153,41 @@ mod tests {
         assert!(!packet.has_payload);
         let body = packet.body.expect("body deveria estar presente");
         assert_eq!(body_get_str(&body, "text"), Some("abc"));
+    }
+
+    /// O limite é verificado antes de alocar: com só os 4 bytes do tamanho
+    /// (16 MiB) e nada a seguir, o erro é `InvalidData` e não `UnexpectedEof`
+    /// (que seria o caso se tivesse reservado o buffer e tentado enchê-lo).
+    #[tokio::test]
+    async fn frame_limitado_recusa_o_prefixo_antes_de_alocar() {
+        let prefix = MAX_FRAME_SIZE.to_be_bytes();
+        let mut reader = &prefix[..];
+        let e = read_frame_limited(&mut reader, 64 * 1024)
+            .await
+            .unwrap_err();
+        assert_eq!(e.kind(), std::io::ErrorKind::InvalidData);
+
+        let one_over = (64 * 1024u32 + 1).to_be_bytes();
+        let mut reader = &one_over[..];
+        let e = read_frame_limited(&mut reader, 64 * 1024)
+            .await
+            .unwrap_err();
+        assert_eq!(e.kind(), std::io::ErrorKind::InvalidData);
+
+        let zero = 0u32.to_be_bytes();
+        let mut reader = &zero[..];
+        let e = read_frame_limited(&mut reader, 64 * 1024)
+            .await
+            .unwrap_err();
+        assert_eq!(e.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[tokio::test]
+    async fn frame_limitado_aceita_ate_ao_maximo() {
+        let mut data = 4u32.to_be_bytes().to_vec();
+        data.extend_from_slice(b"abcd");
+        let mut reader = &data[..];
+        assert_eq!(read_frame_limited(&mut reader, 4).await.unwrap(), b"abcd");
     }
 
     #[test]

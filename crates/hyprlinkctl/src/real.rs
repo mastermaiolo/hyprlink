@@ -145,7 +145,11 @@ pub fn open_gui(json_out: bool) -> ExitCode {
         .map(|d| std::path::PathBuf::from(d).join("hyprlink-gui.sock"));
     if let Some(mut s) = sock.and_then(|p| std::os::unix::net::UnixStream::connect(p).ok()) {
         let _ = s.write_all(b"open\n");
-        return ok(json_out, "HYPRLINK em primeiro plano", json!({ "running": true }));
+        return ok(
+            json_out,
+            "HYPRLINK em primeiro plano",
+            json!({ "running": true }),
+        );
     }
     match std::process::Command::new("hyprlink-gui").spawn() {
         Ok(_) => ok(json_out, "a abrir HYPRLINK", json!({ "running": false })),
@@ -163,19 +167,16 @@ pub fn watch(json_out: bool, interval: Duration, human: fn(&Snapshot) -> String)
     let mut last_host = Instant::now();
     let stdout = std::io::stdout();
     loop {
-        let mut session = open().ok();
-        let mut st = session.as_ref().map(|_| ()).map_or_else(
-            || {
+        // Uma sessão por volta (antes abria-se duas: a primeira só servia
+        // para saber se o daemon estava lá e ficava pendurada).
+        let (mut session, mut st) = match open() {
+            Ok((s, state)) => (Some(s), state),
+            Err(_) => {
                 let mut s = State::new();
                 s.snap = Snapshot::new("down");
-                s
-            },
-            |_| State::new(),
-        );
-        if let Ok((s, state)) = session.take().map_or(Err(()), |_| open().map_err(|_| ())) {
-            session = Some(s);
-            st = state;
-        }
+                (None, s)
+            }
+        };
         loop {
             let deadline = Instant::now() + interval;
             if let Some(s) = session.as_mut() {
@@ -251,12 +252,17 @@ pub fn ping(json_out: bool) -> ExitCode {
     }
     let r = s.wait_for(Duration::from_secs(3), |e| match e {
         Event::Notice(Notice::PingReply { device, rtt_ms }) if *device == id => Some(Ok(*rtt_ms)),
-        Event::Notice(Notice::Failed { op: Op::Ping, error }) => Some(Err(*error)),
+        Event::Notice(Notice::Failed {
+            op: Op::Ping,
+            error,
+        }) => Some(Err(*error)),
         _ => None,
     });
     match r {
         Ok(Ok(rtt)) => {
-            let rtt = (rtt * 10.0).round() / 10.0;
+            // Arredondar já em f64: em f32, o 12.3 sai no JSON como
+            // 12.300000190734863.
+            let rtt = (f64::from(rtt) * 10.0).round() / 10.0;
             ok(
                 json_out,
                 &format!("{name} respondeu em {rtt} ms"),

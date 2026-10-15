@@ -11,7 +11,7 @@
 #                                próprio em src/, sem tocar no target/ do repo
 
 pkgname=hyprlink-bridge
-pkgver=0.1.0
+pkgver=0.1.1
 pkgrel=1
 pkgdesc='Android phone ↔ Hyprland link over QUIC + mTLS: notifications, clipboard, files, media, webcam, mic'
 arch=('x86_64')

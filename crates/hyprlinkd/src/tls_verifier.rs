@@ -3,6 +3,15 @@
 //! lados), mas a prova de posse de chave continua sendo verificada — quem
 //! autentica de verdade é o pin de fingerprint pós-handshake (ver `pairing.rs`),
 //! não este verificador.
+//!
+//! Porque é seguro aceitar qualquer certificado: o handshake só prova que o
+//! peer tem a chave do certificado que mostrou, e a fingerprint desse
+//! certificado é que tem de estar em `paired_devices.json` (ou vir com o
+//! token do QR no `core.hello`). Até essa decisão o peer é anónimo e fica
+//! preso ao gate de `gate.rs`/`server::authenticate`: poucas ligações por
+//! autenticar (8, 2 por IP), uma só stream bidi, 128 KiB de janela, hello até
+//! 64 KiB em 10 s e bloqueio por IP após tokens errados. Validar uma CA aqui
+//! não acrescentava nada — os certificados são autoassinados dos dois lados.
 
 use std::sync::Arc;
 

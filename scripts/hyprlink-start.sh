@@ -21,7 +21,13 @@ DAEMON="$RAIZ/target/$PERFIL/hyprlink-daemon"
 GUI="$RAIZ/target/$PERFIL/hyprlink-gui"
 SOCKET="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hyprlink.sock"
 LOGS="${XDG_STATE_HOME:-$HOME/.local/state}/hyprlink"
+# Os registos podem ter dados pessoais (nomes de ficheiros, dispositivos):
+# diretório 0700 e ficheiros 0600, também para os que já existiam.
+umask 077
 mkdir -p "$LOGS"
+chmod 700 "$LOGS"
+touch "$LOGS/daemon.log" "$LOGS/gui.log"
+chmod 600 "$LOGS/daemon.log" "$LOGS/gui.log"
 
 for b in "$DAEMON" "$GUI"; do
   if [ ! -x "$b" ]; then

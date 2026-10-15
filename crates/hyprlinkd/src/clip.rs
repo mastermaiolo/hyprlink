@@ -6,10 +6,10 @@
 
 use std::sync::{Arc, Mutex};
 
+use crate::session::tokio_command;
 use ciborium::Value;
 use sha2::{Digest, Sha256};
 use tokio::io::AsyncReadExt;
-use tokio::process::Command;
 
 use crate::active::{ActiveConn, announce, push};
 use crate::state::{self, HudState, push_log};
@@ -58,7 +58,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 /// `clipboard.set` recebido do telemóvel: escreve no clipboard do Wayland.
 pub async fn set_from_remote(text: &str, guard: &LastLocalSet) {
     *guard.lock().unwrap() = Some(text.to_string());
-    let mut child = match Command::new("wl-copy")
+    let mut child = match tokio_command("wl-copy")
         .stdin(std::process::Stdio::piped())
         .spawn()
     {
@@ -76,7 +76,7 @@ pub async fn set_from_remote(text: &str, guard: &LastLocalSet) {
 /// pro telemóvel a cada mudança que não veio dele mesmo.
 pub async fn watch(active: ActiveConn, guard: LastLocalSet, hud: Arc<Mutex<HudState>>) {
     loop {
-        let mut child = match Command::new("wl-paste")
+        let mut child = match tokio_command("wl-paste")
             .args(["--type", "text", "--no-newline", "--watch", "cat"])
             .stdout(std::process::Stdio::piped())
             .spawn()
@@ -143,7 +143,7 @@ pub async fn set_image_from_remote(
         return;
     }
     *guard.lock().unwrap() = Some(sha256_hex(&bytes));
-    let mut child = match Command::new("wl-copy")
+    let mut child = match tokio_command("wl-copy")
         .args(["--type", "image/png"])
         .stdin(std::process::Stdio::piped())
         .spawn()
@@ -250,7 +250,7 @@ pub async fn watch_images(active: ActiveConn, guard: LastLocalImage, hud: Arc<Mu
     loop {
         interval.tick().await;
 
-        let types = match Command::new("wl-paste")
+        let types = match tokio_command("wl-paste")
             .args(["--list-types"])
             .output()
             .await
@@ -262,7 +262,7 @@ pub async fn watch_images(active: ActiveConn, guard: LastLocalImage, hud: Arc<Mu
             continue;
         }
 
-        let bytes = match Command::new("wl-paste")
+        let bytes = match tokio_command("wl-paste")
             .args(["--type", "image/png"])
             .output()
             .await

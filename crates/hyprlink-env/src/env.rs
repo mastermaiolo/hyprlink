@@ -77,6 +77,7 @@ pub const VARS: &[&str] = &[
     "XDG_CONFIG_HOME",
     "XDG_STATE_HOME",
     "XDG_RUNTIME_DIR",
+    "HYPRLAND_INSTANCE_SIGNATURE",
     "HOME",
     "USER",
 ];
@@ -167,19 +168,140 @@ fn is_exe(p: &Path) -> bool {
     std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
 }
 
-/// Liga a `$XDG_RUNTIME_DIR/<nome>`, envia `cmd` + `\n` e lê a resposta, tudo
-/// com tempo-limite de 400 ms. Nunca bloqueia nem falha: sem socket, `None`.
+/// Teto da resposta de um socket local.
+const SOCK_REPLY_MAX: usize = 64 * 1024;
+/// Prazo total de uma pergunta (ligar + escrever + ler).
+const SOCK_DEADLINE: Duration = Duration::from_millis(400);
+/// Depois do primeiro bloco: sem mais nada durante isto, a resposta acabou
+/// (há servidores que respondem e não fecham a ligação).
+const SOCK_IDLE: Duration = Duration::from_millis(50);
+
+/// Liga a `$XDG_RUNTIME_DIR/<nome>` e pergunta: ver [`sock_query_at`].
 fn real_sock_query(name: &str, cmd: &str) -> Option<String> {
-    use std::io::{Read, Write};
-    use std::os::unix::net::UnixStream;
     let dir = std::env::var_os("XDG_RUNTIME_DIR")?;
-    let path = std::path::Path::new(&dir).join(name);
+    sock_query_at(&Path::new(&dir).join(name), cmd)
+}
+
+/// Envia `cmd` + `\n` a um socket Unix e lê a resposta até EOF, até
+/// [`SOCK_REPLY_MAX`] bytes ou até o prazo de 400 ms acabar (depois do
+/// primeiro bloco, 50 ms sem mais dados também a dão por acabada). Nunca
+/// bloqueia nem falha: sem socket ou sem resposta, `None`.
+fn sock_query_at(path: &Path, cmd: &str) -> Option<String> {
+    use std::io::Write;
+    use std::os::unix::net::UnixStream;
+    let deadline = Instant::now() + SOCK_DEADLINE;
     let mut s = UnixStream::connect(path).ok()?;
-    let t = Some(Duration::from_millis(400));
-    s.set_read_timeout(t).ok()?;
-    s.set_write_timeout(t).ok()?;
+    s.set_write_timeout(Some(SOCK_DEADLINE)).ok()?;
     s.write_all(format!("{cmd}\n").as_bytes()).ok()?;
-    let mut buf = [0u8; 256];
-    let n = s.read(&mut buf).ok()?;
-    (n > 0).then(|| String::from_utf8_lossy(&buf[..n]).trim().to_string())
+    let mut reply = Vec::new();
+    let mut buf = [0u8; 4096];
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        let wait = if reply.is_empty() {
+            left
+        } else {
+            left.min(SOCK_IDLE)
+        };
+        if wait.is_zero() {
+            break;
+        }
+        s.set_read_timeout(Some(wait)).ok()?;
+        match s.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                let room = SOCK_REPLY_MAX - reply.len();
+                reply.extend_from_slice(&buf[..n.min(room)]);
+                if reply.len() >= SOCK_REPLY_MAX {
+                    break;
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            // Prazo (WouldBlock/TimedOut) ou erro: fica o que chegou.
+            Err(_) => break,
+        }
+    }
+    let text = String::from_utf8_lossy(&reply).trim().to_string();
+    (!text.is_empty()).then_some(text)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use std::os::unix::net::UnixListener;
+
+    fn sock(name: &str) -> PathBuf {
+        let p = std::env::temp_dir().join(format!("hyprlink-sq-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_file(&p);
+        p
+    }
+
+    /// Servidor falso: lê o pedido e responde com `chunks`, um de cada vez.
+    fn serve(path: &Path, chunks: Vec<Vec<u8>>, close: bool) -> std::thread::JoinHandle<()> {
+        let l = UnixListener::bind(path).unwrap();
+        std::thread::spawn(move || {
+            let (mut c, _) = l.accept().unwrap();
+            let mut req = [0u8; 64];
+            let _ = c.read(&mut req);
+            for ch in chunks {
+                // O cliente pode fechar antes (teto): o erro aqui não conta.
+                let _ = c.write_all(&ch);
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            if !close {
+                std::thread::sleep(Duration::from_millis(600));
+            }
+        })
+    }
+
+    #[test]
+    fn resposta_maior_que_256_bytes_em_varias_escritas() {
+        let p = sock("grande");
+        let parts: Vec<Vec<u8>> = (0..4).map(|i| vec![b'a' + i; 200]).collect();
+        let expected: String = parts.iter().map(|c| String::from_utf8_lossy(c)).collect();
+        let t = serve(&p, parts, true);
+        assert_eq!(sock_query_at(&p, "get").as_deref(), Some(expected.as_str()));
+        t.join().unwrap();
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn servidor_que_nao_fecha_nao_prende_os_400_ms() {
+        let p = sock("aberto");
+        let t = serve(&p, vec![b"1\n".to_vec()], false);
+        let t0 = Instant::now();
+        assert_eq!(sock_query_at(&p, "get").as_deref(), Some("1"));
+        assert!(t0.elapsed() < SOCK_DEADLINE, "{:?}", t0.elapsed());
+        t.join().unwrap();
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn sem_resposta_desiste_no_prazo() {
+        let p = sock("calado");
+        let t = serve(&p, vec![], false);
+        let t0 = Instant::now();
+        assert_eq!(sock_query_at(&p, "get"), None);
+        let e = t0.elapsed();
+        assert!(e >= SOCK_DEADLINE && e < SOCK_DEADLINE * 2, "{e:?}");
+        t.join().unwrap();
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn resposta_tem_teto() {
+        let p = sock("teto");
+        let t = serve(&p, vec![vec![b'x'; SOCK_REPLY_MAX + 5000]], true);
+        assert_eq!(
+            sock_query_at(&p, "get").map(|r| r.len()),
+            Some(SOCK_REPLY_MAX)
+        );
+        t.join().unwrap();
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn sem_socket_e_none() {
+        assert_eq!(sock_query_at(&sock("nada"), "get"), None);
+    }
 }

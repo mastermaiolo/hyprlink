@@ -250,15 +250,14 @@ pub fn cover(app: &App) -> El<'_> {
             },
         ),
     ]
-    .width(if app.is_compact() { Length::Fill } else { fill_portion(2) });
+    .width(if app.is_compact() {
+        Length::Fill
+    } else {
+        fill_portion(2)
+    });
 
     let hero: El = if app.is_compact() {
-        column![
-            hero_left.width(Length::Fill),
-            gap(space::XL),
-            hero_right,
-        ]
-        .into()
+        column![hero_left.width(Length::Fill), gap(space::XL), hero_right,].into()
     } else {
         row![hero_left, hgap(space::GUTTER), hero_right].into()
     };
@@ -313,7 +312,7 @@ pub fn cover(app: &App) -> El<'_> {
                 .height(40)
                 .align_y(Alignment::End)
         ]
-        .into()
+        .into(),
     );
     let cell_net = cell(
         column![
@@ -341,7 +340,7 @@ pub fn cover(app: &App) -> El<'_> {
             .height(40)
             .align_y(Alignment::End)
         ]
-        .into()
+        .into(),
     );
     let cell_sto = cell(
         column![
@@ -365,7 +364,7 @@ pub fn cover(app: &App) -> El<'_> {
             .height(40)
             .align_y(Alignment::End)
         ]
-        .into()
+        .into(),
     );
     let cell_lat = cell(
         column![
@@ -378,7 +377,7 @@ pub fn cover(app: &App) -> El<'_> {
             gap(space::M),
             spark(app.latency.to_vec(), ACID, 0.0, lat_max, 40.0)
         ]
-        .into()
+        .into(),
     );
 
     let phone_stats: El = if app.is_compact() {
@@ -638,13 +637,21 @@ pub fn cover(app: &App) -> El<'_> {
         gap(space::S),
         kicker(t("— NOTAS DE ARQUITETURA, HYPRLINK")),
     ]
-    .width(if app.is_compact() { Length::Fill } else { fill_portion(2) });
+    .width(if app.is_compact() {
+        Length::Fill
+    } else {
+        fill_portion(2)
+    });
 
     let mut wire = column![subhead("B", t("O fio"))];
     for p in app.packets.iter().rev().take(7) {
         wire = wire.push(packet_row(p, true));
     }
-    let wire = wire.width(if app.is_compact() { Length::Fill } else { fill_portion(3) });
+    let wire = wire.width(if app.is_compact() {
+        Length::Fill
+    } else {
+        fill_portion(3)
+    });
 
     let bottom_split: El = if app.is_compact() {
         column![actions, gap(space::XL), wire].into()
@@ -857,7 +864,11 @@ pub fn devices(app: &App) -> El<'_> {
         gap(space::S),
         mono(t("QUIC · mTLS · porta 7443"), FAINT),
     ]
-    .width(if app.is_compact() { Length::Fill } else { Length::Fixed(340.0) });
+    .width(if app.is_compact() {
+        Length::Fill
+    } else {
+        Length::Fixed(340.0)
+    });
 
     let detail: El = match app.device() {
         Some(d) => device_detail(app, d),
@@ -869,12 +880,7 @@ pub fn devices(app: &App) -> El<'_> {
     };
 
     let body: El = if app.is_compact() {
-        column![
-            list,
-            gap(space::XXL),
-            container(detail).width(Length::Fill),
-        ]
-        .into()
+        column![list, gap(space::XXL), container(detail).width(Length::Fill),].into()
     } else {
         row![
             list,
@@ -1547,19 +1553,9 @@ pub fn mirror_body(app: &App) -> El<'_> {
     .align_x(Alignment::Center);
 
     let body: El = if app.is_compact() {
-        column![
-            phone_preview,
-            gap(space::XXL),
-            controls,
-        ]
-        .into()
+        column![phone_preview, gap(space::XXL), controls,].into()
     } else {
-        row![
-            phone_preview,
-            hgap(space::GUTTER),
-            controls,
-        ]
-        .into()
+        row![phone_preview, hgap(space::GUTTER), controls,].into()
     };
 
     column![body].into()
@@ -2075,7 +2071,9 @@ pub fn presence_body(app: &App) -> El<'_> {
     let top_split: El = if app.is_compact() {
         column![now, gap(space::XL), scale].into()
     } else {
-        row![now, hgap(space::GUTTER), scale].align_y(Alignment::End).into()
+        row![now, hgap(space::GUTTER), scale]
+            .align_y(Alignment::End)
+            .into()
     };
 
     let thresh_split: El = if app.is_compact() {
@@ -2192,7 +2190,11 @@ pub fn journal(app: &App) -> El<'_> {
             .font(MONO)
             .size(12)
             .padding(Padding::from([8, 12]))
-            .width(if app.is_compact() { Length::Fill } else { Length::Fixed(340.0) })
+            .width(if app.is_compact() {
+                Length::Fill
+            } else {
+                Length::Fixed(340.0)
+            })
             .style(theme::input),
         fill_x(),
         btn(

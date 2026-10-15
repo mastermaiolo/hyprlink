@@ -11,6 +11,7 @@ pub mod camera;
 pub mod env;
 pub mod gpu;
 pub mod hyprland;
+pub mod instance;
 pub mod overrides;
 pub mod pipewire;
 pub mod plan;

@@ -101,7 +101,7 @@ fn ensure_v4l2loopback_loaded(hud: &Arc<Mutex<HudState>>) -> bool {
         hud,
         "[i] webcam: carregando v4l2loopback (pode pedir sua senha)...".to_string(),
     );
-    let status = std::process::Command::new("pkexec")
+    let status = crate::session::command("pkexec")
         .args([
             "modprobe",
             "v4l2loopback",

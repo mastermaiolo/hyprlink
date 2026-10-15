@@ -396,6 +396,14 @@ pub fn update_file_transfer_progress(state: &Arc<Mutex<HudState>>, bytes: u64) {
     }
 }
 
+/// Muda o nome da transferência em curso (ex.: o ficheiro recebido ficou
+/// gravado como `nome (1).ext`).
+pub fn set_file_transfer_name(state: &Arc<Mutex<HudState>>, name: String) {
+    if let Some(t) = state.lock().unwrap().modules.file_transfer.as_mut() {
+        t.name = name;
+    }
+}
+
 pub fn set_file_transfer_wire_id(state: &Arc<Mutex<HudState>>, wire_id: u64) {
     if let Some(t) = state.lock().unwrap().modules.file_transfer.as_mut() {
         t.wire_id = Some(wire_id);
