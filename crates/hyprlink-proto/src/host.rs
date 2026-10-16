@@ -18,6 +18,19 @@ pub struct Host {
     pub uptime_s: u64,
 }
 
+/// Hyprland pela descoberta partilhada (`hyprlink_env::instance`: a
+/// variável ou uma instância viva — a GUI pode ter arrancado fora do
+/// ambiente do Hyprland); senão, o `XDG_CURRENT_DESKTOP`.
+fn compositor_name(hyprland: bool, desktop: Option<String>) -> String {
+    if hyprland {
+        "Hyprland".into()
+    } else {
+        desktop
+            .filter(|d| !d.is_empty())
+            .unwrap_or_else(|| "—".into())
+    }
+}
+
 #[derive(Default)]
 pub struct Probe {
     last_cpu: Option<(u64, u64)>,
@@ -39,11 +52,10 @@ impl Probe {
                     .map(|m| m.trim().replace("(R)", "").replace("(TM)", ""))
             })
             .unwrap_or_default();
-        let compositor = if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some() {
-            "Hyprland".into()
-        } else {
-            std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_else(|_| "—".into())
-        };
+        let compositor = compositor_name(
+            hyprlink_env::instance::is_hyprland_session(),
+            std::env::var("XDG_CURRENT_DESKTOP").ok(),
+        );
 
         // CPU usage from the delta of /proc/stat.
         let cpu_pct = read("/proc/stat")
@@ -112,5 +124,18 @@ impl Probe {
             battery,
             uptime_s,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compositor_pela_descoberta_partilhada() {
+        assert_eq!(compositor_name(true, Some("GNOME".into())), "Hyprland");
+        assert_eq!(compositor_name(false, Some("GNOME".into())), "GNOME");
+        assert_eq!(compositor_name(false, Some(String::new())), "—");
+        assert_eq!(compositor_name(false, None), "—");
     }
 }

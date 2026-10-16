@@ -16,6 +16,17 @@
 #   }
 # Classes CSS: `connected`, `disconnected`, `unknown` — estilize à vontade.
 
+# Com um hyprlinkctl que tenha `status --waybar`, é ele que responde (mesma
+# lógica, serde_json). Um hyprlinkctl antigo responde «ok …» pelo protocolo
+# de texto: só se usa a saída se for JSON; senão segue a versão jq abaixo.
+if command -v hyprlinkctl >/dev/null 2>&1; then
+    OUT=$(hyprlinkctl status --waybar 2>/dev/null)
+    if [[ $OUT == '{'* ]]; then
+        printf '%s\n' "$OUT"
+        exit 0
+    fi
+fi
+
 S="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hyprlink/status.json"
 
 if [ ! -f "$S" ]; then
@@ -52,4 +63,6 @@ TIP="$DEV"
 [ -n "$MEDIA" ] && TIP+=" · ${MEDIA}"
 [ "$SPK" = "true" ] && TIP+=" · som no telemóvel"
 
-jq -n --arg t "$TXT" --arg tt "$TIP" '{text:$t, tooltip:$tt, class:"connected"}'
+# A Waybar lê o tooltip como markup Pango: & < > escapados.
+jq -nc --arg t "$TXT" --arg tt "$TIP" \
+    '{text:$t, tooltip:($tt | gsub("&";"&amp;") | gsub("<";"&lt;") | gsub(">";"&gt;")), class:"connected"}'

@@ -207,7 +207,8 @@ O daemon publica a fase da ligação (`Event::Link`) a partir de `ConnState`
 Todas SIL Open Font License 1.1, embutidas em `assets/fonts/` com as respetivas licenças:
 Anton (Vernon Adams), Instrument Serif (Instrument), Inter (Rasmus Andersson),
 IBM Plex Mono (IBM) e, para 中文, um subconjunto do Noto Sans CJK SC (Adobe/Google;
-Regular e Bold, hanzi GB2312 nível 1, +3,6 MB no binário; gerado por
-`scripts/font-zh-subset.py`). Texto CJK fora do subconjunto (nomes de ficheiros, notificações do
-telemóvel) cai para as fontes CJK do sistema, se existirem. Instrument Serif Itálico não tem
+Regular e Bold, só os caracteres da UI, ~0,5 MB no binário; gerado por
+`scripts/subset-fontes.sh`, a regenerar quando as traduções zh mudarem — o teste
+`tests/fontes_zh.rs` falha se faltar algum). Texto CJK fora do subconjunto (nomes de ficheiros,
+notificações do telemóvel) cai para as fontes CJK do sistema, se existirem. Instrument Serif Itálico não tem
 glifos CJK: em 中文 os *decks* usam Inter vertical.

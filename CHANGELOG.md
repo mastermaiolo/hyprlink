@@ -4,7 +4,59 @@ Todas as alterações relevantes deste projeto ficam aqui. O formato segue o
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e as versões o
 [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
-## [0.1.0] — por publicar
+## [0.1.1] — por publicar
+
+Versão de correções, sobretudo de segurança. **Atualização recomendada.** A app
+Android não muda e funciona com esta versão.
+
+### Segurança
+- O token e o QR de emparelhamento só aparecem quando o daemon corre num
+  terminal; nos registos do serviço ficam só o IP e a impressão digital.
+- Abrir um link vindo do telemóvel (ou `hyprlinkctl url`) só aceita
+  endereços `http://` e `https://`.
+- Receber ficheiros tem um tamanho máximo e confirma o espaço livre antes de
+  aceitar; o número de anúncios pendentes é limitado.
+- Os ficheiros recebidos são escritos primeiro num `.hyprlink-part` escondido
+  e só ganham o nome final quando chegam completos; uma transferência cortada
+  ou mais curta do que o anunciado conta como falha e é apagada.
+- Um ficheiro recebido nunca substitui outro com o mesmo nome: fica como
+  `nome (1).ext`, `nome (2).ext`, etc. Partes órfãs com mais de 1 h são
+  limpas ao arrancar.
+- Ligações ainda por autenticar têm limites: apresentação até 64 KiB e 10 s,
+  um só canal, no máximo 8 em simultâneo (2 por IP).
+- Um IP que erra o token 5 vezes fica bloqueado 60 s, com o tempo a dobrar a
+  cada bloqueio até 1 h; os aparelhos já emparelhados continuam a entrar.
+- Uma ligação desconhecida recusada já não derruba a sessão do telemóvel
+  emparelhado.
+
+### Corrigido
+- Depois de reiniciar o Hyprland, o daemon volta a encontrar a instância nova
+  e os eventos (workspaces, janelas) religam sozinhos.
+- O daemon, a GUI e o `hyprlinkctl doctor` encontram o Hyprland mesmo quando
+  arrancam sem as variáveis da sessão gráfica (por exemplo, pelo
+  `systemd --user`).
+- As respostas longas do Hyprland são lidas até ao fim.
+- Copiar para a área de transferência, abrir ficheiros e correr ações a
+  partir do telemóvel funcionam também com o daemon a correr como serviço.
+- «Enviar via HyprLink» e `hyprlinkctl send` aceitam caminhos com espaços,
+  URIs `file://` e caminhos relativos.
+
+### Alterado
+- `hyprlinkctl --json` fala com o daemon real; o simulador só se usa com
+  `--mock` ou `HYPRLINK_MOCK=1`.
+- A GUI adapta-se a janelas estreitas (tiling a meio ecrã do Hyprland), com
+  uma barra lateral compacta.
+- A fonte chinesa da GUI leva só os caracteres usados na interface (binário
+  cerca de 3 MB mais pequeno).
+
+### Adicionado
+- `hyprlinkctl doctor --no-dispatch` (ou `HYPRLINK_NO_DISPATCH=1`): diagnóstico
+  sem enviar comandos ao Hyprland; o modo (Lua ou clássico) é inferido pela
+  versão e pela configuração.
+- `hyprlinkctl status --waybar`: estado em JSON para um módulo `custom` da
+  Waybar.
+
+## [0.1.0] — 2026-10-07
 
 Primeira versão instalável (alfa). Daemon, GUI e linha de comandos do PC;
 a app Android tem versões próprias (`versionName`).

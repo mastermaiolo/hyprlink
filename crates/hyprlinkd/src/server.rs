@@ -4,6 +4,7 @@
 
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use ciborium::Value;
 use hyprlink_proto::link::NotifAction;
@@ -14,11 +15,14 @@ use crate::active::{self, ActiveConn};
 use crate::clip::{self, LastLocalSet};
 use crate::config::{self, SharedConfig};
 use crate::ctl;
+use crate::gate;
 use crate::identity::{ServerIdentity, fingerprint_der};
 use crate::input::InputDevice;
 use crate::notif;
 use crate::pairing::PairingStore;
-use crate::protocol::{Packet, body_get_bytes, body_get_str, read_frame, write_frame};
+use crate::protocol::{
+    Packet, body_get_bytes, body_get_str, read_frame, read_frame_limited, write_frame,
+};
 use crate::share;
 use crate::state::{self, HudState};
 use crate::telemetry;
@@ -91,6 +95,17 @@ impl Ctx {
     }
 }
 
+/// Streams por ligação depois de autenticada. Antes: 1 bidi (a do hello) e
+/// nenhuma uni — ver `build_endpoint` e `authenticate`.
+const AUTH_MAX_BIDI: u32 = 100;
+const AUTH_MAX_UNI: u32 = 100;
+
+/// Janela de receção da ligação até autenticar: o hello (64 KiB no máximo)
+/// cabe com folga e um peer anónimo não põe mais do que isto em memória.
+/// Depois de autorizado passa a ilimitada (o valor por omissão do quinn,
+/// como antes); cada stream continua com a sua janela.
+const PRE_AUTH_RECEIVE_WINDOW: u32 = 128 * 1024;
+
 pub fn build_endpoint(
     identity: &ServerIdentity,
     addr: SocketAddr,
@@ -125,8 +140,10 @@ pub fn build_endpoint(
     let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(quic_tls_config));
     if let Some(transport) = Arc::get_mut(&mut server_config.transport) {
         transport
-            .max_concurrent_bidi_streams(100u32.into())
-            .max_concurrent_uni_streams(100u32.into())
+            // Até autenticar (sobem em `authenticate`).
+            .max_concurrent_bidi_streams(1u32.into())
+            .max_concurrent_uni_streams(0u32.into())
+            .receive_window(PRE_AUTH_RECEIVE_WINDOW.into())
             // ponytail: o app manda ping de keepalive a cada 30s (mesmo valor do
             // max_idle_timeout padrão do quinn) — sem margem, qualquer jitter faz o
             // QUIC fechar a conexão por "ociosa" bem na hora que o ping ia renová-la.
@@ -209,12 +226,31 @@ pub fn spawn_background_tasks(ctx: Ctx) {
 }
 
 pub async fn run(endpoint: quinn::Endpoint, pairing: Arc<Mutex<PairingStore>>, ctx: Ctx) {
+    let gate = gate::new(gate::Limits::DEFAULT);
     while let Some(incoming) = endpoint.accept().await {
-        let pairing = pairing.clone();
-        let ctx = ctx.clone();
-        state::set_connecting(&ctx.hud);
+        let Some((incoming, slot)) = admit_incoming(incoming, &gate, &ctx.hud) else {
+            continue;
+        };
+        let (pairing, ctx, gate) = (pairing.clone(), ctx.clone(), gate.clone());
+        // Com um telemóvel já ligado, um peer por autenticar não mexe no
+        // estado mostrado na GUI.
+        if ctx.active.lock().unwrap().is_none() {
+            state::set_connecting(&ctx.hud);
+        }
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(incoming, pairing, ctx.clone()).await {
+            let authed = match authenticate(incoming, slot, &gate, &pairing, &ctx.hud).await {
+                Ok(authed) => authed,
+                // Recusado antes de autenticar: a sessão em curso (se
+                // houver) não é tocada — só se volta a «à espera» se não
+                // houver nenhuma.
+                Err(_) => {
+                    if ctx.active.lock().unwrap().is_none() {
+                        state::set_pairing(&ctx.hud);
+                    }
+                    return;
+                }
+            };
+            if let Err(e) = serve(authed, pairing, ctx.clone()).await {
                 state::push_log(&ctx.hud, format!("[!] conexão encerrada: {e}"));
                 state::set_pairing(&ctx.hud);
                 active::clear(&ctx.active);
@@ -235,28 +271,169 @@ pub async fn run(endpoint: quinn::Endpoint, pairing: Arc<Mutex<PairingStore>>, c
     }
 }
 
-async fn handle_connection(
+/// Reserva um lugar de ligação por autenticar, ou recusa o `Incoming` logo à
+/// entrada (antes do handshake) se já houver demasiadas — no total ou deste IP.
+fn admit_incoming(
     incoming: quinn::Incoming,
-    pairing: Arc<Mutex<PairingStore>>,
-    ctx: Ctx,
-) -> anyhow::Result<()> {
-    let connection = incoming.await?;
-    let peer_fingerprint = peer_cert_fingerprint(&connection)
-        .ok_or_else(|| anyhow::anyhow!("cliente não apresentou certificado (mTLS obrigatório)"))?;
+    gate: &gate::Gate,
+    hud: &Arc<Mutex<HudState>>,
+) -> Option<(quinn::Incoming, gate::PendingSlot)> {
+    let ip = incoming.remote_address().ip();
+    match gate::admit(gate, ip) {
+        Ok(slot) => Some((incoming, slot)),
+        Err(refusal) => {
+            incoming.refuse();
+            log_refused(gate, hud, refusal.reason(), ip, None);
+            None
+        }
+    }
+}
 
-    println!("[+] handshake QUIC/mTLS completo, fingerprint do peer: {peer_fingerprint}");
+/// Uma linha no HUD por minuto, no máximo, com quantas ligações por
+/// autenticar foram recusadas e o motivo da última (sem token, fingerprint
+/// abreviada).
+fn log_refused(
+    gate: &gate::Gate,
+    hud: &Arc<Mutex<HudState>>,
+    reason: &str,
+    ip: std::net::IpAddr,
+    fingerprint: Option<&str>,
+) {
+    let Some(n) = gate.lock().unwrap().note_refused(Instant::now()) else {
+        return;
+    };
+    let fp = fingerprint.map_or_else(|| "sem certificado".to_string(), gate::short_fp);
+    state::push_log(
+        hud,
+        format!(
+            "[!] ligação não autenticada recusada ({n} desde a última linha) · {reason} · {} · {fp}",
+            gate::IpKey::of(ip)
+        ),
+    );
+}
+
+/// Ligação que passou o gate: o `core.hello` foi lido e o peer é um
+/// dispositivo emparelhado (ou acabou de emparelhar com o token certo).
+struct Authed {
+    connection: quinn::Connection,
+    send: quinn::SendStream,
+    /// A metade de leitura da stream do hello vive tanto quanto a ligação
+    /// (largá-la mandava STOP_SENDING ao telemóvel).
+    recv: quinn::RecvStream,
+    hello: Packet,
+    device_name: String,
+    fingerprint: String,
+    newly_paired: bool,
+}
+
+/// Porque é que uma ligação não passou o gate.
+#[derive(Debug)]
+enum PreAuthError {
+    HandshakeTimeout,
+    Handshake(String),
+    NoCert,
+    HelloTimeout,
+    BadHello(String),
+    Unauthorized,
+    Blocked(Duration),
+    Store(std::io::Error),
+}
+
+impl std::fmt::Display for PreAuthError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PreAuthError::HandshakeTimeout => write!(f, "handshake sem resposta"),
+            PreAuthError::Handshake(e) => write!(f, "handshake falhou: {e}"),
+            PreAuthError::NoCert => write!(f, "sem certificado de cliente"),
+            PreAuthError::HelloTimeout => write!(f, "core.hello não chegou a tempo"),
+            PreAuthError::BadHello(e) => write!(f, "core.hello inválido: {e}"),
+            PreAuthError::Unauthorized => {
+                write!(f, "dispositivo não emparelhado e sem token válido")
+            }
+            PreAuthError::Blocked(left) => {
+                write!(f, "IP bloqueado por tokens errados (faltam {left:.0?})")
+            }
+            PreAuthError::Store(e) => write!(f, "não foi possível guardar o emparelhamento: {e}"),
+        }
+    }
+}
+
+/// Códigos de fecho (de aplicação) para quem não passa o gate.
+const CLOSE_HELLO_TIMEOUT: u32 = 0x10;
+const CLOSE_BAD_HELLO: u32 = 0x11;
+const CLOSE_UNAUTHORIZED: u32 = 0x12;
+const CLOSE_BLOCKED: u32 = 0x13;
+
+impl PreAuthError {
+    fn close_code(&self) -> u32 {
+        match self {
+            PreAuthError::HelloTimeout => CLOSE_HELLO_TIMEOUT,
+            PreAuthError::BadHello(_) => CLOSE_BAD_HELLO,
+            PreAuthError::Blocked(_) => CLOSE_BLOCKED,
+            _ => CLOSE_UNAUTHORIZED,
+        }
+    }
+}
+
+/// O gate: handshake, `core.hello` e decisão de emparelhamento, tudo com os
+/// limites de [`gate::Limits`]. Até aqui o peer é anónimo — o TLS aceita
+/// qualquer certificado (`tls_verifier.rs`) e a confiança vem só da
+/// fingerprint fixada, verificada abaixo. Por isso, antes desta decisão:
+/// uma stream bidi, nenhuma uni, 128 KiB de janela (ver `build_endpoint`),
+/// um hello de 64 KiB no máximo e 10 s para o mandar. Só depois de
+/// autorizado se sobe para os limites normais.
+async fn authenticate(
+    incoming: quinn::Incoming,
+    slot: gate::PendingSlot,
+    gate: &gate::Gate,
+    pairing: &Arc<Mutex<PairingStore>>,
+    hud: &Arc<Mutex<HudState>>,
+) -> Result<Authed, PreAuthError> {
+    let ip = incoming.remote_address().ip();
+    let mut fingerprint = None;
+    let result = authenticate_inner(incoming, ip, gate, pairing, hud, &mut fingerprint).await;
+    // O lugar de «por autenticar» liberta-se já, passe ou não.
+    drop(slot);
+    if let Err(e) = &result {
+        log_refused(gate, hud, &e.to_string(), ip, fingerprint.as_deref());
+    }
+    result
+}
+
+async fn authenticate_inner(
+    incoming: quinn::Incoming,
+    ip: std::net::IpAddr,
+    gate: &gate::Gate,
+    pairing: &Arc<Mutex<PairingStore>>,
+    hud: &Arc<Mutex<HudState>>,
+    fingerprint: &mut Option<String>,
+) -> Result<Authed, PreAuthError> {
+    let limits = gate.lock().unwrap().limits;
+    let connection = match tokio::time::timeout(limits.handshake_timeout, incoming).await {
+        Err(_) => return Err(PreAuthError::HandshakeTimeout),
+        Ok(Err(e)) => return Err(PreAuthError::Handshake(e.to_string())),
+        Ok(Ok(c)) => c,
+    };
+    let refuse = |e: PreAuthError| {
+        connection.close(e.close_code().into(), b"");
+        e
+    };
+    let peer_fingerprint =
+        peer_cert_fingerprint(&connection).ok_or_else(|| refuse(PreAuthError::NoCert))?;
+    *fingerprint = Some(peer_fingerprint.clone());
 
     // O primeiro stream bidirecional deve trazer o core.hello — é ali que a
     // autenticação por pareamento acontece antes de qualquer outro pacote.
-    let (mut send, mut recv) = connection.accept_bi().await?;
-    let frame = read_frame(&mut recv).await?;
-    let hello = Packet::decode(&frame)?;
-    if hello.kind != "core.hello" {
-        anyhow::bail!(
-            "primeiro pacote não foi core.hello (recebido: {})",
-            hello.kind
-        );
-    }
+    let (send, recv, hello) = match tokio::time::timeout(
+        limits.hello_timeout,
+        read_hello(&connection, limits.hello_max),
+    )
+    .await
+    {
+        Err(_) => return Err(refuse(PreAuthError::HelloTimeout)),
+        Ok(Err(e)) => return Err(refuse(PreAuthError::BadHello(e))),
+        Ok(Ok(h)) => h,
+    };
 
     let device_name = hello
         .body
@@ -270,26 +447,121 @@ async fn handle_connection(
         .and_then(|b| body_get_bytes(b, "pairing_token"))
         .map(|bytes| bytes.iter().map(|b| format!("{b:02x}")).collect::<String>());
 
-    let (authorized, newly_paired) = {
+    // Um hello sem token de um dispositivo não emparelhado (ex.: um
+    // telemóvel revogado a tentar religar) não testa o token e não conta
+    // como tentativa falhada; só um token errado conta.
+    let now = Instant::now();
+    let newly_paired = {
         let mut store = pairing.lock().unwrap();
         if store.is_paired(&peer_fingerprint) {
-            (true, false)
+            false
         } else if let Some(token_hex) = &token_hex {
-            let ok = store.try_pair_with_token(&peer_fingerprint, token_hex)?;
-            if ok {
-                // O token roda depois de um pareamento: o QR mostrado tem de
-                // passar a ter o novo, senão o próximo pareamento falha.
-                ctx.hud.lock().unwrap().pairing_token_hex = store.current_token_hex.clone();
+            let mut g = gate.lock().unwrap();
+            if let Some(left) = g.blocked_for(ip, now) {
+                // Bloqueado: o token nem é comparado, certo ou errado.
+                return Err(refuse(PreAuthError::Blocked(left)));
             }
-            (ok, ok)
+            match store.try_pair_with_token(&peer_fingerprint, token_hex) {
+                Ok(true) => {
+                    g.record_success(ip);
+                    // O token roda depois de um pareamento: o QR mostrado tem de
+                    // passar a ter o novo, senão o próximo pareamento falha.
+                    hud.lock().unwrap().pairing_token_hex = store.current_token_hex.clone();
+                    true
+                }
+                Ok(false) => {
+                    let out = g.record_failure(ip, now);
+                    if out.rotate {
+                        store.rotate_token();
+                        hud.lock().unwrap().pairing_token_hex = store.current_token_hex.clone();
+                    }
+                    let limits = g.limits;
+                    drop(g);
+                    drop(store);
+                    if let Some(block) = out.blocked {
+                        state::push_log(
+                            hud,
+                            format!(
+                                "[!] emparelhamento: {} tokens errados de {} — bloqueado {block:?}",
+                                limits.fails_per_ip,
+                                gate::IpKey::of(ip),
+                            ),
+                        );
+                    }
+                    if out.rotate {
+                        state::push_log(
+                            hud,
+                            format!(
+                                "[!] emparelhamento: {} tokens errados no total — token novo (o QR na GUI já mudou)",
+                                limits.fails_global
+                            ),
+                        );
+                    }
+                    return Err(refuse(PreAuthError::Unauthorized));
+                }
+                Err(e) => return Err(refuse(PreAuthError::Store(e))),
+            }
         } else {
-            (false, false)
+            return Err(refuse(PreAuthError::Unauthorized));
         }
     };
 
-    if !authorized {
-        anyhow::bail!("dispositivo não pareado e sem pairing_token válido — conexão rejeitada");
+    // Autorizado: abre os limites normais da ligação.
+    connection.set_max_concurrent_bi_streams(AUTH_MAX_BIDI.into());
+    connection.set_max_concurrent_uni_streams(AUTH_MAX_UNI.into());
+    connection.set_receive_window(quinn::VarInt::MAX);
+
+    Ok(Authed {
+        connection,
+        send,
+        recv,
+        hello,
+        device_name,
+        fingerprint: peer_fingerprint,
+        newly_paired,
+    })
+}
+
+/// `accept_bi` + o primeiro frame, limitado a `max` bytes. O tempo-limite
+/// fica com quem chama.
+async fn read_hello(
+    connection: &quinn::Connection,
+    max: u32,
+) -> Result<(quinn::SendStream, quinn::RecvStream, Packet), String> {
+    let (send, mut recv) = connection.accept_bi().await.map_err(|e| e.to_string())?;
+    let hello = read_hello_frame(&mut recv, max).await?;
+    Ok((send, recv, hello))
+}
+
+async fn read_hello_frame<R: tokio::io::AsyncRead + Unpin>(
+    recv: &mut R,
+    max: u32,
+) -> Result<Packet, String> {
+    let frame = read_frame_limited(recv, max)
+        .await
+        .map_err(|e| e.to_string())?;
+    let hello =
+        Packet::decode(&frame).map_err(|_| format!("CBOR inválido ({} bytes)", frame.len()))?;
+    if hello.kind != "core.hello" {
+        let kind: String = hello.kind.chars().take(40).collect();
+        return Err(format!("primeiro pacote não foi core.hello: {kind:?}"));
     }
+    Ok(hello)
+}
+
+/// A sessão de um dispositivo autorizado: resposta ao hello e despacho das
+/// streams até a ligação fechar.
+async fn serve(authed: Authed, pairing: Arc<Mutex<PairingStore>>, ctx: Ctx) -> anyhow::Result<()> {
+    let Authed {
+        connection,
+        mut send,
+        recv: _hello_recv,
+        hello,
+        device_name,
+        fingerprint: peer_fingerprint,
+        newly_paired,
+    } = authed;
+    println!("[+] handshake QUIC/mTLS completo, fingerprint do peer: {peer_fingerprint}");
     {
         let text = |k: &str| {
             hello
@@ -956,11 +1228,35 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
             if let Some(b) = body {
                 let name = body_get_str(b, "name").unwrap_or("arquivo").to_string();
                 let size = crate::protocol::body_get_i64(b, "size").unwrap_or(0).max(0) as u64;
-                state::push_log(
-                    hud,
-                    format!("[i] share.file · recebendo {name} ({size} bytes)"),
-                );
-                share::announce_incoming(packet.id, name, size, &ctx.incoming_files);
+                // Teto e espaço livre verificados já no anúncio, antes de se
+                // criar o ficheiro (o stream recusado leva share.done ok=false).
+                let max = config::max_incoming_file_bytes(&ctx.config);
+                let free = share::free_space_for(&config::download_dir(&ctx.config));
+                match share::announce_incoming(
+                    packet.id,
+                    name.clone(),
+                    size,
+                    &ctx.incoming_files,
+                    max,
+                    free,
+                ) {
+                    Ok(()) => state::push_log(
+                        hud,
+                        format!("[i] share.file · recebendo {name} ({size} bytes)"),
+                    ),
+                    Err(motivo) => {
+                        state::push_log(
+                            hud,
+                            format!("[!] share.file recusado · {name} ({size} bytes): {motivo}"),
+                        );
+                        crate::hub::global().publish(hyprlink_proto::link::Event::Notice(
+                            hyprlink_proto::link::Notice::Failed {
+                                op: hyprlink_proto::link::Op::Files,
+                                error: hyprlink_proto::link::ErrorKind::Refused,
+                            },
+                        ));
+                    }
+                }
             }
         }
 
@@ -997,8 +1293,20 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
 
         "share.url" => {
             if let Some(url) = body.and_then(|b| body_get_str(b, "url")) {
-                state::push_log(hud, format!("[i] share.url {url}"));
-                let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+                // Só http(s): ver open_url.rs. Recusado → log sem o URL
+                // completo e aviso na GUI.
+                match crate::open_url::safe_open_url(url) {
+                    Ok(()) => state::push_log(hud, format!("[i] share.url {url}")),
+                    Err(motivo) => {
+                        state::push_log(hud, format!("[!] share.url recusado ({motivo})"));
+                        crate::hub::global().publish(hyprlink_proto::link::Event::Notice(
+                            hyprlink_proto::link::Notice::Failed {
+                                op: hyprlink_proto::link::Op::Phone,
+                                error: hyprlink_proto::link::ErrorKind::Refused,
+                            },
+                        ));
+                    }
+                }
             }
         }
 
@@ -1068,4 +1376,518 @@ fn default_iface_mac() -> Option<String> {
     let mac = std::fs::read_to_string(format!("/sys/class/net/{iface}/address")).ok()?;
     let mac = mac.trim().to_string();
     (mac.len() == 17).then_some(mac)
+}
+
+#[cfg(test)]
+mod tests {
+    //! O gate antes da autenticação com QUIC a sério em loopback: um servidor
+    //! com `build_endpoint` + `admit_incoming` + `authenticate` (o mesmo
+    //! caminho do `run`, sem a sessão) e clientes com certificados próprios.
+    //! O token é fictício.
+
+    use super::*;
+    use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+    use rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, ServerName, UnixTime};
+    use rustls::{DigitallySignedStruct, SignatureScheme};
+    use tokio::sync::mpsc;
+
+    const TOKEN: &str = "00112233445566778899aabbccddeeff";
+    const WRONG: &str = "ffeeddccbbaa99887766554433221100";
+
+    #[derive(Debug)]
+    struct AnyServer(rustls::crypto::WebPkiSupportedAlgorithms);
+
+    impl ServerCertVerifier for AnyServer {
+        fn verify_server_cert(
+            &self,
+            _: &CertificateDer<'_>,
+            _: &[CertificateDer<'_>],
+            _: &ServerName<'_>,
+            _: &[u8],
+            _: UnixTime,
+        ) -> Result<ServerCertVerified, rustls::Error> {
+            Ok(ServerCertVerified::assertion())
+        }
+        fn verify_tls12_signature(
+            &self,
+            message: &[u8],
+            cert: &CertificateDer<'_>,
+            dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+            rustls::crypto::verify_tls12_signature(message, cert, dss, &self.0)
+        }
+        fn verify_tls13_signature(
+            &self,
+            message: &[u8],
+            cert: &CertificateDer<'_>,
+            dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+            rustls::crypto::verify_tls13_signature(message, cert, dss, &self.0)
+        }
+        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+            self.0.supported_schemes()
+        }
+    }
+
+    fn new_cert() -> (CertificateDer<'static>, PrivateKeyDer<'static>) {
+        let rcgen::CertifiedKey { cert, signing_key } =
+            rcgen::generate_simple_self_signed(vec!["teste".to_string()]).unwrap();
+        (
+            cert.der().clone(),
+            PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(signing_key.serialize_der())),
+        )
+    }
+
+    /// Um «telemóvel»: endpoint cliente num IP de loopback, com certificado próprio.
+    struct Peer {
+        endpoint: quinn::Endpoint,
+        fingerprint: String,
+    }
+
+    fn peer(ip: &str) -> Peer {
+        let provider = rustls::crypto::ring::default_provider();
+        let (cert, key) = new_cert();
+        let fingerprint = fingerprint_der(cert.as_ref());
+        let mut tls = rustls::ClientConfig::builder_with_provider(Arc::new(provider.clone()))
+            .with_protocol_versions(&[&rustls::version::TLS13])
+            .unwrap()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(AnyServer(
+                provider.signature_verification_algorithms,
+            )))
+            .with_client_auth_cert(vec![cert], key)
+            .unwrap();
+        tls.alpn_protocols = vec![b"hyprlink/1".to_vec()];
+        let quic = quinn::crypto::rustls::QuicClientConfig::try_from(tls).unwrap();
+        let mut endpoint = quinn::Endpoint::client(format!("{ip}:0").parse().unwrap()).unwrap();
+        endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(quic)));
+        Peer {
+            endpoint,
+            fingerprint,
+        }
+    }
+
+    impl Peer {
+        async fn connect(
+            &self,
+            addr: SocketAddr,
+        ) -> Result<quinn::Connection, quinn::ConnectionError> {
+            self.endpoint
+                .connect(addr, "HyprLink-Desktop")
+                .unwrap()
+                .await
+        }
+    }
+
+    struct Server {
+        addr: SocketAddr,
+        pairing: Arc<Mutex<PairingStore>>,
+        hud: Arc<Mutex<HudState>>,
+        results: mpsc::UnboundedReceiver<Result<Authed, PreAuthError>>,
+        _endpoint: quinn::Endpoint,
+    }
+
+    fn server(limits: gate::Limits) -> Server {
+        let (cert_der, key_der) = new_cert();
+        let identity = ServerIdentity {
+            fingerprint_hex: fingerprint_der(cert_der.as_ref()),
+            cert_der,
+            key_der,
+        };
+        let endpoint = build_endpoint(&identity, "127.0.0.1:0".parse().unwrap()).unwrap();
+        let addr = endpoint.local_addr().unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "hyprlinkd-gate-{}-{}",
+            std::process::id(),
+            addr.port()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let pairing = Arc::new(Mutex::new(PairingStore::in_dir(&dir, TOKEN)));
+        let hud = HudState::new(TOKEN.to_string());
+        let gate = gate::new(limits);
+        let (tx, results) = mpsc::unbounded_channel();
+        {
+            let (endpoint, pairing, hud) = (endpoint.clone(), pairing.clone(), hud.clone());
+            tokio::spawn(async move {
+                while let Some(incoming) = endpoint.accept().await {
+                    let Some((incoming, slot)) = admit_incoming(incoming, &gate, &hud) else {
+                        continue;
+                    };
+                    let (gate, pairing, hud, tx) =
+                        (gate.clone(), pairing.clone(), hud.clone(), tx.clone());
+                    tokio::spawn(async move {
+                        let r = authenticate(incoming, slot, &gate, &pairing, &hud).await;
+                        let _ = tx.send(r);
+                    });
+                }
+            });
+        }
+        Server {
+            addr,
+            pairing,
+            hud,
+            results,
+            _endpoint: endpoint,
+        }
+    }
+
+    fn quick() -> gate::Limits {
+        gate::Limits {
+            hello_timeout: Duration::from_millis(300),
+            block_base: Duration::from_millis(400),
+            block_max: Duration::from_secs(2),
+            ..gate::Limits::DEFAULT
+        }
+    }
+
+    fn hex_bytes(hex: &str) -> Vec<u8> {
+        (0..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+            .collect()
+    }
+
+    /// Manda um `core.hello` como a app (com ou sem token). Devolve a stream
+    /// para não a largar antes do fim do teste.
+    async fn send_hello(
+        conn: &quinn::Connection,
+        token: Option<&str>,
+    ) -> (quinn::SendStream, quinn::RecvStream) {
+        let mut body = vec![(
+            Value::Text("device_name".into()),
+            Value::Text("Teste".into()),
+        )];
+        if let Some(t) = token {
+            body.push((
+                Value::Text("pairing_token".into()),
+                Value::Bytes(hex_bytes(t)),
+            ));
+        }
+        let hello = Packet::new(1, "core.hello", Some(Value::Map(body)), false);
+        let (mut send, recv) = conn.open_bi().await.unwrap();
+        write_frame(&mut send, &hello.encode()).await.unwrap();
+        (send, recv)
+    }
+
+    async fn close_code(conn: &quinn::Connection) -> u64 {
+        match tokio::time::timeout(Duration::from_secs(5), conn.closed())
+            .await
+            .expect("a ligação devia ter sido fechada")
+        {
+            quinn::ConnectionError::ApplicationClosed(c) => c.error_code.into_inner(),
+            other => panic!("fecho inesperado: {other:?}"),
+        }
+    }
+
+    async fn next(s: &mut Server) -> Result<Authed, PreAuthError> {
+        tokio::time::timeout(Duration::from_secs(5), s.results.recv())
+            .await
+            .expect("o servidor devia ter decidido")
+            .unwrap()
+    }
+
+    /// Hello real da app (campos do `buildHelloCbor`): ~350 bytes, muito
+    /// abaixo dos 64 KiB do gate.
+    #[test]
+    fn hello_da_app_cabe_com_folga() {
+        let text = |k: &str, v: &str| (Value::Text(k.into()), Value::Text(v.into()));
+        let caps = [
+            "core",
+            "clipboard",
+            "notification",
+            "media",
+            "battery",
+            "share",
+            "webcam",
+            "audio",
+            "input",
+            "hypr",
+            "phone",
+            "phone_status",
+            "media_session",
+        ];
+        let body = Value::Map(vec![
+            text("device_name", &"N".repeat(64)),
+            text("manufacturer", "Xiaomi"),
+            text("model", "22021211RG"),
+            text("android", "14"),
+            text("app_version", "0.1.0"),
+            (
+                Value::Text("capabilities".into()),
+                Value::Array(caps.iter().map(|c| Value::Text((*c).into())).collect()),
+            ),
+            (
+                Value::Text("pairing_token".into()),
+                Value::Bytes(vec![0; 16]),
+            ),
+        ]);
+        let len = Packet::new(1, "core.hello", Some(body), false)
+            .encode()
+            .len();
+        assert!(len < 512, "{len} bytes");
+        assert!(len as u32 * 64 < gate::Limits::DEFAULT.hello_max);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn hello_que_nao_chega_expira_aos_10_s() {
+        let limits = gate::Limits::DEFAULT;
+        // Ainda à espera aos 9,9 s.
+        let (mut reader, _writer) = tokio::io::duplex(64);
+        let early = tokio::time::timeout(
+            Duration::from_millis(9_900),
+            read_hello_frame(&mut reader, limits.hello_max),
+        )
+        .await;
+        assert!(early.is_err());
+        // O mesmo `timeout` do `authenticate_inner`: desiste aos 10 s certos
+        // (o relógio pausado avança sozinho).
+        let (mut reader, _writer) = tokio::io::duplex(64);
+        let start = tokio::time::Instant::now();
+        let r = tokio::time::timeout(
+            limits.hello_timeout,
+            read_hello_frame(&mut reader, limits.hello_max),
+        )
+        .await;
+        assert!(r.is_err());
+        assert_eq!(start.elapsed(), Duration::from_secs(10));
+    }
+
+    #[tokio::test]
+    async fn prefixo_de_16_mib_fecha_sem_ler_mais() {
+        let mut s = server(gate::Limits::DEFAULT);
+        let p = peer("127.0.0.1");
+        let conn = p.connect(s.addr).await.unwrap();
+        let (mut send, _recv) = conn.open_bi().await.unwrap();
+        send.write_all(&crate::protocol::MAX_FRAME_SIZE.to_be_bytes())
+            .await
+            .unwrap();
+        send.write_all(&[0u8; 1024]).await.unwrap();
+        let started = std::time::Instant::now();
+        assert_eq!(close_code(&conn).await, u64::from(CLOSE_BAD_HELLO));
+        // Não esperou pelo tempo-limite (10 s): recusou logo pelo tamanho.
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert!(matches!(next(&mut s).await, Err(PreAuthError::BadHello(_))));
+    }
+
+    #[tokio::test]
+    async fn outro_pacote_antes_do_hello_fecha() {
+        let mut s = server(gate::Limits::DEFAULT);
+        let p = peer("127.0.0.1");
+        let conn = p.connect(s.addr).await.unwrap();
+        let (mut send, _recv) = conn.open_bi().await.unwrap();
+        let ping = Packet::new(1, "core.ping", None, false);
+        write_frame(&mut send, &ping.encode()).await.unwrap();
+        assert_eq!(close_code(&conn).await, u64::from(CLOSE_BAD_HELLO));
+        assert!(matches!(next(&mut s).await, Err(PreAuthError::BadHello(_))));
+    }
+
+    #[tokio::test]
+    async fn peer_calado_fecha_no_tempo_limite() {
+        let mut s = server(quick());
+        let p = peer("127.0.0.1");
+        let conn = p.connect(s.addr).await.unwrap();
+        assert_eq!(close_code(&conn).await, u64::from(CLOSE_HELLO_TIMEOUT));
+        assert!(matches!(
+            next(&mut s).await,
+            Err(PreAuthError::HelloTimeout)
+        ));
+    }
+
+    #[tokio::test]
+    async fn excesso_de_ligacoes_por_autenticar_e_recusado() {
+        // Por IP: 2.
+        let s = server(gate::Limits::DEFAULT);
+        let a = peer("127.0.0.1");
+        let _c1 = a.connect(s.addr).await.unwrap();
+        let _c2 = a.connect(s.addr).await.unwrap();
+        assert!(matches!(
+            a.connect(s.addr).await,
+            Err(quinn::ConnectionError::ConnectionClosed(_))
+        ));
+        // Outro IP ainda entra.
+        let b = peer("127.0.0.2");
+        let _c3 = b.connect(s.addr).await.unwrap();
+
+        // No total: aqui 3.
+        let s = server(gate::Limits {
+            max_pending: 3,
+            ..gate::Limits::DEFAULT
+        });
+        let _d1 = a.connect(s.addr).await.unwrap();
+        let _d2 = a.connect(s.addr).await.unwrap();
+        let _d3 = b.connect(s.addr).await.unwrap();
+        let c = peer("127.0.0.3");
+        assert!(matches!(
+            c.connect(s.addr).await,
+            Err(quinn::ConnectionError::ConnectionClosed(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn lugar_liberta_se_depois_de_decidir() {
+        let mut s = server(quick());
+        let a = peer("127.0.0.1");
+        for _ in 0..4 {
+            let conn = a.connect(s.addr).await.unwrap();
+            let _st = send_hello(&conn, None).await;
+            assert_eq!(close_code(&conn).await, u64::from(CLOSE_UNAUTHORIZED));
+            assert!(matches!(
+                next(&mut s).await,
+                Err(PreAuthError::Unauthorized)
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn forca_bruta_bloqueia_o_ip_ate_ao_fim_do_recuo() {
+        let mut s = server(quick());
+        let a = peer("127.0.0.1");
+        for _ in 0..5 {
+            let conn = a.connect(s.addr).await.unwrap();
+            let _st = send_hello(&conn, Some(WRONG)).await;
+            assert_eq!(close_code(&conn).await, u64::from(CLOSE_UNAUTHORIZED));
+            assert!(matches!(
+                next(&mut s).await,
+                Err(PreAuthError::Unauthorized)
+            ));
+        }
+        // Bloqueado: nem o token certo passa.
+        let conn = a.connect(s.addr).await.unwrap();
+        let _st = send_hello(&conn, Some(TOKEN)).await;
+        assert_eq!(close_code(&conn).await, u64::from(CLOSE_BLOCKED));
+        assert!(matches!(next(&mut s).await, Err(PreAuthError::Blocked(_))));
+        assert!(!s.pairing.lock().unwrap().is_paired(&a.fingerprint));
+        // O bloqueio não gasta o token.
+        assert_eq!(s.pairing.lock().unwrap().current_token_hex, TOKEN);
+
+        // Outro IP não está bloqueado.
+        let b = peer("127.0.0.2");
+        let conn = b.connect(s.addr).await.unwrap();
+        let _st = send_hello(&conn, Some(WRONG)).await;
+        assert_eq!(close_code(&conn).await, u64::from(CLOSE_UNAUTHORIZED));
+        let _ = next(&mut s).await;
+
+        // Passado o recuo, o token certo emparelha.
+        tokio::time::sleep(Duration::from_millis(450)).await;
+        let conn = a.connect(s.addr).await.unwrap();
+        let _st = send_hello(&conn, Some(TOKEN)).await;
+        let authed = next(&mut s)
+            .await
+            .expect("devia emparelhar depois do recuo");
+        assert!(authed.newly_paired);
+        assert!(s.pairing.lock().unwrap().is_paired(&a.fingerprint));
+    }
+
+    #[tokio::test]
+    async fn demasiados_tokens_errados_no_total_rodam_o_token() {
+        let mut s = server(gate::Limits {
+            fails_global: 6,
+            ..quick()
+        });
+        let ips = ["127.0.0.1", "127.0.0.2"];
+        for (i, n) in [(0, 5), (1, 1)] {
+            let p = peer(ips[i]);
+            for _ in 0..n {
+                let conn = p.connect(s.addr).await.unwrap();
+                let _st = send_hello(&conn, Some(WRONG)).await;
+                assert_eq!(close_code(&conn).await, u64::from(CLOSE_UNAUTHORIZED));
+                let _ = next(&mut s).await;
+            }
+        }
+        let novo = s.pairing.lock().unwrap().current_token_hex.clone();
+        assert_ne!(novo, TOKEN);
+        assert_eq!(s.hud.lock().unwrap().pairing_token_hex, novo);
+
+        // O token antigo já não serve, o novo sim.
+        let c = peer("127.0.0.3");
+        let conn = c.connect(s.addr).await.unwrap();
+        let _st = send_hello(&conn, Some(TOKEN)).await;
+        assert_eq!(close_code(&conn).await, u64::from(CLOSE_UNAUTHORIZED));
+        let _ = next(&mut s).await;
+        let conn = c.connect(s.addr).await.unwrap();
+        let _st = send_hello(&conn, Some(&novo)).await;
+        assert!(next(&mut s).await.unwrap().newly_paired);
+    }
+
+    #[tokio::test]
+    async fn emparelhamento_novo_com_o_token_certo() {
+        let mut s = server(gate::Limits::DEFAULT);
+        let p = peer("127.0.0.1");
+        let conn = p.connect(s.addr).await.unwrap();
+        let _st = send_hello(&conn, Some(TOKEN)).await;
+        let authed = next(&mut s).await.expect("token certo devia emparelhar");
+        assert!(authed.newly_paired);
+        assert_eq!(authed.fingerprint, p.fingerprint);
+        assert_eq!(authed.device_name, "Teste");
+        let store = s.pairing.lock().unwrap();
+        assert!(store.is_paired(&p.fingerprint));
+        // Uso único: o token rodou e o HUD (QR) acompanha.
+        assert_ne!(store.current_token_hex, TOKEN);
+        assert_eq!(
+            s.hud.lock().unwrap().pairing_token_hex,
+            store.current_token_hex
+        );
+    }
+
+    /// Dispositivo já emparelhado: entra sem token, mesmo vindo de um IP
+    /// bloqueado (NAT partilhado), e só depois de autorizado pode abrir mais
+    /// streams.
+    #[tokio::test]
+    async fn emparelhado_entra_e_so_depois_os_limites_sobem() {
+        // Tempo para o hello maior do que as esperas abaixo.
+        let mut s = server(gate::Limits {
+            hello_timeout: Duration::from_secs(3),
+            ..quick()
+        });
+        let p = peer("127.0.0.1");
+        s.pairing.lock().unwrap().insert_paired(&p.fingerprint);
+        // Outro peer bloqueia o IP.
+        let intruso = peer("127.0.0.1");
+        for _ in 0..5 {
+            let conn = intruso.connect(s.addr).await.unwrap();
+            let _st = send_hello(&conn, Some(WRONG)).await;
+            close_code(&conn).await;
+            let _ = next(&mut s).await;
+        }
+
+        let conn = p.connect(s.addr).await.unwrap();
+        let (mut send, recv) = conn.open_bi().await.unwrap();
+        // Antes do hello: nenhuma uni e só a bidi do hello.
+        let short = Duration::from_millis(200);
+        assert!(tokio::time::timeout(short, conn.open_uni()).await.is_err());
+        assert!(tokio::time::timeout(short, conn.open_bi()).await.is_err());
+
+        let hello = Packet::new(
+            1,
+            "core.hello",
+            Some(Value::Map(vec![(
+                Value::Text("device_name".into()),
+                Value::Text("Teste".into()),
+            )])),
+            false,
+        );
+        write_frame(&mut send, &hello.encode()).await.unwrap();
+        let authed = next(&mut s).await.expect("emparelhado devia entrar");
+        assert!(!authed.newly_paired);
+
+        // Depois: várias streams de cada tipo, como antes do gate.
+        let long = Duration::from_secs(2);
+        let mut keep = Vec::new();
+        for _ in 0..3 {
+            let mut uni = tokio::time::timeout(long, conn.open_uni())
+                .await
+                .expect("uni devia abrir depois de autorizado")
+                .unwrap();
+            uni.write_all(b"x").await.unwrap();
+            keep.push(uni);
+            let (mut bi, r) = tokio::time::timeout(long, conn.open_bi())
+                .await
+                .expect("bidi devia abrir depois de autorizado")
+                .unwrap();
+            bi.write_all(b"x").await.unwrap();
+            keep.push(bi);
+            drop(r);
+        }
+        drop((recv, authed));
+    }
 }

@@ -1314,7 +1314,9 @@ impl App {
             window::close_events().map(Message::WindowClosed),
             iced::event::listen_with(|e, _, _| match e {
                 iced::Event::Window(window::Event::FileDropped(p)) => Some(Message::FileDropped(p)),
-                iced::Event::Window(window::Event::Resized(size)) => Some(Message::WindowResized(size)),
+                iced::Event::Window(window::Event::Resized(size)) => {
+                    Some(Message::WindowResized(size))
+                }
                 _ => None,
             }),
             tray::subscription(),
@@ -1387,23 +1389,17 @@ impl App {
                 Section::Camera => self.webcam.is_some() || self.mirror.is_some(),
                 Section::Notificacoes => !self.notifs.is_empty(),
                 Section::Audio => self.mic_on || self.tap_on,
-                Section::Partilha => {
-                    self.transfers
-                        .iter()
-                        .any(|t| t.state == link::TransferState::Active)
-                }
+                Section::Partilha => self
+                    .transfers
+                    .iter()
+                    .any(|t| t.state == link::TransferState::Active),
                 Section::Multimedia => self.players.iter().any(|p| p.playing),
                 _ => false,
             };
 
             let entry = row![
-                container(iced::widget::Space::new().width(2).height(18)).style(theme::fill(
-                    if active {
-                        ACID
-                    } else {
-                        Color::TRANSPARENT
-                    }
-                )),
+                container(iced::widget::Space::new().width(2).height(18))
+                    .style(theme::fill(if active { ACID } else { Color::TRANSPARENT })),
                 fill_x(),
                 ui::t(
                     s.num(),
@@ -1466,8 +1462,8 @@ impl App {
         .style(theme::nav(settings_active))
         .on_press(Message::Nav(Section::Definicoes));
 
-        let daemon_dot = row![fill_x(), square(ACID, 6.0), fill_x(),]
-            .padding(Padding::from([space::L, 0.0]));
+        let daemon_dot =
+            row![fill_x(), square(ACID, 6.0), fill_x(),].padding(Padding::from([space::L, 0.0]));
 
         container(
             column![
@@ -1770,21 +1766,20 @@ impl App {
                 },
                 MONO_MEDIUM,
                 11.5,
-                PAPER
+                PAPER,
             ));
 
         if !compact {
             row_items = row_items.push(hgap(6.0)).push(kicker("WEST"));
         }
 
-        container(
-            row_items
-                .align_y(Alignment::Center)
-                .height(Length::Fill),
-        )
-        .height(52)
-        .padding(Padding::from([0.0, if compact { space::M } else { space::GUTTER }]))
-        .into()
+        container(row_items.align_y(Alignment::Center).height(Length::Fill))
+            .height(52)
+            .padding(Padding::from([
+                0.0,
+                if compact { space::M } else { space::GUTTER },
+            ]))
+            .into()
     }
 
     fn ticker(&self) -> El<'_> {

@@ -1,7 +1,7 @@
 //! `hyprlinkctl` — the scriptable face of HYPRLINK, for shell plugins and keybinds.
 //!
 //!   hyprlinkctl watch --json [--interval MS]   one JSON snapshot per line
-//!   hyprlinkctl status [--json]
+//!   hyprlinkctl status [--json | --waybar]
 //!   hyprlinkctl ping | clipboard | pair
 //!   hyprlinkctl mic on|off|toggle
 //!   hyprlinkctl tap on|off|toggle
@@ -9,7 +9,7 @@
 //!   hyprlinkctl mirror start|stop|toggle
 //!   hyprlinkctl ws <N>
 //!   hyprlinkctl open                           open (or focus) the GUI
-//!   hyprlinkctl doctor [--json] [--report [f]] relatório de compatibilidade (só lê)
+//!   hyprlinkctl doctor [--json] [--report [f]] [--no-dispatch]  relatório de compatibilidade (só lê)
 //!
 //! Two halves, one binary:
 //! - **text** (no `--json`): the original `ok …` / `erro: …` protocol over
@@ -18,13 +18,22 @@
 //!   phone-url phone-app`.
 //! - **JSON v1** (`--json`, and the commands only this half has).
 //!
-//! The JSON half still talks to the *mock* daemon: commands persist toggles in
-//! `$XDG_RUNTIME_DIR/hyprlink-mock.json`, and `watch` folds them into the
-//! simulation, so a Noctalia panel behaves exactly as it will against the
-//! real `hyprlinkd`. Swapping in the real socket changes only `Backend`.
+//! The JSON half talks to the real `hyprlinkd` over
+//! `$XDG_RUNTIME_DIR/hyprlink.sock` (`real.rs`, `hyprlink_proto::client::Session`).
+//! With the daemon stopped, `watch` keeps emitting `"daemon":"down"` lines and
+//! retries; one-shot commands answer `{"ok":false,"error":"daemon_down",…}`
+//! with a non-zero exit.
+//!
+//! `HYPRLINK_MOCK=1` (or `--mock`) switches the JSON half to the simulator
+//! (`Backend` below, built with the `mock` feature): screenshots, fixtures
+//! and tests. Its commands persist toggles in
+//! `$XDG_RUNTIME_DIR/hyprlink-mock.json` and `watch` folds them into the
+//! simulation; every snapshot says `"daemon":"mock"`.
 
 mod doctor;
 mod legacy;
+mod real;
+mod waybar;
 
 use hyprlink_proto::fmt;
 use hyprlink_proto::host::Probe;
@@ -270,7 +279,8 @@ fn usage() -> ExitCode {
          \n  só texto: send <ficheiro> · dispatch <cmd> · lock · notif <título> [corpo] · url · phone-url · phone-app\n\
          \n  watch --json [--interval MS]   uma linha JSON por instantâneo (por omissão 500 ms)\
          \n  mic|tap|speaker on|off|toggle\n  mirror start|stop|toggle\n  ws <1-10>\
-         \n  doctor [--json] [--report [f]] relatório de compatibilidade (só lê)\
+         \n  status --waybar                 uma linha {{text,tooltip,class}} para a Waybar (lê o status.json)\
+         \n  doctor [--json] [--report [f]] [--no-dispatch]  relatório de compatibilidade (só lê;\n                                 --no-dispatch não faz hyprctl dispatch)\
          \n  shortcuts [--json]              lista os atalhos configurados\
          \n  --lang pt-PT|pt-BR|en|es|zh   idioma dos textos (por omissão, o do ambiente)"
     );
@@ -297,8 +307,75 @@ fn take_lang(args: Vec<String>) -> (Vec<String>, Result<Option<Lang>, String>) {
     (out, lang)
 }
 
+/// O simulador foi pedido? `--mock` nos argumentos ou `HYPRLINK_MOCK` com
+/// um valor que não seja vazio nem `0`.
+fn mock_requested(args: &[String], env: Option<&str>) -> bool {
+    args.iter().any(|a| a == "--mock") || env.is_some_and(|v| !v.is_empty() && v != "0")
+}
+
+/// A metade JSON contra o daemon real (`real.rs`).
+fn run_real(pos: &[&str], json: bool, interval: Duration) -> ExitCode {
+    match pos.first().copied() {
+        Some("watch") => real::watch(json, interval, human),
+        Some("status") => real::status(json, human),
+        Some("ping") => real::ping(json),
+        Some("clipboard") => real::clipboard(json),
+        Some("pair") => real::pair(json),
+        Some(which @ ("mic" | "tap" | "mirror" | "speaker")) => {
+            real::channel(json, which, pos.get(1).copied()).unwrap_or_else(usage)
+        }
+        Some("ws") => match pos
+            .get(1)
+            .and_then(|v| v.parse::<u8>().ok())
+            .filter(|n| (1..=10).contains(n))
+        {
+            Some(n) => real::workspace(json, n),
+            None => usage(),
+        },
+        Some("open") => real::open_gui(json),
+        _ => usage(),
+    }
+}
+
+/// `shortcuts`: lê o `config.json` local (igual com e sem daemon).
+fn shortcuts(json: bool) -> ExitCode {
+    let env = hyprlink_env::Env::real();
+    let config_path = env.hyprlink_config_path();
+    #[derive(serde::Deserialize)]
+    struct Cfg {
+        #[serde(default)]
+        shortcuts: Vec<ShortcutItem>,
+    }
+    #[derive(serde::Deserialize, serde::Serialize)]
+    struct ShortcutItem {
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        name: String,
+        #[serde(default)]
+        command: String,
+    }
+    let list: Vec<ShortcutItem> = config_path
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|s| serde_json::from_str::<Cfg>(&s).ok())
+        .map(|c| c.shortcuts)
+        .unwrap_or_default();
+    if json {
+        print_json(&serde_json::json!({ "shortcuts": list }));
+    } else if list.is_empty() {
+        println!("sem atalhos configurados");
+    } else {
+        for s in list {
+            println!("{}: {} -> {}", s.id, s.name, s.command);
+        }
+    }
+    ExitCode::SUCCESS
+}
+
 fn main() -> ExitCode {
     let (args, lang) = take_lang(std::env::args().skip(1).collect());
+    let mock = mock_requested(&args, std::env::var("HYPRLINK_MOCK").ok().as_deref());
+    let args: Vec<String> = args.into_iter().filter(|a| a != "--mock").collect();
     match lang {
         // Sem flag, o idioma vem do ambiente (LC_ALL / LC_MESSAGES / LANG).
         Ok(l) => i18n::set(l.unwrap_or_else(i18n::detect)),
@@ -311,7 +388,10 @@ fn main() -> ExitCode {
         let _ = usage();
         return ExitCode::SUCCESS;
     }
-    if args.iter().any(|a| a == "--version" || a == "-V" || a == "-v") {
+    if args
+        .iter()
+        .any(|a| a == "--version" || a == "-V" || a == "-v")
+    {
         println!("hyprlinkctl {}", env!("CARGO_PKG_VERSION"));
         return ExitCode::SUCCESS;
     }
@@ -319,12 +399,18 @@ fn main() -> ExitCode {
     if args.first().map(String::as_str) == Some("doctor") {
         return doctor::run(&args);
     }
+    // Antes do protocolo de texto: o `status` sem `--json` iria para o cmd.sock.
+    if args.first().map(String::as_str) == Some("status") && args.iter().any(|a| a == "--waybar") {
+        return waybar::run();
+    }
     let first = args
         .iter()
         .find(|a| !a.starts_with("--"))
         .map(String::as_str);
+    // Com o simulador, os comandos partilhados ficam no simulador mesmo sem
+    // `--json` (o protocolo de texto é sempre o daemon real).
     if let Some(cmd) = first
-        && (legacy::ONLY_HERE.contains(&cmd) || (!json && legacy::SHARED.contains(&cmd)))
+        && (legacy::ONLY_HERE.contains(&cmd) || (!json && !mock && legacy::SHARED.contains(&cmd)))
     {
         legacy::run(args);
     }
@@ -340,10 +426,17 @@ fn main() -> ExitCode {
             .and_then(|v| v.parse().ok())
     };
 
+    let interval = Duration::from_millis(flag("--interval").unwrap_or(500).clamp(100, 10_000));
+    if pos.first().copied() == Some("shortcuts") {
+        return shortcuts(json);
+    }
+    if !mock {
+        return run_real(&pos, json, interval);
+    }
+
+    // Simulador (`HYPRLINK_MOCK=1` / `--mock`).
     match pos.first().copied() {
         Some("watch") => {
-            let interval =
-                Duration::from_millis(flag("--interval").unwrap_or(500).clamp(100, 10_000));
             let mut b = Backend::new();
             let mut last_emit = Instant::now() - interval;
             let mut last_sync = Instant::now();
@@ -466,39 +559,6 @@ fn main() -> ExitCode {
                 }
             }
         }
-        Some("shortcuts") => {
-            let env = hyprlink_env::Env::real();
-            let config_path = env.hyprlink_config_path();
-            #[derive(serde::Deserialize)]
-            struct Cfg {
-                #[serde(default)]
-                shortcuts: Vec<ShortcutItem>,
-            }
-            #[derive(serde::Deserialize, serde::Serialize)]
-            struct ShortcutItem {
-                #[serde(default)]
-                id: String,
-                #[serde(default)]
-                name: String,
-                #[serde(default)]
-                command: String,
-            }
-            let list: Vec<ShortcutItem> = config_path
-                .and_then(|p| std::fs::read_to_string(p).ok())
-                .and_then(|s| serde_json::from_str::<Cfg>(&s).ok())
-                .map(|c| c.shortcuts)
-                .unwrap_or_default();
-            if json {
-                print_json(&serde_json::json!({ "shortcuts": list }));
-            } else if list.is_empty() {
-                println!("sem atalhos configurados");
-            } else {
-                for s in list {
-                    println!("{}: {} -> {}", s.id, s.name, s.command);
-                }
-            }
-            ExitCode::SUCCESS
-        }
         _ => usage(),
     }
 }
@@ -509,6 +569,15 @@ mod lang_tests {
 
     fn v(a: &[&str]) -> Vec<String> {
         a.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn simulador_so_quando_pedido() {
+        assert!(!mock_requested(&v(&["watch", "--json"]), None));
+        assert!(mock_requested(&v(&["watch", "--mock"]), None));
+        assert!(mock_requested(&v(&["watch"]), Some("1")));
+        assert!(!mock_requested(&v(&["watch"]), Some("0")));
+        assert!(!mock_requested(&v(&["watch"]), Some("")));
     }
 
     #[test]

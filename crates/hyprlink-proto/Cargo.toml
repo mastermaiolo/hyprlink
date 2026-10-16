@@ -14,6 +14,9 @@ mock = []
 fmt = ["dep:chrono"]
 
 [dependencies]
+# Só para `instance` (sessão Hyprland em `host.rs`); o hyprlink-env não
+# depende de nenhum crate do HyprLink, não há ciclo.
+hyprlink-env.workspace = true
 serde.workspace = true
 ciborium.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"], optional = true }

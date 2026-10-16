@@ -536,3 +536,39 @@ fn tap_source_invalido_da_aviso() {
     assert_eq!(r.options.tap_source, TapChoice::Auto);
     assert!(r.option_problems.iter().any(|p| p.contains("tap_source")));
 }
+
+/// O doctor fora do ambiente do Hyprland: a instância vem dos diretórios,
+/// e o relatório diz de onde.
+#[test]
+fn doctor_encontra_a_instancia_sem_a_variavel() {
+    use hyprlink_env::instance::Source;
+    let rt = std::env::temp_dir().join(format!("hyprlink-doctor-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&rt);
+    let inst = rt.join("hypr/abc_1_1");
+    std::fs::create_dir_all(&inst).unwrap();
+    std::fs::write(inst.join(".socket.sock"), b"").unwrap();
+
+    let mut e = env("amd_so");
+    e.vars
+        .insert("XDG_RUNTIME_DIR".into(), rt.to_string_lossy().into_owned());
+    e.vars.remove("HYPRLAND_INSTANCE_SIGNATURE");
+    let r = report::collect(&e, &Overrides::default());
+    assert_eq!(r.hyprland_instance, Some(Source::Discovered));
+    assert!(report::text_redacted(&e, &r).contains("instância    : descoberta"));
+    let json: serde_json::Value = serde_json::from_str(&report::json_redacted(&e, &r)).unwrap();
+    assert_eq!(json["hyprland_instance"], "discovered");
+
+    e.vars
+        .insert("HYPRLAND_INSTANCE_SIGNATURE".into(), "abc_1_1".into());
+    let r = report::collect(&e, &Overrides::default());
+    assert_eq!(r.hyprland_instance, Some(Source::Variable));
+    assert!(report::text_redacted(&e, &r).contains("da variável"));
+
+    // Sem nada vivo no runtime dir (e sem /tmp/hypr nesta árvore): null.
+    std::fs::remove_dir_all(rt.join("hypr")).unwrap();
+    let r = report::collect(&e, &Overrides::default());
+    if !std::path::Path::new("/tmp/hypr").exists() {
+        assert_eq!(r.hyprland_instance, None);
+    }
+    std::fs::remove_dir_all(&rt).ok();
+}

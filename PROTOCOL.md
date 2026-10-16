@@ -257,7 +257,7 @@ os implementar) e não envia o comando.
 |---|---|---|
 | `share.file` | anúncio bidi (`has_payload=true`), **as duas direções** | `{name, size}` — `id` do pacote correlaciona com o uni-stream de bytes |
 | `share.progress` | push **D→P sempre** | `{id, bytes, total}` |
-| `share.done` | push **D→P sempre** | `{id, ok, sha256 (hex), bytes, error?}` |
+| `share.done` | push **D→P sempre** | `{id, ok, sha256 (hex), bytes, error?, name?}` — `name` (opcional, telemóvel→PC): nome com que o PC gravou, que pode ser `nome (1).ext` |
 | `share.url` | P→D one-way | `{url}` |
 
 Uni-stream de ficheiro: 8 bytes id + bytes crus, chunks de 32 KiB. SHA-256

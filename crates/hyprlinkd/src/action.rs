@@ -176,58 +176,6 @@ fn patience(name: &str) -> Duration {
     }
 }
 
-/// Variáveis de sessão em falta no ambiente do daemon (arrancado pelo
-/// `systemd --user` ou por um `exec-once`, pode não ter `WAYLAND_DISPLAY` nem
-/// `HYPRLAND_INSTANCE_SIGNATURE`), descobertas pelos sockets em
-/// `$XDG_RUNTIME_DIR`. Só devolve o que falta.
-pub fn session_env(
-    runtime_dir: &Path,
-    get: &dyn Fn(&str) -> Option<String>,
-) -> Vec<(String, String)> {
-    let mut out = Vec::new();
-    if get("WAYLAND_DISPLAY").is_none() {
-        let mut socks: Vec<String> = std::fs::read_dir(runtime_dir)
-            .into_iter()
-            .flatten()
-            .filter_map(|e| e.ok())
-            .map(|e| e.file_name().to_string_lossy().into_owned())
-            .filter(|n| n.starts_with("wayland-") && !n.ends_with(".lock"))
-            .collect();
-        socks.sort();
-        if let Some(s) = socks.into_iter().next() {
-            out.push(("WAYLAND_DISPLAY".to_string(), s));
-        }
-    }
-    if get("HYPRLAND_INSTANCE_SIGNATURE").is_none() {
-        // A instância mais recente (as assinaturas começam por um hash e
-        // acabam em `_<timestamp>_<n>`).
-        let mut inst: Vec<(std::time::SystemTime, String)> =
-            std::fs::read_dir(runtime_dir.join("hypr"))
-                .into_iter()
-                .flatten()
-                .filter_map(|e| e.ok())
-                .filter(|e| e.path().join(".socket.sock").exists())
-                .filter_map(|e| {
-                    let t = e.metadata().ok()?.modified().ok()?;
-                    Some((t, e.file_name().to_string_lossy().into_owned()))
-                })
-                .collect();
-        inst.sort();
-        if let Some((_, sig)) = inst.pop() {
-            out.push(("HYPRLAND_INSTANCE_SIGNATURE".to_string(), sig));
-        }
-    }
-    out
-}
-
-/// `session_env` com o ambiente real do processo.
-pub fn real_session_env() -> Vec<(String, String)> {
-    let Some(rt) = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from) else {
-        return Vec::new();
-    };
-    session_env(&rt, &|k| std::env::var(k).ok())
-}
-
 fn on_path(exe: &str) -> bool {
     std::env::var_os("PATH")
         .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(exe).is_file()))
@@ -243,12 +191,10 @@ fn shots_dir() -> PathBuf {
 /// Corre os candidatos por ordem; devolve o primeiro sucesso.
 /// «Sucesso» = saiu com 0, ou ainda corre passado `patience`.
 fn run_candidates(cands: &[Vec<String>], wait: Duration, area: bool) -> Result<(), String> {
-    let env = real_session_env();
     let mut last = "failed".to_string();
     for c in cands {
-        let mut cmd = std::process::Command::new(&c[0]);
+        let mut cmd = crate::session::command(&c[0]);
         cmd.args(&c[1..])
-            .envs(env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null());
@@ -472,32 +418,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn ambiente_de_sessao_so_o_que_falta() {
-        let rt = std::env::temp_dir().join(format!("hyprlink-rt-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&rt);
-        std::fs::create_dir_all(rt.join("hypr/abc_1_2")).unwrap();
-        std::fs::write(rt.join("hypr/abc_1_2/.socket.sock"), b"").unwrap();
-        std::fs::create_dir_all(rt.join("hypr/vazia_0_0")).unwrap(); // sem socket
-        std::fs::write(rt.join("wayland-1"), b"").unwrap();
-        std::fs::write(rt.join("wayland-1.lock"), b"").unwrap();
-
-        let nada = |_: &str| None;
-        let v = session_env(&rt, &nada);
-        assert!(
-            v.contains(&("WAYLAND_DISPLAY".into(), "wayland-1".into())),
-            "{v:?}"
-        );
-        assert!(
-            v.contains(&("HYPRLAND_INSTANCE_SIGNATURE".into(), "abc_1_2".into())),
-            "{v:?}"
-        );
-        // Já definidas: não se mexe.
-        let tudo = |_: &str| Some("x".to_string());
-        assert!(session_env(&rt, &tudo).is_empty());
-        std::fs::remove_dir_all(&rt).ok();
-    }
-
     /// À mão, na máquina real (NÃO bloqueia nem suspende):
     /// `cargo test -p hyprlinkd -- --ignored manual_acoes --nocapture`.
     #[test]
@@ -522,7 +442,7 @@ mod tests {
             run_candidates(&c, Duration::from_secs(5), false).expect("mute");
         }
         println!("lock plan: {:?}", plan("lock", &on_path, &dir, "x"));
-        println!("env: {:?}", real_session_env());
+        println!("env: {:?}", crate::session::real_session_env());
     }
 }
 

@@ -154,8 +154,12 @@ pub async fn serve(ctl: Ctl) {
                     }
                 }
             }
-            let line = String::from_utf8_lossy(&acc).trim().to_string();
-            let reply = handle(&line, &ctl).await;
+            // Só sai o fim de linha: o `send` usa o resto da linha tal e
+            // qual (um caminho pode acabar ou ter espaços seguidos).
+            let raw = String::from_utf8_lossy(&acc);
+            let line = raw.strip_suffix('\n').unwrap_or(&raw);
+            let line = line.strip_suffix('\r').unwrap_or(line);
+            let reply = handle(line, &ctl).await;
             let _ = tx.write_all(reply.as_bytes()).await;
             let _ = tx.shutdown().await;
         });
@@ -188,6 +192,26 @@ pub async fn phone_run_app(active: &ActiveConn, package: &str) -> bool {
 
 pub use hyprlink_proto::link::{http_url_ok, package_ok};
 
+/// O caminho de `send <caminho>`: **tudo** o que vem depois de `send ` (um
+/// espaço), sem partir nem aparar — espaços seguidos, aspas, `#`, `%` e
+/// acentos passam tal e qual. Um caminho com mudança de linha ou NUL é
+/// recusado (o contrato é uma linha por ligação).
+fn send_path(line: &str) -> Result<&str, &'static str> {
+    const USAGE: &str = "uso: send <caminho>";
+    let path = line
+        .trim_start()
+        .strip_prefix("send")
+        .and_then(|r| r.strip_prefix(' '))
+        .ok_or(USAGE)?;
+    if path.trim().is_empty() {
+        return Err(USAGE);
+    }
+    if path.contains(['\n', '\r', '\0']) {
+        return Err("caminho com mudança de linha ou NUL");
+    }
+    Ok(path)
+}
+
 async fn handle(line: &str, ctl: &Ctl) -> String {
     let mut parts = line.split_whitespace();
     let cmd = parts.next().unwrap_or("");
@@ -200,8 +224,8 @@ async fn handle(line: &str, ctl: &Ctl) -> String {
 
         // Ficheiro → telemóvel. Progresso/SHA ficam no log da GUI como
         // qualquer envio iniciado por lá (share.rs é o mesmo caminho).
-        "send" => match rest.first() {
-            Some(path) if rest.len() == 1 => {
+        "send" => match send_path(line) {
+            Ok(path) => {
                 let path = std::path::PathBuf::from(path);
                 if !path.is_file() {
                     return format!("erro: não é um ficheiro: {}", path.display());
@@ -209,7 +233,7 @@ async fn handle(line: &str, ctl: &Ctl) -> String {
                 crate::share::send_file(&ctl.active, &ctl.hud, &path).await;
                 "ok enviado (progresso no painel do daemon)".to_string()
             }
-            _ => "erro: uso: send <caminho>".to_string(),
+            Err(e) => format!("erro: {e}"),
         },
 
         // hyprctl dispatch de qualquer script/atalho.
@@ -361,8 +385,10 @@ async fn handle(line: &str, ctl: &Ctl) -> String {
         // phone.open_url, que precisa do lado Android (ver Visão §5.B).
         "url" if !rest.is_empty() => {
             let url = rest.join(" ");
-            let _ = tokio::process::Command::new("xdg-open").arg(&url).spawn();
-            format!("ok aberto no PC: {url}")
+            match crate::open_url::safe_open_url(&url) {
+                Ok(()) => format!("ok aberto no PC: {url}"),
+                Err(motivo) => format!("erro: URL recusado ({motivo}); só http(s)://"),
+            }
         }
 
         // URL/app no telemóvel — phone.open_url/phone.run_app (a app decide
@@ -446,6 +472,39 @@ mod tests {
             "", "whatsapp", "com.", ".com", "com..x", "com.1x", "com.a-b", "com.a b",
         ] {
             assert!(!package_ok(mau), "devia recusar {mau:?}");
+        }
+    }
+
+    #[test]
+    fn send_usa_o_resto_da_linha_como_um_caminho() {
+        for path in [
+            "/tmp/As minhas fotos/a.jpg",
+            "/tmp/dois  espaços.txt",
+            "/tmp/acentuação ção.pdf",
+            "/tmp/it's.txt",
+            "/tmp/\"aspas\".txt",
+            "/tmp/#1 cardinal.txt",
+            "/tmp/literal%20não-é-espaço.txt",
+            "/tmp/acaba em espaço ",
+        ] {
+            assert_eq!(send_path(&format!("send {path}")), Ok(path), "{path:?}");
+        }
+        // Um único espaço separa o comando; os outros são do caminho.
+        assert_eq!(send_path("send  /tmp/x"), Ok(" /tmp/x"));
+    }
+
+    #[test]
+    fn send_recusa_vazio_e_mudancas_de_linha() {
+        for mau in [
+            "send",
+            "send ",
+            "send   ",
+            "sendx /tmp/a",
+            "send /tmp/a\nb",
+            "send /tmp/a\rb",
+            "send /tmp/a\0b",
+        ] {
+            assert!(send_path(mau).is_err(), "devia recusar {mau:?}");
         }
     }
 

@@ -36,6 +36,10 @@ pub struct Report {
     pub session_type: Option<String>,
     pub desktop: Option<String>,
     pub hyprland_version: Option<String>,
+    /// De onde veio a instância do Hyprland (`hyprlink_env::instance`):
+    /// `"variable"`, `"discovered"` ou `null` (nenhuma viva). Campo
+    /// acrescentado; o resto do JSON não muda.
+    pub hyprland_instance: Option<crate::instance::Source>,
     /// `hyprland.lua` / `hyprland.conf` encontrado em `~/.config/hypr`.
     pub hyprland_config_file: Option<String>,
     pub dispatch_mode: DispatchMode,
@@ -201,13 +205,36 @@ fn sensor_ok(p: &Path) -> bool {
 }
 
 /// Recolhe tudo (o que o `doctor` mostra). `ov` vem do `config.json`.
+/// A instância do Hyprland pelas raízes do `env` (o runtime dir das
+/// variáveis, o `/proc` do `env`), como o daemon a descobre.
+pub fn hyprland_instance(env: &Env) -> Option<crate::instance::Source> {
+    let roots = crate::instance::Roots {
+        runtime_dir: env.var("XDG_RUNTIME_DIR").map(std::path::PathBuf::from),
+        legacy: std::path::PathBuf::from("/tmp/hypr"),
+        proc_dir: env.proc_dir.clone(),
+    };
+    crate::instance::find_with_source(&roots, env.var("HYPRLAND_INSTANCE_SIGNATURE"))
+        .map(|(_, s)| s)
+}
+
 pub fn collect(env: &Env, ov: &overrides::Overrides) -> Report {
-    collect_with(env, ov, true)
+    collect_inner(env, ov, true, true)
+}
+
+/// Como [`collect`], mas **sem** `hyprctl dispatch`: o modo é inferido pela
+/// versão e pela configuração (`hyprland::infer_mode`). É o que os agentes e
+/// os testes usam numa sessão viva (`hyprlinkctl doctor --no-dispatch`).
+pub fn collect_no_dispatch(env: &Env, ov: &overrides::Overrides) -> Report {
+    collect_inner(env, ov, true, false)
 }
 
 /// `deep = false` salta o que é lento e só serve para mostrar (versões das
 /// ferramentas, D-Bus, `modinfo`, `dkms`): é o que o daemon usa ao arrancar.
 pub fn collect_with(env: &Env, ov: &overrides::Overrides, deep: bool) -> Report {
+    collect_inner(env, ov, deep, true)
+}
+
+fn collect_inner(env: &Env, ov: &overrides::Overrides, deep: bool, dispatch: bool) -> Report {
     let (options, option_problems) = ov.resolve(&sensor_ok);
     let have = |t: &str| env.have(t);
     let procs = shell::list_procs(&env.proc_dir);
@@ -227,10 +254,18 @@ pub fn collect_with(env: &Env, ov: &overrides::Overrides, deep: bool) -> Report 
             .find(|f| d.join(f).exists())
             .map(str::to_string)
     });
-    let probed = hyprland::probe(&*env.runner);
+    let probed = if dispatch {
+        hyprland::probe(&*env.runner)
+    } else {
+        None
+    };
     let (dispatch_mode, source) = match options.hypr_dispatch_mode {
         DispatchChoice::Classic => (DispatchMode::Classic, "forçado (hypr_dispatch_mode)"),
         DispatchChoice::Lua => (DispatchMode::Lua, "forçado (hypr_dispatch_mode)"),
+        DispatchChoice::Auto if !dispatch => (
+            hyprland::infer_mode(hyprland_version.as_deref(), hyprland_config_file.as_deref()),
+            "inferido pela versão e pela configuração (sem dispatch)",
+        ),
         DispatchChoice::Auto => match probed {
             Some(m) => (m, "teste com hl.dsp.no_op()"),
             None => (DispatchMode::Classic, "assumido (sem resposta do hyprctl)"),
@@ -350,6 +385,7 @@ pub fn collect_with(env: &Env, ov: &overrides::Overrides, deep: bool) -> Report 
         session_type: env.var("XDG_SESSION_TYPE").map(str::to_string),
         desktop: env.var("XDG_CURRENT_DESKTOP").map(str::to_string),
         hyprland_version,
+        hyprland_instance: hyprland_instance(env),
         hyprland_config_file,
         dispatch_mode,
         dispatch_mode_source: source,
@@ -441,6 +477,17 @@ pub fn render_text(r: &Report) -> String {
 
     let _ = writeln!(w, "\n[Hyprland]");
     let _ = writeln!(w, "  versão       : {}", opt(&r.hyprland_version));
+    let _ = writeln!(
+        w,
+        "  instância    : {}",
+        match r.hyprland_instance {
+            Some(crate::instance::Source::Variable) => "da variável HYPRLAND_INSTANCE_SIGNATURE",
+            Some(crate::instance::Source::Discovered) => {
+                "descoberta nos diretórios (sem a variável, ou a variável aponta para uma instância morta)"
+            }
+            None => "nenhuma instância viva encontrada",
+        }
+    );
     let _ = writeln!(w, "  configuração : {}", opt(&r.hyprland_config_file));
     let _ = writeln!(
         w,

@@ -553,7 +553,11 @@ fn camera_body(app: &App) -> El<'_> {
             )
         },
     ]
-    .width(if app.is_compact() { Length::Fill } else { Length::Fixed(440.0) });
+    .width(if app.is_compact() {
+        Length::Fill
+    } else {
+        Length::Fixed(440.0)
+    });
 
     let preview = column![
         frame,
@@ -567,19 +571,9 @@ fn camera_body(app: &App) -> El<'_> {
     .width(Length::Fill);
 
     if app.is_compact() {
-        column![
-            preview,
-            gap(space::XXL),
-            controls,
-        ]
-        .into()
+        column![preview, gap(space::XXL), controls,].into()
     } else {
-        row![
-            preview,
-            hgap(space::GUTTER),
-            controls,
-        ]
-        .into()
+        row![preview, hgap(space::GUTTER), controls,].into()
     }
 }
 
@@ -987,7 +981,11 @@ pub fn notifications(app: &App) -> El<'_> {
         .font(MONO)
         .size(12)
         .padding(Padding::from([8, 12]))
-        .width(if app.is_compact() { Length::Fill } else { Length::Fixed(360.0) })
+        .width(if app.is_compact() {
+            Length::Fill
+        } else {
+            Length::Fixed(360.0)
+        })
         .style(theme::input),
         fill_x(),
         btn(
@@ -1184,7 +1182,11 @@ pub fn share(app: &App) -> El<'_> {
         gap(space::XXL),
         open_on_phone(app),
     ]
-    .width(if app.is_compact() { Length::Fill } else { fill_portion(1) });
+    .width(if app.is_compact() {
+        Length::Fill
+    } else {
+        fill_portion(1)
+    });
 
     // ── files ──
     let linked = app.primary().is_some();
@@ -1351,15 +1353,14 @@ pub fn share(app: &App) -> El<'_> {
         ]
         .align_y(Alignment::Center),
     ]
-    .width(if app.is_compact() { Length::Fill } else { fill_portion(1) });
+    .width(if app.is_compact() {
+        Length::Fill
+    } else {
+        fill_portion(1)
+    });
 
     let body: El = if app.is_compact() {
-        column![
-            left,
-            gap(space::XXL),
-            right,
-        ]
-        .into()
+        column![left, gap(space::XXL), right,].into()
     } else {
         row![left, hgap(space::GUTTER), right].into()
     };

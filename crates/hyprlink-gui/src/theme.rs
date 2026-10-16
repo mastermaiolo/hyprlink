@@ -133,7 +133,8 @@ pub const FONTS: &[&[u8]] = &[
     include_bytes!("../assets/fonts/IBMPlexMono-Regular.ttf"),
     include_bytes!("../assets/fonts/IBMPlexMono-Medium.ttf"),
     include_bytes!("../assets/fonts/IBMPlexMono-SemiBold.ttf"),
-    // 中文: subconjunto do Noto Sans CJK SC (scripts/font-zh-subset.py), para o
+    // 中文: subconjunto do Noto Sans CJK SC (scripts/subset-fontes.sh, só os
+    // caracteres da UI, ~250 KB cada; regenerar quando o zh.rs mudar), para o
     // texto não aparecer em quadrados onde não há fontes CJK no sistema.
     include_bytes!("../assets/fonts/NotoSansSC-Regular.otf"),
     include_bytes!("../assets/fonts/NotoSansSC-Bold.otf"),

@@ -1,6 +1,6 @@
 pkgbase = hyprlink-bridge
 	pkgdesc = Android phone ↔ Hyprland link over QUIC + mTLS: notifications, clipboard, files, media, webcam, mic
-	pkgver = 0.1.0
+	pkgver = 0.1.1
 	pkgrel = 1
 	url = https://github.com/mastermaiolo/hyprlink
 	arch = x86_64
@@ -37,7 +37,7 @@ pkgbase = hyprlink-bridge
 	optdepends = vulkan-icd-loader: GUI desenhada pela GPU (sem isto usa o renderizador por software)
 	options = !lto
 	options = !debug
-	source = hyprlink-0.1.0.tar.gz::https://github.com/mastermaiolo/hyprlink/archive/v0.1.0.tar.gz
+	source = hyprlink-0.1.1.tar.gz::https://github.com/mastermaiolo/hyprlink/archive/v0.1.1.tar.gz
 	source = hyprlink-bridge.service
 	source = hyprlink-bridge.desktop
 	source = hyprlink-bridge-autostart.desktop

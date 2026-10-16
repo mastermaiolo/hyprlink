@@ -36,6 +36,45 @@ pub fn probe(hyprctl: &dyn Runner) -> Option<DispatchMode> {
     })
 }
 
+/// Primeira versão com configuração Lua (e `hyprctl dispatch` em Lua).
+pub const LUA_SINCE: (u32, u32) = (0, 55);
+
+/// `Hyprland 0.56.2` (ou `0.56.2`) → `(0, 56)`.
+pub fn parse_version(v: &str) -> Option<(u32, u32)> {
+    let num = v
+        .split_whitespace()
+        .find(|w| w.starts_with(|c: char| c.is_ascii_digit()))?;
+    let mut it = num.split('.');
+    let major = it.next()?.parse().ok()?;
+    let minor = it
+        .next()?
+        .trim_end_matches(|c: char| !c.is_ascii_digit())
+        .parse()
+        .ok()?;
+    Some((major, minor))
+}
+
+/// O modo **sem** dispatch (`hyprlinkctl doctor --no-dispatch`): pela versão
+/// e pelo ficheiro de configuração em `~/.config/hypr`.
+///
+/// - versão < 0.55 → clássico (ainda não havia Lua);
+/// - `hyprland.lua` → Lua; só `hyprland.conf` → clássico (um Hyprland
+///   recente com config hyprlang continua clássico);
+/// - versão ≥ 0.55 sem nenhum dos dois → Lua; sem versão nem ficheiro →
+///   clássico.
+pub fn infer_mode(version: Option<&str>, config_file: Option<&str>) -> DispatchMode {
+    let v = version.and_then(parse_version);
+    if v.is_some_and(|v| v < LUA_SINCE) {
+        return DispatchMode::Classic;
+    }
+    match config_file {
+        Some("hyprland.lua") => DispatchMode::Lua,
+        Some(_) => DispatchMode::Classic,
+        None if v.is_some() => DispatchMode::Lua,
+        None => DispatchMode::Classic,
+    }
+}
+
 /// Guarda o modo detetado (uma vez); `reset` obriga a testar de novo.
 #[derive(Default)]
 pub struct ModeCache(Mutex<Option<DispatchMode>>);
@@ -103,6 +142,21 @@ mod tests {
                 stdout: String::new(),
             })
         }
+    }
+
+    #[test]
+    fn modo_inferido_sem_dispatch() {
+        use DispatchMode::{Classic, Lua};
+        assert_eq!(parse_version("Hyprland 0.56.2"), Some((0, 56)));
+        assert_eq!(parse_version("0.54.0-dev"), Some((0, 54)));
+        assert_eq!(parse_version("Hyprland"), None);
+        let m = |v, f| infer_mode(v, f);
+        assert_eq!(m(Some("Hyprland 0.54.3"), Some("hyprland.lua")), Classic);
+        assert_eq!(m(Some("Hyprland 0.55.0"), Some("hyprland.lua")), Lua);
+        assert_eq!(m(Some("Hyprland 0.56.2"), Some("hyprland.conf")), Classic);
+        assert_eq!(m(Some("Hyprland 0.56.2"), None), Lua);
+        assert_eq!(m(None, Some("hyprland.lua")), Lua);
+        assert_eq!(m(None, None), Classic);
     }
 
     fn fake(lua: bool, missing: bool) -> Fake {

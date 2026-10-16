@@ -24,7 +24,7 @@ static INFO: OnceLock<Info> = OnceLock::new();
 pub fn daemon_env() -> Env {
     let mut env = Env::real();
     env.runner = Box::new(RealRunner {
-        envs: crate::action::real_session_env(),
+        envs: crate::session::real_session_env(),
         ..RealRunner::default()
     });
     env

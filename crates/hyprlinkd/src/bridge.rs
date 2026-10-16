@@ -745,7 +745,7 @@ async fn execute(b: &Arc<Bridge>, c: Command) {
         },
         Command::SendClipboard(_) => {
             let text = blocking(|| {
-                std::process::Command::new("wl-paste")
+                crate::session::command("wl-paste")
                     .args(["--no-newline", "--type", "text"])
                     .output()
                     .ok()
@@ -1175,7 +1175,7 @@ async fn execute_more(b: &Arc<Bridge>, c: Command2) {
         Command2::OpenDownloads => {
             let dir = config::download_dir(&ctx.config);
             let _ = std::fs::create_dir_all(&dir);
-            if std::process::Command::new("xdg-open")
+            if crate::session::command("xdg-open")
                 .arg(&dir)
                 .spawn()
                 .is_err()
