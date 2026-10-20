@@ -49,7 +49,7 @@
 - **双向剪贴板**：无缝双向剪贴板同步，支持原始 UTF-8 文本与无损 PNG 图像缓冲区。
 - **文件传输**：双向文件传输队列，支持实时传输进度跟踪、传输历史记录以及自定义接收目录。
 - **媒体控制**：在手机上控制电脑的 MPRIS 播放器（附带播放进度与专辑封面），电脑端当前播放状态同样显示在手机通知栏中。
-- **手机充当摄像头**：通过 `v4l2loopback` 将手机摄像头映射为虚拟视频设备（`/dev/video42`），支持硬件 H.264 或 H.265 编码流。
+- **手机充当摄像头**：通过 `v4l2loopback`（或 PipeWire 节点）将手机摄像头映射为虚拟视频设备（`/dev/video42`），支持 H.264 或 H.265，优先由 GPU（VA-API）解码，失败时回退到 CPU。
 - **音频桥接**：手机麦克风作为电脑音频输入、手机作为电脑扬声器输出，以及电脑声音实时串流至手机播放。
 - **远程触控板与键盘**：通过 `/dev/uinput` 实现光标移动、点击拖拽、实时按键输入、回车与快捷键；连接意外中断时触发安全按键释放机制。
 - **快捷操作**：一键锁屏、系统挂起、屏幕截图（区域截取或全屏截图，自动复制至剪贴板并保存）、音量控制及任意 `hyprctl dispatch` 指令分发。
@@ -81,7 +81,8 @@
 | **鼠标按键与拖拽**（`input.button`） | 🚧 测试中 | 守护进程与 Android 端就绪，等待实机验证 |
 | **手机手势**（`gesture`） | 🚧 测试中 | 守护进程、GUI 与 Android 端就绪，等待实机验证 |
 | **音频桥接**（麦克风、扬声器、音频流） | 🚧 测试中 | PipeWire 与 GStreamer 管道调试中 |
-| **虚拟摄像头**（H.264 / H.265 于 /dev/video42） | 🚧 测试中 | 通过 pkexec 挂载 v4l2loopback 模块 |
+| **虚拟摄像头**（H.264 / H.265 于 /dev/video42 或 PipeWire） | 🚧 测试中 | VA-API 解码，失败时回退 CPU；通过 pkexec 挂载 v4l2loopback 模块；PipeWire 输出为实验性 |
+| **USB 网络共享链路**（手机经 USB 连接） | 🚧 测试中 | 需要 0.1.1 版 Android 应用；尚未在真机上验证 |
 
 网络协议全部规范参见 [`PROTOCOL.md`](PROTOCOL.md)，版本演进细节参见 [`CHANGELOG.md`](CHANGELOG.md)。
 
@@ -97,7 +98,8 @@
 |---|---|
 | **核心基础组件** | `hyprland`, `pipewire`, `wireplumber`, `libpulse`（`pactl`）, `wl-clipboard` |
 | **音频与摄像头（GStreamer）** | `gst-plugins-base-libs`, `gst-plugins-good`, `gst-plugins-bad-libs`（H.265）, `gst-libav`（H.264/H.265）, `gst-plugin-pipewire` |
-| **虚拟摄像头内核模块** | `v4l2loopback-dkms`（通过 `pkexec` 加载至 `/dev/video42`） |
+| **虚拟摄像头内核模块** | `v4l2loopback-dkms`（通过 `pkexec` 加载至 `/dev/video42`）；若使用 PipeWire 输出（`webcam_output` 为 `pipewire`，或 `auto` 且无该模块）则可选 |
+| **硬件解码（可选，VA-API）** | `gst-plugin-va` + 驱动：AMD 用 `mesa`，Intel 用 `intel-media-driver`；未安装时由 CPU 解码 |
 | **GUI 文件选择器** | `xdg-desktop-portal` + `xdg-desktop-portal-gtk` |
 | **快捷操作组件（可选）** | 锁屏：`noctalia`, `hyprlock` 或 `loginctl`；截图：`grimblast` 或 `grim` + `slurp` |
 | **编译构建工具** | `rust`, `clang`, `lld`, `pkgconf` |
@@ -107,11 +109,15 @@
 
 ### 推荐快捷安装：预编译二进制包（x86_64）
 
-从 [GitHub Releases](https://github.com/mastermaiolo/hyprlink/releases) 下载 `hyprlink-0.1.0-linux-x86_64.tar.gz`：
+从 [GitHub Releases](https://github.com/mastermaiolo/hyprlink/releases) 下载 `hyprlink-0.1.1-linux-x86_64.tar.gz`：
+
+<!-- 发布 v0.1.1（tag v0.1.1）后删除此提示 -->
+> [!NOTE]
+> 0.1.1 的二进制文件随 `v0.1.1` 标签发布。在该版本发布之前，请使用 Arch 的 PKGBUILD 或从源码编译。
 
 ```bash
-tar -xzf hyprlink-0.1.0-linux-x86_64.tar.gz
-cd hyprlink-0.1.0-linux-x86_64
+tar -xzf hyprlink-0.1.1-linux-x86_64.tar.gz
+cd hyprlink-0.1.1-linux-x86_64
 ./install.sh                                     # 安装至 ~/.local（无需 root 权限）
 systemctl --user enable --now hyprlink-bridge   # 启动并启用用户级守护服务
 hyprlink-gui                                     # 启动桌面图形界面
@@ -162,6 +168,7 @@ hyprlink-gui
 ### 配对手机步骤
 
 1. 在手机上安装配套 Android 客户端 APK（在 [Releases](https://github.com/mastermaiolo/hyprlink/releases) 页面获取，需允许“安装未知应用”权限）。
+   0.1.1 版应用使用了新的应用 ID（`io.maggio.hyprlink`），会与旧版并存安装；请手动卸载旧版，然后重新配对。
 2. 在守护进程运行状态下，打开桌面客户端进入 **设备（Devices）→ 配对新设备（Pair new）**（若手动启动守护进程，可在终端中查看二维码）。
 3. 使用手机应用扫描该二维码。二维码数据包含电脑证书 SHA-256 指纹、`<PC-IP>:7443` 地址与单次配对令牌。
 4. 完成配对后，只要两台设备处于相同局域网下，连接便会自动静默恢复。
@@ -183,13 +190,14 @@ hyprlinkctl ping               # 测量与手机端的往返通信延迟
 hyprlinkctl watch --json       # 持续输出 JSON 格式的遥测数据流
 hyprlinkctl clipboard          # 手动将电脑剪贴板推送至手机
 hyprlinkctl pair               # 开启为期 120 秒的配对发现窗口
-hyprlinkctl mirror toggle      # 开关手机屏幕实时镜像流
 hyprlinkctl mic toggle         # 切换手机麦克风输入（on | off | toggle）
 hyprlinkctl tap toggle         # 切换电脑声音向手机串流开关
 hyprlinkctl speaker toggle     # 切换手机充当电脑扬声器输出
 hyprlinkctl ws 3               # 指挥 Hyprland 切换至工作区 3
 hyprlinkctl open               # 打开或置顶聚焦桌面客户端窗口
 hyprlinkctl doctor             # 运行环境诊断与兼容性自检报告
+hyprlinkctl find               # 让手机响铃、振动或打开手电筒；find stop 停止
+hyprlinkctl usb setup          # 避免 USB 网络共享成为默认路由（会先询问；使用 nmcli）
 ```
 
 运行 `hyprlinkctl --help` 查看完整参数。`contrib/` 目录提供了 Waybar 顶栏小部件与文件管理器右键上下文菜单动作（可通过 `contrib/install.sh` 安装）。
@@ -216,6 +224,8 @@ hyprlinkctl doctor             # 运行环境诊断与兼容性自检报告
   },
   "disk_path": "/home/user",
   "gpu_nvidia_wake": false,
+  "webcam_decoder": "auto",
+  "webcam_output": "v4l2loopback",
   "lang": "zh-CN"
 }
 ```
@@ -226,6 +236,8 @@ hyprlinkctl doctor             # 运行环境诊断与兼容性自检报告
 * `battery_alerts`：低电量与满电提醒的百分比阈值。
 * `disk_path`：用于监控存储剩余空间的挂载路径（默认 `$HOME`）。
 * `gpu_nvidia_wake`：设为 `false`（默认）时，可避免后台遥测读取唤醒处于休眠状态的 NVIDIA 独立显卡。
+* `webcam_decoder`：`auto`（默认）优先尝试 GPU 上的 VA-API，失败则回退 CPU；`gpu` 或 `cpu` 强制使用其中一种。
+* `webcam_output`：`v4l2loopback`（默认，`/dev/video42`）、`pipewire`（实验性，无需内核模块）或 `auto`（模块可用时用 v4l2loopback，否则用 PipeWire）。
 * `lang`：图形界面语言代码（`en-GB`、`pt-BR`、`pt-PT`、`es-ES`、`zh-CN`）。
 
 如需在脱机或无手机环境下预览客户端界面，可启动模拟模式：
@@ -246,6 +258,7 @@ HYPRLINK_MOCK=1 hyprlink-gui
 │   ├── hyprlinkd/            后台守护服务（二进制文件 hyprlink-daemon，无窗口）
 │   ├── hyprlink-gui/         桌面客户端（iced，带系统托盘图标的独立进程）
 │   ├── hyprlink-proto/       公共契约库，CBOR 帧协议，网络传输类型，fmt.rs
+│   ├── hyprlink-env/         环境探测：摄像头、USB 网络、PipeWire、doctor 报告
 │   └── hyprlinkctl/          命令行交互工具，供快捷键、Waybar 与脚本调用
 ├── contrib/                  Waybar 集成脚本，文件管理器右键 .desktop 入口
 ├── packaging/arch/           Arch Linux 本地打包配置（hyprlink-bridge）
@@ -283,7 +296,7 @@ HYPRLINK_MOCK=1 hyprlink-gui
    - 检查当前用户是否有 `/dev/uinput` 写入权限：`getfacl /dev/uinput`。
    - 如无权限，请配置对应的 udev 规则授权。
 3. **虚拟摄像头设备未生成**：
-   - 确认已安装 `v4l2loopback-dkms`。
+   - 确认已安装 `v4l2loopback-dkms`（使用 `webcam_output` 为 `pipewire` 时不需要）。
    - 守护进程需要通过 `pkexec` 授权以挂载 `/dev/video42`。
 4. **登录系统时服务未启动**：
    - 若未配合 `uwsm` 使用，请确认 `graphical-session.target` 是否就绪。
@@ -340,6 +353,14 @@ Android 手机应用（基于 Kotlin 与 Jetpack Compose）在独立仓库中进
 核心实现建立在 [`quinn`](https://github.com/quinn-rs/quinn)、[`rustls`](https://github.com/rustls/rustls)、[`iced`](https://github.com/iced-rs/iced)、`ciborium`、`ksni` 及 `zbus` 之上。
 
 桌面与移动端内嵌的字体资源 — Anton、Instrument Serif、Inter、IBM Plex Mono 与 Noto Sans SC — 均遵循 SIL Open Font License 1.1 开源许可；完整授权文本参见 `crates/hyprlink-gui/assets/fonts/OFL-*.txt`。
+
+### 支持
+
+HyprLink 由一个人利用业余时间开发。如果它对你有用，可以在 Ko-fi 上支持：<https://ko-fi.com/mastermaggio>
+
+<p align="center">
+  <a href="https://ko-fi.com/mastermaggio"><img src="docs/img/kofi-banner.webp" width="480" alt="在 Ko-fi 上支持 HyprLink"></a>
+</p>
 
 ---
 

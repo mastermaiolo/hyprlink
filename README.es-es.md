@@ -49,7 +49,7 @@ El enlace se establece de forma directa en su red local mediante **QUIC + mTLS**
 - **Portapapeles bidireccional**: sincronización continua de texto plano UTF-8 e imágenes PNG sin pérdida.
 - **Transferencia de archivos**: cola de envíos en ambos sentidos, supervisión del progreso en tiempo real, historial y carpeta de descargas configurable.
 - **Control multimedia**: control de los reproductores MPRIS del ordenador desde el móvil (con posición de reproducción y carátula del álbum); el reproductor del PC también se muestra como notificación en el móvil.
-- **Móvil como cámara web**: transmisión de la cámara del móvil como dispositivo de vídeo virtual (`/dev/video42` mediante `v4l2loopback`) en H.264 o H.265 acelerado por hardware.
+- **Móvil como cámara web**: transmisión de la cámara del móvil como dispositivo de vídeo virtual (`/dev/video42` mediante `v4l2loopback`, o un nodo PipeWire) en H.264 o H.265, decodificado en la GPU (VA-API) con recurso a la CPU.
 - **Puente de audio**: micrófono del móvil como entrada de sonido del ordenador, móvil como altavoz del PC y transmisión del audio del PC hacia el móvil.
 - **Panel táctil y teclado remotos**: integración con `/dev/uinput` que proporciona movimiento de cursor, clics, gestos, escritura en tiempo real, tecla Enter y combinaciones de teclas con liberación de seguridad en caso de desconexión.
 - **Acciones rápidas**: bloqueo de pantalla, suspensión, captura de pantalla (área o completa, copiada al portapapeles y guardada), control de volumen y llamadas arbitrarias mediante `hyprctl dispatch`.
@@ -81,7 +81,8 @@ El enlace se establece de forma directa en su red local mediante **QUIC + mTLS**
 | **Botones del ratón y arrastre** (`input.button`) | 🚧 En pruebas | Daemon y app Android listos; pruebas en móvil pendientes |
 | **Gestos en el móvil** (`gesture`) | 🚧 En pruebas | Daemon, GUI y app listos; pruebas en móvil pendientes |
 | **Puente de audio** (micrófono, altavoz, transmisión) | 🚧 En pruebas | Validación de canalizaciones PipeWire y GStreamer |
-| **Cámara web virtual** (H.264 / H.265 en /dev/video42) | 🚧 En pruebas | Carga del módulo v4l2loopback mediante pkexec |
+| **Cámara web virtual** (H.264 / H.265 en /dev/video42 o PipeWire) | 🚧 En pruebas | VA-API con recurso a la CPU; carga del módulo v4l2loopback mediante pkexec; salida PipeWire experimental |
+| **Enlace USB** (móvil por cable) | 🚧 En pruebas | Requiere la app Android 0.1.1; aún sin validar en un móvil real |
 
 Las especificaciones detalladas del protocolo se encuentran en [`PROTOCOL.md`](PROTOCOL.md) y el registro de cambios en [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -97,7 +98,8 @@ Probado en **Arch Linux / CachyOS** con **Hyprland** (Wayland). Los nombres de p
 |---|---|
 | **Base / Núcleo** | `hyprland`, `pipewire`, `wireplumber`, `libpulse` (`pactl`), `wl-clipboard` |
 | **Audio y Cámara (GStreamer)** | `gst-plugins-base-libs`, `gst-plugins-good`, `gst-plugins-bad-libs` (H.265), `gst-libav` (H.264/H.265), `gst-plugin-pipewire` |
-| **Cámara Web Virtual** | `v4l2loopback-dkms` (cargado en `/dev/video42` mediante `pkexec`) |
+| **Cámara Web Virtual** | `v4l2loopback-dkms` (cargado en `/dev/video42` mediante `pkexec`); opcional con la salida PipeWire (`webcam_output` = `pipewire`, o `auto` sin el módulo) |
+| **Decodificación por hardware (opcional, VA-API)** | `gst-plugin-va` + controlador: `mesa` (AMD), `intel-media-driver` (Intel); sin ellos, decodifica la CPU |
 | **Selector de archivos de la GUI** | `xdg-desktop-portal` + `xdg-desktop-portal-gtk` |
 | **Acciones rápidas (Opcional)** | Bloqueo: `noctalia`, `hyprlock`, o `loginctl`; Capturas: `grimblast` o `grim` + `slurp` |
 | **Herramientas de compilación** | `rust`, `clang`, `lld`, `pkgconf` |
@@ -107,11 +109,15 @@ Probado en **Arch Linux / CachyOS** con **Hyprland** (Wayland). Los nombres de p
 
 ### Método rápido: Paquete binario precompilado (x86_64)
 
-Descargue `hyprlink-0.1.0-linux-x86_64.tar.gz` desde los [Lanzamientos de GitHub](https://github.com/mastermaiolo/hyprlink/releases):
+Descargue `hyprlink-0.1.1-linux-x86_64.tar.gz` desde los [Lanzamientos de GitHub](https://github.com/mastermaiolo/hyprlink/releases):
+
+<!-- retirar esta nota cuando exista la release v0.1.1 (tag v0.1.1) -->
+> [!NOTE]
+> Los binarios 0.1.1 se publican con la etiqueta `v0.1.1`. Mientras esa release no exista, use el PKGBUILD de Arch o compile desde el código.
 
 ```bash
-tar -xzf hyprlink-0.1.0-linux-x86_64.tar.gz
-cd hyprlink-0.1.0-linux-x86_64
+tar -xzf hyprlink-0.1.1-linux-x86_64.tar.gz
+cd hyprlink-0.1.1-linux-x86_64
 ./install.sh                                     # Instala en ~/.local (sin privilegios root)
 systemctl --user enable --now hyprlink-bridge   # Activa la unidad de servicio de usuario
 hyprlink-gui                                     # Inicia la interfaz gráfica
@@ -162,6 +168,7 @@ El servicio en segundo plano se vincula a `graphical-session.target`.
 ### Emparejamiento con el móvil
 
 1. Instale la aplicación móvil para Android disponible en la sección de [Lanzamientos](https://github.com/mastermaiolo/hyprlink/releases) (habilite la opción de instalar aplicaciones de fuentes desconocidas).
+   La app 0.1.1 tiene otro identificador (`io.maggio.hyprlink`): se instala junto a la antigua; desinstale la antigua a mano y vuelva a emparejar.
 2. Con el servicio en ejecución, abra la interfaz gráfica en **Dispositivos → Emparejar nuevo** (o visualice el código QR en el terminal si ejecutó el daemon manualmente).
 3. Escanee el código QR desde la aplicación. Contiene la huella digital SHA-256 del certificado, la dirección `<IP-DEL-PC>:7443` y un token temporal.
 4. A partir de ese momento, el enlace se reanudará automáticamente siempre que ambos dispositivos compartan la misma red local.
@@ -183,13 +190,14 @@ hyprlinkctl ping               # Comprobación de latencia de ida y vuelta al m�
 hyprlinkctl watch --json       # Flujo continuo de telemetría en líneas JSON
 hyprlinkctl clipboard          # Envía el portapapeles del PC al móvil
 hyprlinkctl pair               # Abre una ventana de emparejamiento de 120 segundos
-hyprlinkctl mirror toggle      # Alterna la duplicación de pantalla del móvil
 hyprlinkctl mic toggle         # Alterna el micrófono del móvil (on | off | toggle)
 hyprlinkctl tap toggle         # Alterna el envío de sonido del PC al móvil
 hyprlinkctl speaker toggle     # Alterna el uso del móvil como altavoz del PC
 hyprlinkctl ws 3               # Cambia al espacio de trabajo 3 de Hyprland
 hyprlinkctl open               # Abre o enfoca la ventana de la interfaz gráfica
 hyprlinkctl doctor             # Diagnóstico del entorno e informe de compatibilidad
+hyprlinkctl find               # Hace sonar, vibrar o encender la linterna del móvil; find stop lo detiene
+hyprlinkctl usb setup          # Evita que el enlace USB tome la ruta por defecto (pregunta antes; usa nmcli)
 ```
 
 Consulte el resto de opciones mediante `hyprlinkctl --help`. El directorio `contrib/` incluye un módulo para Waybar y una acción para el menú contextual del explorador de archivos (instálelos con `contrib/install.sh`).
@@ -216,6 +224,8 @@ Los parámetros se guardan en `~/.config/hyprlink/config.json` y pueden modifica
   },
   "disk_path": "/home/user",
   "gpu_nvidia_wake": false,
+  "webcam_decoder": "auto",
+  "webcam_output": "v4l2loopback",
   "lang": "es-ES"
 }
 ```
@@ -226,6 +236,8 @@ Los parámetros se guardan en `~/.config/hyprlink/config.json` y pueden modifica
 * `battery_alerts`: Umbrales porcentuales para alertas de batería baja y carga completa.
 * `disk_path`: Punto de montaje supervisado para la telemetría de almacenamiento (por defecto: `$HOME`).
 * `gpu_nvidia_wake`: Si es `false` (por defecto), evita que las comprobaciones de telemetría activen tarjetas NVIDIA en suspensión.
+* `webcam_decoder`: `auto` (por defecto) intenta VA-API en la GPU y recurre a la CPU; `gpu` o `cpu` fuerza uno de ellos.
+* `webcam_output`: `v4l2loopback` (por defecto, `/dev/video42`), `pipewire` (experimental, sin módulo del kernel) o `auto` (v4l2loopback si el módulo está disponible, si no PipeWire).
 * `lang`: Idioma de la interfaz (`en-GB`, `pt-BR`, `pt-PT`, `es-ES`, `zh-CN`).
 
 Para evaluar la interfaz gráfica sin daemon ni teléfono móvil conectado:
@@ -246,6 +258,7 @@ HYPRLINK_MOCK=1 hyprlink-gui
 │   ├── hyprlinkd/            Servicio en segundo plano (binario hyprlink-daemon, sin ventana)
 │   ├── hyprlink-gui/         Interfaz de escritorio (iced, proceso independiente con icono en bandeja)
 │   ├── hyprlink-proto/       Contrato compartido, tramas CBOR, tipos de red, fmt.rs
+│   ├── hyprlink-env/         Sondas del entorno: cámara, red USB, PipeWire, informe del doctor
 │   └── hyprlinkctl/          Herramienta de línea de órdenes para atajos, Waybar y scripts
 ├── contrib/                  Módulo de integración para Waybar, accesos .desktop
 ├── packaging/arch/           Definición de paquete PKGBUILD para Arch Linux (hyprlink-bridge)
@@ -283,7 +296,7 @@ A través de la red local, una única conexión QUIC en el puerto **7443/UDP** m
    - Asegúrese de que su usuario dispone de permisos de escritura en `/dev/uinput`: `getfacl /dev/uinput`.
    - Configure reglas udev adecuadas si no dispone de acceso.
 3. **La cámara web virtual no aparece**:
-   - Compruebe que el paquete `v4l2loopback-dkms` está instalado.
+   - Compruebe que el paquete `v4l2loopback-dkms` está instalado (no hace falta con `webcam_output` = `pipewire`).
    - El daemon requiere permisos elevados (`pkexec`) para crear el nodo `/dev/video42`.
 4. **El servicio no se inicia al abrir sesión**:
    - Si no utiliza `uwsm`, compruebe la activación de `graphical-session.target`.
@@ -340,6 +353,14 @@ La aplicación móvil para Android (desarrollada en Kotlin con Jetpack Compose) 
 La base técnica se apoya en [`quinn`](https://github.com/quinn-rs/quinn), [`rustls`](https://github.com/rustls/rustls), [`iced`](https://github.com/iced-rs/iced), `ciborium`, `ksni` y `zbus`.
 
 Las fuentes tipográficas distribuidas con la interfaz de escritorio y móvil — Anton, Instrument Serif, Inter, IBM Plex Mono y Noto Sans SC — se licencian bajo SIL Open Font License 1.1; sus textos están en `crates/hyprlink-gui/assets/fonts/OFL-*.txt`.
+
+### Apoyar
+
+HyprLink lo hace una sola persona en su tiempo libre. Si te resulta útil, puedes apoyarlo en Ko-fi: <https://ko-fi.com/mastermaggio>
+
+<p align="center">
+  <a href="https://ko-fi.com/mastermaggio"><img src="docs/img/kofi-banner.webp" width="480" alt="Apoya HyprLink en Ko-fi"></a>
+</p>
 
 ---
 
