@@ -32,6 +32,8 @@ fn is(v: &Value, t: T) -> bool {
 const FIELDS: &[(&str, T, bool)] = &[
     ("/v", T::Num, false),
     ("/daemon", T::Str, false),
+    ("/daemon_version", T::Str, true),
+    ("/ctl_version", T::Str, true),
     ("/device", T::Obj, true),
     ("/device/name", T::Str, false),
     ("/device/manufacturer", T::Str, true),
@@ -63,6 +65,18 @@ const FIELDS: &[(&str, T, bool)] = &[
     ("/tap/speaker", T::Bool, false),
     ("/mirror/on", T::Bool, false),
     ("/mirror/fps", T::Num, true),
+    // Aditivo (0.1.1): a transferência em curso, ou null.
+    ("/transfer", T::Obj, true),
+    ("/transfer/name", T::Str, false),
+    ("/transfer/dir", T::Str, false),
+    ("/transfer/done", T::Num, false),
+    ("/transfer/bytes", T::Num, false),
+    ("/transfer/bytes_per_sec", T::Num, true),
+    ("/transfer/eta_s", T::Num, true),
+    ("/find_phone", T::Obj, false),
+    ("/find_phone/active", T::Bool, false),
+    ("/find_phone/until_ms", T::Num, true),
+    ("/find_phone/last_stopped_by", T::Str, true),
     ("/host", T::Obj, true),
     ("/host/hostname", T::Str, false),
     ("/host/compositor", T::Str, false),
@@ -154,4 +168,30 @@ fn v1_reading_order() {
             w[1]
         );
     }
+}
+
+/// Com o simulador a enviar um ficheiro, o snapshot traz a velocidade e,
+/// quando o envio acaba, volta a `transfer: null`.
+#[test]
+fn v1_transfer_with_speed_from_the_mock() {
+    use hyprlink_proto::link::{Command, Command2};
+    let mut sim = Simulator::new();
+    let mut s = Snapshot::new("mock");
+    sim.send(Command::More(Command2::SendFile("~/grande.mp4".into())));
+    for _ in 0..10 {
+        for e in sim.poll(Duration::from_millis(50)) {
+            s.apply(&e);
+        }
+    }
+    let v = serde_json::to_value(&s).unwrap();
+    check(&v);
+    assert_eq!(v["transfer"]["name"], "grande.mp4");
+    assert_eq!(v["transfer"]["bytes_per_sec"], 9_000_000);
+    // 286,4 MB a 9 MB/s: acaba.
+    for _ in 0..800 {
+        for e in sim.poll(Duration::from_millis(50)) {
+            s.apply(&e);
+        }
+    }
+    assert!(s.transfer.is_none(), "{:?}", s.transfer);
 }

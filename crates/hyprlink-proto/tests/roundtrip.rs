@@ -195,6 +195,14 @@ fn all_commands2() -> Vec<Command2> {
         },
         SetGesture("swipe_left_3".into(), false),
         ClearFileHistory,
+        FindPhone(FindPhoneRequest::all(30)),
+        FindPhone(FindPhoneRequest {
+            sound: false,
+            vibrate: true,
+            torch: false,
+            duration_s: 15,
+        }),
+        StopFindPhone,
     ]
 }
 
@@ -365,6 +373,7 @@ fn webcam_stats_codec_is_additive() {
         fps: None,
         codec: Some(CamCodec::H265),
         format: None,
+        ..Default::default()
     };
     same(&now);
     assert_eq!(serde_json::to_value(now).unwrap()["codec"], "h265");
@@ -408,6 +417,7 @@ fn webcam_format_is_additive_and_roundtrips() {
         fps: Some(30.0),
         codec: Some(CamCodec::H264),
         format: Some(fmt),
+        ..Default::default()
     });
     let partial: WebcamFormat =
         serde_json::from_str(r#"{"width":640,"height":480,"fps":15,"codec":"h264"}"#).unwrap();
@@ -415,4 +425,97 @@ fn webcam_format_is_additive_and_roundtrips() {
         (partial.lens, partial.rotation, partial.mirror),
         (None, 0, false)
     );
+}
+
+/// «Onde está o telemóvel?»: estado com e sem campos opcionais, nomes do
+/// `stopped_by` iguais aos do wire e a normalização do pedido.
+#[test]
+fn find_phone_contract() {
+    same(&Event2::FindPhone(FindPhoneState::default()));
+    same(&Event2::FindPhone(FindPhoneState {
+        active: true,
+        until_ms: Some(1_791_100_030_000),
+        last_stopped_by: None,
+        last_error: None,
+    }));
+    same(&Event2::FindPhone(FindPhoneState {
+        active: false,
+        until_ms: None,
+        last_stopped_by: Some(FindStoppedBy::Error),
+        last_error: Some("torch unavailable".into()),
+    }));
+    // Aditivo: um estado só com `active` lê-se.
+    let s: FindPhoneState = serde_json::from_str(r#"{"active": false}"#).unwrap();
+    assert_eq!(s, FindPhoneState::default());
+    for by in [
+        FindStoppedBy::User,
+        FindStoppedBy::Timeout,
+        FindStoppedBy::Pc,
+        FindStoppedBy::Error,
+    ] {
+        assert_eq!(serde_json::to_value(by).unwrap(), by.as_str());
+        assert_eq!(FindStoppedBy::parse(by.as_str()), Some(by));
+    }
+    assert_eq!(FindStoppedBy::parse("found"), None);
+
+    let none = FindPhoneRequest {
+        sound: false,
+        vibrate: false,
+        torch: false,
+        duration_s: 30,
+    };
+    assert_eq!(none.normalized(), None, "nenhum modo → recusado");
+    let short = FindPhoneRequest {
+        duration_s: 1,
+        ..FindPhoneRequest::all(0)
+    };
+    assert_eq!(short.normalized().unwrap().duration_s, 5);
+    assert_eq!(
+        FindPhoneRequest::all(600).normalized().unwrap().duration_s,
+        60
+    );
+    assert_eq!(
+        FindPhoneRequest::all(30).normalized(),
+        Some(FindPhoneRequest::all(30))
+    );
+}
+
+/// O mock do «onde está o telemóvel?»: começa a tocar, para com o PC e
+/// para sozinho ao fim da duração.
+#[test]
+fn mock_find_phone_rings_stops_and_times_out() {
+    fn find_states(sim: &mut Simulator, secs: f32) -> Vec<FindPhoneState> {
+        let mut out = Vec::new();
+        for _ in 0..(secs / 0.05) as usize {
+            for e in sim.poll(Duration::from_millis(50)) {
+                if let Event::More(Event2::FindPhone(s)) = e {
+                    out.push(s);
+                }
+            }
+        }
+        out
+    }
+    let mut sim = Simulator::new();
+    find_states(&mut sim, 0.5);
+
+    sim.send(Command::More(Command2::FindPhone(FindPhoneRequest::all(5))));
+    let s = find_states(&mut sim, 1.0);
+    assert!(
+        s.last().is_some_and(|s| s.active && s.until_ms.is_some()),
+        "{s:?}"
+    );
+    sim.send(Command::More(Command2::StopFindPhone));
+    let s = find_states(&mut sim, 0.5);
+    assert_eq!(
+        s.last().and_then(|s| s.last_stopped_by),
+        Some(FindStoppedBy::Pc)
+    );
+
+    sim.send(Command::More(Command2::FindPhone(FindPhoneRequest::all(5))));
+    let s = find_states(&mut sim, 6.0);
+    assert_eq!(
+        s.last().and_then(|s| s.last_stopped_by),
+        Some(FindStoppedBy::Timeout)
+    );
+    assert!(!s.last().unwrap().active);
 }

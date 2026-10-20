@@ -290,4 +290,36 @@ pub const TABLE: &[(&str, &str)] = &[
         "H.265 poupa débito; o telemóvel volta a H.264 se não tiver encoder HEVC",
         "H.265 economiza banda; o celular volta para H.264 se não tiver encoder HEVC",
     ),
+    // ── onde está o telemóvel ──
+    ("ONDE ESTÁ O TELEMÓVEL", "CADÊ O CELULAR"),
+    ("O TELEMÓVEL ESTÁ A TOCAR", "O CELULAR ESTÁ TOCANDO"),
+    ("A TOCAR · {}", "TOCANDO · {}"),
+    ("A TOCAR NO TELEMÓVEL", "TOCANDO NO CELULAR"),
+    ("LANTERNA A PISCAR", "LANTERNA PISCANDO"),
+    ("sem ligação", "sem conexão"),
+    (
+        "sem ligação · último contacto às {}",
+        "sem conexão · último contato às {}",
+    ),
+    ("à espera do telemóvel…", "aguardando o celular…"),
+    (
+        "A app do telemóvel não respondeu (versão antiga?)",
+        "O app do celular não respondeu (versão antiga?)",
+    ),
+    ("encontrado no telemóvel", "encontrado no celular"),
+    ("erro no telemóvel · {}", "erro no celular · {}"),
+    (
+        "interrompido (ligação perdida?)",
+        "interrompido (conexão perdida?)",
+    ),
+    // Transferências: velocidade e tempo restante (prompt 61).
+    ("a calcular…", "calculando…"),
+    ("{} em {} ({} média)", "{} em {} (média de {})"),
+    // Câmara: o telemóvel voltou a H.264 (prompt 60 B).
+    (
+        "o telemóvel não suporta H.265 · a usar H.264",
+        "o celular não suporta H.265 · usando H.264",
+    ),
+    // ── ligação por USB ──
+    ("LIGAÇÃO", "CONEXÃO"),
 ];

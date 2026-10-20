@@ -39,6 +39,8 @@ pub enum StateKey {
     Players,
     Settings,
     Gestures,
+    FindPhone,
+    LinkPath,
 }
 
 /// `None` = acontecimento (Packet, Notice): não se guarda nem se coalesce.
@@ -73,6 +75,8 @@ pub fn key(e: &Event) -> Option<StateKey> {
             Event2::Players(_) => K::Players,
             Event2::Settings(_) => K::Settings,
             Event2::Gestures { .. } => K::Gestures,
+            Event2::FindPhone(_) => K::FindPhone,
+            Event2::LinkPath(_) => K::LinkPath,
         },
     })
 }

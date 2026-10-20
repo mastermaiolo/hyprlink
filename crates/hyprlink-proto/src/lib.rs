@@ -8,6 +8,7 @@
 //! - [`ipc`]: o envelope do socket local `hyprlink.sock` (u32 BE + CBOR).
 //! - [`snapshot`]: o JSON v1 estável para plugins de shell.
 //! - [`host`]: "Este PC" lido de `/proc` e `/sys`.
+//! - [`rate`]: velocidade e tempo restante das transferências (só dados).
 //! - `fmt` (feature `fmt`): os textos para humanos, no idioma atual — só para
 //!   quem desenha (o texto-fonte é pt-PT).
 //! - `i18n` (feature `fmt`): `Lang`, `t()`, `tr!`, `detect()` e as tabelas por
@@ -25,4 +26,5 @@ pub mod host;
 pub mod i18n;
 pub mod ipc;
 pub mod link;
+pub mod rate;
 pub mod snapshot;

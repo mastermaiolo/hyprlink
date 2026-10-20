@@ -35,6 +35,22 @@ pub struct TransferProgress {
     pub direction: &'static str, // "recebendo" · "enviando"
     pub bytes: u64,
     pub total: u64,
+    /// Para a velocidade e o tempo restante (`hyprlink_proto::rate`).
+    pub started: std::time::Instant,
+    pub meter: hyprlink_proto::rate::RateMeter,
+}
+
+impl TransferProgress {
+    /// Amostra a velocidade agora (também sem bytes novos: numa pausa a
+    /// média desce) e devolve `(bytes_per_sec, eta_s)`.
+    pub fn speed(&mut self) -> (Option<u64>, Option<u64>) {
+        let elapsed = self.started.elapsed();
+        self.meter.sample(elapsed, self.bytes);
+        (
+            self.meter.bytes_per_sec(),
+            self.meter.eta_s(elapsed, self.bytes, self.total),
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -49,6 +65,18 @@ pub struct TransferRecord {
     pub bytes: u64,
     pub ok: bool,
     pub error: Option<String>,
+    /// Quanto durou (ms).
+    pub duration_ms: u64,
+}
+
+impl TransferRecord {
+    /// Média da transferência toda (B/s); `None` se durou 0 ms.
+    pub fn average(&self) -> Option<u64> {
+        hyprlink_proto::rate::average(
+            self.bytes,
+            std::time::Duration::from_millis(self.duration_ms),
+        )
+    }
 }
 
 /// Amostra periódica (`sample_battery_history`, a cada ~5 min) — 144
@@ -110,6 +138,8 @@ pub struct ModuleStatus {
     /// `Event::Phone` pro hub (GUI/hyprlinkctl). Default = tudo `None`.
     /// Fica vazio (default) ao desconectar, via `set_pairing`.
     pub phone_status: hyprlink_proto::link::PhoneStatus,
+    /// «Onde está o telemóvel?»: ver `find.rs`.
+    pub find_phone: hyprlink_proto::link::FindPhoneState,
     pub pc_battery_pct: Option<i64>,
     pub pc_battery_charging: bool,
     /// Mais antiga primeiro (ordem de gráfico).
@@ -146,10 +176,20 @@ pub struct ModuleStatus {
     /// Formato efetivo que o telemóvel reportou em `webcam.state` (opcional:
     /// telemóvel antigo nunca o envia). Limpo quando a câmara pára.
     pub webcam_format: Option<hyprlink_proto::link::WebcamFormat>,
+    /// Quem descodifica o vídeo agora (VA-API ou CPU) e para onde a câmara
+    /// escreve; limpos quando a câmara pára.
+    pub webcam_decoder: Option<hyprlink_proto::link::CamDecoder>,
+    pub webcam_output: Option<hyprlink_proto::link::CamOutput>,
+    /// Por onde vai a ligação ativa (pelo IP local); `None` sem ligação.
+    pub link_path: Option<hyprlink_proto::link::LinkPath>,
     /// Sessão de vídeo em curso: (id do uni-stream, largura, altura dos caps
     /// do `v4l2sink`). Permite ao telemóvel reabrir o stream com o mesmo id
     /// (reinício local de resolução/codec) sem novo `webcam.start`.
     pub webcam_session: Option<(u64, i64, i64)>,
+    /// Rotação (0/90/180/270) e espelho que o PC aplica ao vídeo
+    /// (`webcam.transform` ou `webcam.state`). Guardado mesmo sem pipeline:
+    /// a app manda-o logo ao ligar, muitas vezes antes do vídeo.
+    pub webcam_transform: (u16, bool),
     /// Última preferência de formato definida na GUI; serve de base aos
     /// `webcam.request` do telemóvel que omitem campos. Sobrevive à câmara.
     pub webcam_pref: Option<crate::webcam::StartParams>,
@@ -385,6 +425,8 @@ pub fn start_file_transfer(
         direction,
         bytes: 0,
         total,
+        started: std::time::Instant::now(),
+        meter: hyprlink_proto::rate::RateMeter::new(),
     });
     s.modules.file_cancel = Some(cancel.clone());
     cancel
@@ -393,6 +435,7 @@ pub fn start_file_transfer(
 pub fn update_file_transfer_progress(state: &Arc<Mutex<HudState>>, bytes: u64) {
     if let Some(t) = state.lock().unwrap().modules.file_transfer.as_mut() {
         t.bytes = bytes;
+        t.meter.sample(t.started.elapsed(), bytes);
     }
 }
 
@@ -476,6 +519,7 @@ pub fn finish_file_transfer(state: &Arc<Mutex<HudState>>, ok: bool, error: Optio
             bytes: t.bytes,
             ok,
             error,
+            duration_ms: t.started.elapsed().as_millis() as u64,
         });
         s.modules.file_history.truncate(MAX_HISTORY);
     }
@@ -582,8 +626,11 @@ pub fn set_webcam_active(state: &Arc<Mutex<HudState>>, active: bool) {
     if !active {
         s.modules.webcam_mbps = None;
         s.modules.webcam_codec = None;
+        s.modules.webcam_decoder = None;
+        s.modules.webcam_output = None;
         s.modules.webcam_format = None;
         s.modules.webcam_session = None;
+        s.modules.webcam_transform = (0, false);
     }
 }
 
@@ -606,6 +653,14 @@ pub fn set_webcam_codec(state: &Arc<Mutex<HudState>>, label: &'static str) {
 /// vive em `file_transfer` e só passa para o histórico quando acaba).
 pub fn clear_file_history(state: &Arc<Mutex<HudState>>) {
     state.lock().unwrap().modules.file_history.clear();
+}
+
+pub fn set_webcam_decoder(state: &Arc<Mutex<HudState>>, d: hyprlink_proto::link::CamDecoder) {
+    state.lock().unwrap().modules.webcam_decoder = Some(d);
+}
+
+pub fn set_webcam_output(state: &Arc<Mutex<HudState>>, o: hyprlink_proto::link::CamOutput) {
+    state.lock().unwrap().modules.webcam_output = Some(o);
 }
 
 pub fn set_webcam_mbps(state: &Arc<Mutex<HudState>>, mbps: f64) {
@@ -644,6 +699,36 @@ mod tests {
         let r = h.lock().unwrap().modules.file_history[0].clone();
         assert!(!r.ok && r.error.as_deref() == Some("sha256"));
         assert!(!mark_transfer_rejected(&h, 7, None), "id desconhecido");
+    }
+
+    #[test]
+    fn transfer_reports_speed_eta_and_the_average_at_the_end() {
+        let h = hud();
+        start_file_transfer(&h, "grande.mp4".into(), "enviando", 100_000_000);
+        {
+            let mut s = h.lock().unwrap();
+            let t = s.modules.file_transfer.as_mut().unwrap();
+            assert_eq!(t.speed(), (None, None), "sem amostra ainda");
+            // Começou há 4 s.
+            t.started -= std::time::Duration::from_secs(4);
+        }
+        update_file_transfer_progress(&h, 40_000_000);
+        let (rate, eta) = h
+            .lock()
+            .unwrap()
+            .modules
+            .file_transfer
+            .as_mut()
+            .unwrap()
+            .speed();
+        // ≈ 10 MB/s (o relógio corre durante o teste) → faltam ≈ 6 s.
+        let rate = rate.unwrap();
+        assert!((9_900_000..=10_000_000).contains(&rate), "{rate}");
+        assert!(matches!(eta, Some(6 | 7)), "{eta:?}");
+        finish_file_transfer(&h, true, None);
+        let r = h.lock().unwrap().modules.file_history[0].clone();
+        assert!(r.duration_ms >= 4000);
+        assert!(r.average().is_some_and(|a| a <= 10_000_000));
     }
 
     #[test]

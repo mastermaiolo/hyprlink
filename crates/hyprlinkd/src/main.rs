@@ -4,10 +4,12 @@ mod art;
 mod audio;
 mod battery;
 mod bridge;
+mod cli;
 mod clip;
 mod config;
 mod ctl;
 mod envinfo;
+mod find;
 mod gate;
 mod gesture;
 mod hub;
@@ -17,6 +19,7 @@ mod input;
 mod ipc;
 mod media;
 mod mic;
+mod netaddrs;
 mod notif;
 mod open_url;
 mod pairing;
@@ -39,9 +42,37 @@ use std::sync::{Arc, Mutex};
 use qrcode::QrCode;
 use qrcode::render::unicode;
 
-const PORT: u16 = 7443;
+const PORT: u16 = hyprlink_env::net::DAEMON_PORT;
 
-fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<std::process::ExitCode> {
+    use std::process::ExitCode;
+    // Antes de tudo: nem `--help` nem um segundo daemon podem chegar a tocar no
+    // som (`speaker::cleanup_orphans`), na porta ou nos sockets.
+    match cli::parse(std::env::args().skip(1)) {
+        cli::Cli::Run => {}
+        cli::Cli::Help => {
+            println!("{}", cli::usage());
+            return Ok(ExitCode::SUCCESS);
+        }
+        cli::Cli::Version => {
+            println!("{}", cli::version());
+            return Ok(ExitCode::SUCCESS);
+        }
+        cli::Cli::Bad(arg) => {
+            eprintln!("hyprlink-daemon: argumento desconhecido: {arg}\n");
+            eprintln!("{}", cli::usage());
+            return Ok(ExitCode::from(2));
+        }
+    }
+    if let Some(sock) = cli::running_daemon() {
+        eprintln!(
+            "hyprlink-daemon: já há um daemon a correr ({} responde); não arranco outro.\n\
+             Para o reiniciar: systemctl --user restart hyprlink-bridge",
+            sock.display()
+        );
+        return Ok(ExitCode::from(1));
+    }
+
     let identity = identity::load_or_generate()?;
     let pairing = Arc::new(Mutex::new(pairing::PairingStore::load()?));
     let local_ip = local_ip_guess();
@@ -85,7 +116,7 @@ fn main() -> anyhow::Result<()> {
     // hyprlinkctl), que falam com ele pelo socket local da bridge.
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(run_daemon(identity, pairing, hud, config, local_ip));
-    Ok(())
+    Ok(ExitCode::SUCCESS)
 }
 
 async fn run_daemon(

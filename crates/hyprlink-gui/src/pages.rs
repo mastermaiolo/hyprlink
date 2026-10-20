@@ -462,7 +462,7 @@ fn camera_body(app: &App) -> El<'_> {
         |r, (w, h)| {
             r.push(chip(
                 format!("{h}p"),
-                cfg.width == *w && cfg.height == *h,
+                crate::app::cam_class(cfg.width, cfg.height) == crate::app::cam_class(*w, *h),
                 Message::CamRes(*w, *h),
             ))
         },
@@ -514,7 +514,9 @@ fn camera_body(app: &App) -> El<'_> {
         ),
         setting(
             t("Codec"),
-            t("H.265 poupa débito; o telemóvel volta a H.264 se não tiver encoder HEVC"),
+            app.cam_codec_note().unwrap_or(t(
+                "H.265 poupa débito; o telemóvel volta a H.264 se não tiver encoder HEVC"
+            )),
             codecs.into()
         ),
         gap(space::XL),
@@ -528,8 +530,10 @@ fn camera_body(app: &App) -> El<'_> {
         ),
         gap(space::XL),
         subhead("C", t("No PC")),
-        kv_text(t("DISPOSITIVO"), "/dev/video42"),
-        kv_text(t("DRIVER"), "v4l2loopback"),
+        kv_text(t("DISPOSITIVO"), cam_destination(app)),
+        kv_text(t("LIGAÇÃO"), cam_link(app)),
+        kv_text(t("DRIVER"), cam_driver(app)),
+        kv_text(t("DESCODIFICAÇÃO"), cam_decoder(app)),
         kv_text(t("MÓDULO"), "webcam.rs"),
         kv_text(
             t("CODEC EM USO"),
@@ -574,6 +578,48 @@ fn camera_body(app: &App) -> El<'_> {
         column![preview, gap(space::XXL), controls,].into()
     } else {
         row![preview, hgap(space::GUTTER), controls,].into()
+    }
+}
+
+/// Destino real da câmara virtual no PC (secção «No PC»): `/dev/videoN` ou o
+/// nó PipeWire. Um daemon antigo (sem `output`) com a câmara ligada usa sempre
+/// o `/dev/video42`.
+fn cam_destination(app: &App) -> String {
+    use hyprlink_gui::link::CamOutput;
+    match (app.webcam, app.webcam.and_then(|w| w.output)) {
+        (_, Some(CamOutput::V4l2(nr))) => format!("/dev/video{nr}"),
+        (_, Some(CamOutput::Pipewire)) => tr!(
+            "PipeWire: HyprLink · {}",
+            app.device()
+                .map_or_else(|| t("TELEMÓVEL").to_string(), fmt::name)
+        ),
+        (Some(_), None) => "/dev/video42".to_string(),
+        (None, None) => fmt::DASH.to_string(),
+    }
+}
+
+/// Por onde vai a ligação ao telemóvel (USB / Wi-Fi…).
+fn cam_link(app: &App) -> String {
+    app.link_path
+        .map_or_else(|| fmt::DASH.to_string(), |p| fmt::link_path(p).to_string())
+}
+
+fn cam_driver(app: &App) -> String {
+    use hyprlink_gui::link::CamOutput;
+    match (app.webcam, app.webcam.and_then(|w| w.output)) {
+        (_, Some(CamOutput::Pipewire)) => "PipeWire (experimental)".to_string(),
+        (Some(_), _) | (_, Some(CamOutput::V4l2(_))) => "v4l2loopback".to_string(),
+        (None, None) => fmt::DASH.to_string(),
+    }
+}
+
+/// Quem descodifica o vídeo no PC: «GPU (VA-API)» ou «CPU».
+fn cam_decoder(app: &App) -> String {
+    use hyprlink_gui::link::CamDecoder;
+    match app.webcam.and_then(|w| w.decoder) {
+        Some(CamDecoder::Gpu) => t("GPU (VA-API)").to_string(),
+        Some(CamDecoder::Cpu) => t("CPU").to_string(),
+        None => fmt::DASH.to_string(),
     }
 }
 
@@ -1270,7 +1316,11 @@ pub fn share(app: &App) -> El<'_> {
                     gap(space::S),
                     row![
                         mono(
-                            tr!("{} de {}", fmt::size(xfer.done), fmt::size(xfer.bytes)),
+                            format!(
+                                "{} · {}",
+                                tr!("{} de {}", fmt::size(xfer.done), fmt::size(xfer.bytes)),
+                                fmt::transfer_speed(xfer.bytes_per_sec, xfer.eta_s)
+                            ),
                             SUB
                         ),
                         fill_x(),
@@ -1291,7 +1341,18 @@ pub fn share(app: &App) -> El<'_> {
                 TransferState::Failed => HOT,
                 _ => MUTED,
             };
-            history = history.push(column![
+            // «1,9 GB em 2 min 31 s (12,6 MB/s média)» nas que acabaram bem.
+            let summary = match (xfer.state, xfer.duration_ms, xfer.bytes_per_sec) {
+                (TransferState::Done, Some(ms), Some(bps)) => Some(
+                    row![
+                        Space::new().width(20),
+                        mono(fmt::transfer_summary(xfer.done, ms, bps), FAINT)
+                    ]
+                    .padding(Padding::from([0, 0]).bottom(9)),
+                ),
+                _ => None,
+            };
+            let mut entry = column![
                 row![
                     text(if xfer.dir == Dir::Rx { "↓" } else { "↑" })
                         .font(MONO_SEMI)
@@ -1309,8 +1370,11 @@ pub fn share(app: &App) -> El<'_> {
                 ]
                 .align_y(Alignment::Center)
                 .padding(Padding::from([9, 0])),
-                rule(),
-            ]);
+            ];
+            if let Some(summary) = summary {
+                entry = entry.push(summary);
+            }
+            history = history.push(entry.push(rule()));
         }
     }
 

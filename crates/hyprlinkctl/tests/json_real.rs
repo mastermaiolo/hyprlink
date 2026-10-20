@@ -4,7 +4,8 @@
 
 use hyprlink_proto::ipc::{self, ClientMsg, PROTO_VERSION, ServerMsg};
 use hyprlink_proto::link::{
-    Command, Device, Event, Kind, LinkPhase, LinkState, Network, Notice, PhoneStatus,
+    Command, Command2, Device, Event, Event2, FindPhoneState, FindStoppedBy, Kind, LinkPhase,
+    LinkState, Network, Notice, PhoneStatus,
 };
 use serde_json::Value;
 use std::io::{BufRead, BufReader};
@@ -74,18 +75,37 @@ fn fake_daemon(dir: &std::path::Path) {
                 }
                 let mut r = s.try_clone().unwrap();
                 let mut w = s;
-                // Comandos: só o `Ping` tem resposta aqui.
+                // Comandos com resposta aqui: `Ping` e o «onde está o
+                // telemóvel» (com 7 s finge uma app antiga, que não responde).
                 let mut w2 = w.try_clone().unwrap();
                 std::thread::spawn(move || {
                     while let Ok(ClientMsg::Command(c)) = ipc::read::<ClientMsg>(&mut r) {
-                        if let Command::Ping(device) = c {
-                            let n = Notice::PingReply {
+                        let reply = match c {
+                            Command::Ping(device) => Event::Notice(Notice::PingReply {
                                 device,
                                 rtt_ms: 12.34,
-                            };
-                            if ipc::write(&mut w2, &ServerMsg::Event(Event::Notice(n))).is_err() {
-                                return;
+                            }),
+                            Command::More(Command2::FindPhone(req)) if req.duration_s != 7 => {
+                                Event::More(Event2::FindPhone(FindPhoneState {
+                                    active: true,
+                                    until_ms: Some(
+                                        1_791_100_000_000 + u64::from(req.duration_s) * 1000,
+                                    ),
+                                    ..Default::default()
+                                }))
                             }
+                            Command::More(Command2::StopFindPhone) => {
+                                Event::More(Event2::FindPhone(FindPhoneState {
+                                    active: false,
+                                    until_ms: None,
+                                    last_stopped_by: Some(FindStoppedBy::Pc),
+                                    last_error: None,
+                                }))
+                            }
+                            _ => continue,
+                        };
+                        if ipc::write(&mut w2, &ServerMsg::Event(reply)).is_err() {
+                            return;
                         }
                     }
                 });
@@ -167,6 +187,24 @@ fn watch_real_com_telemovel_ligado() {
     assert!(a["host"]["hostname"].is_string());
     // A partir do 2.º instantâneo já há latência.
     assert_eq!(lines[1]["latency_ms"], 12.0);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn find_real_toca_para_e_avisa_sem_resposta() {
+    let dir = runtime_dir("find");
+    fake_daemon(&dir);
+    let (v, ok) = once(&dir, &["find", "sound", "--secs", "15", "--json"], false);
+    assert!(ok, "{v}");
+    assert_eq!(v["find_phone"]["active"], true);
+    assert_eq!(v["message"], "a tocar no telemóvel (som) · 15 s");
+    let (v, ok) = once(&dir, &["find", "stop", "--json"], false);
+    assert!(ok, "{v}");
+    assert_eq!(v["find_phone"]["last_stopped_by"], "pc");
+    // Sem phone.find.state em 5 s: app antiga.
+    let (v, ok) = once(&dir, &["find", "--secs", "7", "--json"], false);
+    assert!(!ok);
+    assert_eq!(v["error"], "no_reply");
     std::fs::remove_dir_all(&dir).ok();
 }
 

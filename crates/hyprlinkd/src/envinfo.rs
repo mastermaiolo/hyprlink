@@ -4,8 +4,9 @@
 
 use std::sync::OnceLock;
 
-use hyprlink_env::overrides::Resolved;
-use hyprlink_env::report::{self, Report};
+use hyprlink_env::hyprland::DispatchMode;
+use hyprlink_env::overrides::{DispatchChoice, Overrides, Resolved};
+use hyprlink_env::report::{self, Depth, ModeProbe, Report};
 use hyprlink_env::shell::Shell;
 use hyprlink_env::{Env, RealRunner};
 use hyprlink_proto::link::EnvValue;
@@ -31,15 +32,48 @@ pub fn daemon_env() -> Env {
 }
 
 /// Deteta o ambiente (bloqueante, rápido) e devolve as linhas para o Diário.
+/// **Nunca faz dispatch:** o modo do `hyprctl dispatch` é forçado
+/// (`hypr_dispatch_mode`) ou inferido; se a inferência for segura fica já em
+/// cache, senão confirma-se no primeiro dispatch a sério (`hypr.rs`).
 pub fn init(config: &SharedConfig) -> Vec<String> {
-    let env = daemon_env();
     let ov = config::env_overrides(config);
-    let rep = report::collect_with(&env, &ov, false);
+    let (rep, log) = detect(&daemon_env(), &ov);
+    if rep.options.hypr_dispatch_mode == DispatchChoice::Auto && rep.dispatch_mode_certain {
+        crate::hypr::seed_mode(rep.dispatch_mode);
+    }
+    let problems = rep.option_problems.clone();
+    let _ = INFO.set(Info {
+        report: rep,
+        problems,
+    });
+    log
+}
+
+/// «Lua (inferido)» / «Lua (override)» / «clássico (a confirmar no primeiro uso)».
+fn mode_line(rep: &Report) -> String {
+    let mode = match rep.dispatch_mode {
+        DispatchMode::Lua => "Lua",
+        DispatchMode::Classic => "clássico",
+    };
+    let why = if rep.options.hypr_dispatch_mode != DispatchChoice::Auto {
+        "override"
+    } else if rep.dispatch_mode_certain {
+        "inferido"
+    } else {
+        "a confirmar no primeiro uso"
+    };
+    format!("{mode} ({why})")
+}
+
+/// A deteção do arranque, sem tocar no estado global (testável com um `Env`
+/// falso).
+fn detect(env: &Env, ov: &Overrides) -> (Report, Vec<String>) {
+    let rep = report::collect_with(env, ov, Depth::Quick, ModeProbe::Infer);
     let mut log = vec![
         format!(
-            "[i] ambiente · shell: {} · dispatch: {:?} · GPU: {}",
+            "[i] ambiente · shell: {} · dispatch: {} · GPU: {}",
             rep.shell.shell.label(),
-            rep.dispatch_mode,
+            mode_line(&rep),
             rep.gpu_source.why
         ),
         format!(
@@ -51,13 +85,12 @@ pub fn init(config: &SharedConfig) -> Vec<String> {
                 .map_or("sem sensor".to_string(), |t| t.why.clone())
         ),
     ];
-    let problems = rep.option_problems.clone();
-    log.extend(problems.iter().map(|p| format!("[!] config.json · {p}")));
-    let _ = INFO.set(Info {
-        report: rep,
-        problems,
-    });
-    log
+    log.extend(
+        rep.option_problems
+            .iter()
+            .map(|p| format!("[!] config.json · {p}")),
+    );
+    (rep, log)
 }
 
 /// O grafo do PipeWire e o estado do EasyEffects agora (bloqueante: corre o
@@ -184,5 +217,105 @@ mod tests {
         assert!(gate(None, "retorno").is_ok());
         let e = gate(Some(AudioServer::PulseAudio), "o retorno de áudio").unwrap_err();
         assert!(e.contains("PulseAudio") && e.contains("retorno"));
+    }
+
+    /// Regista todas as chamadas; o `hyprctl` responde como um Hyprland 0.56
+    /// em Lua (aceita `hl.*`).
+    struct Recorder(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
+
+    impl hyprlink_env::Runner for Recorder {
+        fn run(&self, prog: &str, args: &[&str]) -> Option<hyprlink_env::RunOut> {
+            self.0
+                .lock()
+                .unwrap()
+                .push(format!("{prog} {}", args.join(" ")));
+            let stdout = match args {
+                ["version"] => "Hyprland 0.56.2 built from branch v0.56.2\n".to_string(),
+                _ => String::new(),
+            };
+            Some(hyprlink_env::RunOut {
+                ok: prog == "hyprctl",
+                stdout,
+            })
+        }
+    }
+
+    fn fake_env(config: Option<&str>) -> (Env, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+        let root = std::env::temp_dir().join(format!(
+            "hyprlink-envinfo-{}-{}",
+            std::process::id(),
+            config.unwrap_or("nenhum")
+        ));
+        let hypr = root.join("config/hypr");
+        std::fs::create_dir_all(&hypr).unwrap();
+        if let Some(f) = config {
+            std::fs::write(hypr.join(f), "").unwrap();
+        }
+        let calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let env = Env {
+            sys: root.join("sys"),
+            proc_dir: root.join("proc"),
+            etc: root.join("etc"),
+            dev: root.join("dev"),
+            vars: [(
+                "XDG_CONFIG_HOME".to_string(),
+                root.join("config").display().to_string(),
+            )]
+            .into_iter()
+            .collect(),
+            have: Box::new(|t| t == "hyprctl"),
+            runner: Box::new(Recorder(calls.clone())),
+            sock_query: Box::new(|_, _| None),
+        };
+        (env, calls)
+    }
+
+    #[test]
+    fn arranque_nunca_faz_dispatch() {
+        for config in [Some("hyprland.lua"), Some("hyprland.conf"), None] {
+            let (env, calls) = fake_env(config);
+            let (rep, log) = detect(&env, &Overrides::default());
+            let calls = calls.lock().unwrap().clone();
+            assert!(
+                !calls.iter().any(|c| c.contains("dispatch")),
+                "{config:?}: houve dispatch: {calls:?}"
+            );
+            assert!(calls.iter().any(|c| c == "hyprctl version"), "{calls:?}");
+            let line = &log[0];
+            match config {
+                Some("hyprland.lua") => {
+                    assert_eq!(rep.dispatch_mode, DispatchMode::Lua);
+                    assert!(rep.dispatch_mode_certain);
+                    assert!(line.contains("dispatch: Lua (inferido)"), "{line}");
+                }
+                Some(_) => {
+                    assert_eq!(rep.dispatch_mode, DispatchMode::Classic);
+                    assert!(line.contains("dispatch: clássico (inferido)"), "{line}");
+                }
+                None => {
+                    // 0.56 sem ficheiro: palpite Lua, confirmado no primeiro uso.
+                    assert_eq!(rep.dispatch_mode, DispatchMode::Lua);
+                    assert!(!rep.dispatch_mode_certain);
+                    assert!(
+                        line.contains("dispatch: Lua (a confirmar no primeiro uso)"),
+                        "{line}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn override_aparece_como_override() {
+        let (env, calls) = fake_env(None);
+        let ov: Overrides = serde_json::from_str(r#"{"hypr_dispatch_mode": "classic"}"#).unwrap();
+        let (rep, log) = detect(&env, &ov);
+        assert_eq!(rep.dispatch_mode, DispatchMode::Classic);
+        assert!(
+            log[0].contains("dispatch: clássico (override)"),
+            "{}",
+            log[0]
+        );
+        assert!(!calls.lock().unwrap().iter().any(|c| c.contains("dispatch")));
     }
 }

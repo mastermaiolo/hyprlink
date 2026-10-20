@@ -5,7 +5,8 @@
 use hyprlink_proto::client::{Session, SessionError};
 use hyprlink_proto::host::Probe;
 use hyprlink_proto::link::{
-    Codec, Command, DeviceId, ErrorKind, Event, LinkState, MirrorConfig, Notice, Op,
+    Codec, Command, Command2, DeviceId, ErrorKind, Event, Event2, FindPhoneRequest, FindPhoneState,
+    LinkState, MirrorConfig, Notice, Op,
 };
 use hyprlink_proto::snapshot::Snapshot;
 use serde_json::json;
@@ -60,6 +61,7 @@ fn open() -> Result<(Session, State), SessionError> {
     for e in &events {
         st.apply(e);
     }
+    st.snap.daemon_version = Some(session.daemon_version.clone());
     Ok((session, st))
 }
 
@@ -139,6 +141,108 @@ const MIRROR: MirrorConfig = MirrorConfig {
     scale: 0.75,
 };
 
+/// Quanto esperar pelo `phone.find.state` do telemóvel (a GUI usa o mesmo).
+const FIND_REPLY: Duration = Duration::from_secs(5);
+
+/// «som, vibração, lanterna».
+pub fn find_modes(r: &FindPhoneRequest) -> String {
+    [
+        (r.sound, "som"),
+        (r.vibrate, "vibração"),
+        (r.torch, "lanterna"),
+    ]
+    .iter()
+    .filter(|(on, _)| *on)
+    .map(|(_, s)| *s)
+    .collect::<Vec<_>>()
+    .join(", ")
+}
+
+/// `find [sound|vibrate|torch|all] [--secs N]`: espera que o telemóvel diga
+/// que começou (`phone.find.state`); `None` = `find stop`.
+pub fn find(json_out: bool, req: Option<FindPhoneRequest>) -> ExitCode {
+    let (mut s, st) = match open() {
+        Ok(x) => x,
+        Err(e) => return session_fail(json_out, &e),
+    };
+    if st.linked.is_none() {
+        return fail(json_out, "sem telemóvel ligado", "offline");
+    }
+    let Some(req) = req else {
+        if s.send(Command::More(Command2::StopFindPhone)).is_err() {
+            return fail(json_out, "o daemon fechou a ligação", "protocol");
+        }
+        // Uma só espera: a falha (sem telemóvel) ou o estado parado. Sem
+        // nenhum dos dois em `GRACE`, conta como aceite.
+        let r = s.wait_for(GRACE, |e| match e {
+            Event::More(Event2::FindPhone(f)) if !f.active => Some(Ok(f.clone())),
+            Event::Notice(Notice::Failed {
+                op: Op::Phone,
+                error,
+            }) => Some(Err(*error)),
+            _ => None,
+        });
+        return match r {
+            Ok(Err(e)) => {
+                let (code, msg) = error_code(e);
+                fail(json_out, msg, code)
+            }
+            Ok(Ok(state)) => ok(json_out, "toque parado", json!({ "find_phone": state })),
+            Err(_) => ok(
+                json_out,
+                "toque parado",
+                json!({ "find_phone": FindPhoneState::default() }),
+            ),
+        };
+    };
+    if s.send(Command::More(Command2::FindPhone(req))).is_err() {
+        return fail(json_out, "o daemon fechou a ligação", "protocol");
+    }
+    let r = s.wait_for(FIND_REPLY, |e| match e {
+        Event::More(Event2::FindPhone(f)) if f.active => Some(Ok(f.clone())),
+        Event::Notice(Notice::Failed {
+            op: Op::Phone,
+            error,
+        }) => Some(Err(*error)),
+        _ => None,
+    });
+    match r {
+        Ok(Ok(state)) => ok(
+            json_out,
+            &format!(
+                "a tocar no telemóvel ({}) · {} s",
+                find_modes(&req),
+                req.duration_s
+            ),
+            json!({ "find_phone": state }),
+        ),
+        Ok(Err(ErrorKind::Refused)) => fail(
+            json_out,
+            "recusado pelo daemon (limite: 1 a cada 3 s, 10 por minuto)",
+            "refused",
+        ),
+        Ok(Err(e)) => {
+            let (code, msg) = error_code(e);
+            fail(json_out, msg, code)
+        }
+        Err(SessionError::Timeout) => fail(
+            json_out,
+            "a app do telemóvel não respondeu (versão antiga?)",
+            "no_reply",
+        ),
+        Err(e) => session_fail(json_out, &e),
+    }
+}
+
+/// Para o `--json` do simulador: o estado que o daemon publicaria.
+pub fn find_state_json(active: bool) -> serde_json::Value {
+    serde_json::to_value(FindPhoneState {
+        active,
+        ..Default::default()
+    })
+    .unwrap_or_default()
+}
+
 /// `open`: foca a GUI que já corre, ou lança-a.
 pub fn open_gui(json_out: bool) -> ExitCode {
     let sock = std::env::var_os("XDG_RUNTIME_DIR")
@@ -207,6 +311,7 @@ pub fn watch(json_out: bool, interval: Duration, human: fn(&Snapshot) -> String)
                 st.snap = Snapshot::new("down");
                 st.snap.host = Some(host.clone());
             }
+            st.snap.ctl_version = Some(env!("CARGO_PKG_VERSION").to_string());
             let line = if json_out {
                 serde_json::to_string(&st.snap).unwrap_or_default()
             } else {
@@ -231,6 +336,7 @@ pub fn status(json_out: bool, human: fn(&Snapshot) -> String) -> ExitCode {
     };
     let mut snap = snap;
     snap.host = Some(probe.sample());
+    snap.ctl_version = Some(env!("CARGO_PKG_VERSION").to_string());
     if json_out {
         print_json(&snap);
     } else {

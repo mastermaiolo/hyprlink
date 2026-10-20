@@ -20,8 +20,23 @@ pub fn set(active: &ActiveConn, connection: quinn::Connection) {
     *active.lock().unwrap() = Some(connection);
 }
 
-pub fn clear(active: &ActiveConn) {
-    *active.lock().unwrap() = None;
+/// Limpa o registo **só se** ainda lá estiver esta ligação; devolve se limpou.
+/// Quando o telemóvel volta a ligar, a ligação nova fica registada e a velha
+/// só morre depois (até 60 s, pelo `max_idle_timeout`): um `clear` cego
+/// apagava a nova e o daemon ficava sem como empurrar nada ao telemóvel
+/// (clipboard, notificações) até à próxima reconexão.
+pub fn clear_if(active: &ActiveConn, connection: &quinn::Connection) -> bool {
+    let id = connection.stable_id();
+    take_if(&mut active.lock().unwrap(), |c| c.stable_id() == id)
+}
+
+fn take_if<T>(slot: &mut Option<T>, is_it: impl Fn(&T) -> bool) -> bool {
+    if slot.as_ref().is_some_and(is_it) {
+        *slot = None;
+        true
+    } else {
+        false
+    }
 }
 
 fn next_id() -> u64 {
@@ -84,4 +99,20 @@ pub async fn request(active: &ActiveConn, kind: &str, body: Option<Value>) -> Op
         .ok()?
         .ok()?;
     Packet::decode(&raw).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::take_if;
+
+    #[test]
+    fn take_if_so_limpa_a_ligacao_registada() {
+        // A velha (1) morre depois de a nova (2) ficar registada.
+        let mut slot = Some(2u32);
+        assert!(!take_if(&mut slot, |c| *c == 1));
+        assert_eq!(slot, Some(2));
+        assert!(take_if(&mut slot, |c| *c == 2));
+        assert_eq!(slot, None);
+        assert!(!take_if(&mut slot, |c| *c == 2));
+    }
 }

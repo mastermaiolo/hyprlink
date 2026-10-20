@@ -77,6 +77,15 @@ pub fn status_json(hud: &Arc<Mutex<HudState>>) -> serde_json::Value {
         "mic": m.mic_active,
         "speaker": m.speaker_active,
         "webcam": m.webcam_active,
+        // «gpu» | «cpu» e «v4l2loopback» | «pipewire»; `null` com a câmara parada.
+        "webcam_decoder": m.webcam_decoder,
+        "webcam_output": m.webcam_output.map(|o| match o {
+            hyprlink_proto::link::CamOutput::V4l2(_) => "v4l2loopback",
+            hyprlink_proto::link::CamOutput::Pipewire => "pipewire",
+        }),
+        "find_phone": { "active": m.find_phone.active },
+        // «usb» | «wifi» | «eth» | «other»; `null` sem ligação.
+        "link_path": m.link_path.map(|p| p.as_str()),
     })
 }
 

@@ -7,7 +7,7 @@ Um binário, duas metades:
   `$XDG_RUNTIME_DIR/hyprlink/cmd.sock` (`src/legacy.rs`). É usado pelo `contrib/`:
   `status ping mic tap speaker headset send dispatch lock notif url phone-url
   phone-app phone-media`.
-- **JSON v1** (`--json`, `watch`, `clipboard`, `pair`, `mirror`, `ws`, `open`): fala com o
+- **JSON v1** (`--json`, `watch`, `clipboard`, `pair`, `mirror`, `ws`, `open`, `find`): fala com o
   `hyprlinkd` real pelo `$XDG_RUNTIME_DIR/hyprlink.sock` (`src/real.rs`). O formato do
   `watch` é o `Snapshot` de `hyprlink-proto` (`src/snapshot.rs`), uma linha por
   instantâneo.
@@ -19,9 +19,15 @@ hyprlinkctl ping --json
 hyprlinkctl mic|tap|speaker on|off|toggle --json
 hyprlinkctl mirror start|stop|toggle --json
 hyprlinkctl ws <1-10> --json
+hyprlinkctl find [sound|vibrate|torch|all] [--secs N] [--json]   # por omissão all, 30 s (5–60)
+hyprlinkctl find stop [--json]
 hyprlinkctl doctor [--json] [--no-dispatch]  # relatório de compatibilidade (só lê)
 hyprlinkctl status --waybar                # {text,tooltip,class} para a Waybar (lê o status.json)
 ```
+
+`find` espera até 5 s pelo `phone.find.state` do telemóvel: `{"ok":true,"find_phone":{"active":true,
+"until_ms":…}}`. Erros: `offline` (sem telemóvel), `refused` (limite do daemon: 1 a cada 3 s,
+10 por minuto), `no_reply` (a app não respondeu: versão antiga?). `find stop` nunca é limitado.
 
 `status --waybar` não fala com o daemon: lê o `$XDG_RUNTIME_DIR/hyprlink/status.json`, sai
 sempre com 0 e escapa `& < >` (a Waybar lê markup Pango). O `contrib/waybar-hyprlink.sh` usa-o

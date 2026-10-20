@@ -257,11 +257,12 @@ impl Bridge {
     }
 
     fn transfers(&self) -> Vec<Transfer> {
-        let hud = self.ctx.hud.lock().unwrap();
-        let m = &hud.modules;
+        let mut hud = self.ctx.hud.lock().unwrap();
+        let m = &mut hud.modules;
         let dir = |d: &str| if d == "enviando" { Dir::Tx } else { Dir::Rx };
         let mut out = Vec::new();
-        if let Some(t) = &m.file_transfer {
+        if let Some(t) = &mut m.file_transfer {
+            let (bytes_per_sec, eta_s) = t.speed();
             out.push(Transfer {
                 id: t.id,
                 name: t.name.clone(),
@@ -270,6 +271,9 @@ impl Bridge {
                 done: t.bytes,
                 state: TransferState::Active,
                 at: t.at_unix,
+                bytes_per_sec,
+                eta_s,
+                duration_ms: None,
             });
         }
         out.extend(m.file_history.iter().map(|r| Transfer {
@@ -286,6 +290,9 @@ impl Bridge {
                 TransferState::Failed
             },
             at: r.at_unix,
+            bytes_per_sec: r.ok.then(|| r.average()).flatten(),
+            eta_s: None,
+            duration_ms: r.ok.then_some(r.duration_ms),
         }));
         out
     }
@@ -359,6 +366,8 @@ impl Bridge {
                 // `webcam.state` cobre o intervalo até chegar o primeiro byte.
                 codec: stream_codec.or(format.map(|f| f.codec)),
                 format,
+                decoder: hud.modules.webcam_decoder,
+                output: hud.modules.webcam_output,
             }
         })
     }
@@ -615,6 +624,9 @@ async fn project_slow(b: Arc<Bridge>, hub: Hub) {
         }
 
         hub.publish(Event::More(Event2::Webcam(b.webcam())));
+        hub.publish(Event::More(Event2::LinkPath(
+            b.ctx.hud.lock().unwrap().modules.link_path,
+        )));
         hub.publish(Event::Phone(b.phone_status()));
         hub.publish(Event::More(Event2::Clipboard(b.clipboard())));
         hub.publish(Event::More(Event2::Notifications(b.notifications())));
@@ -635,6 +647,8 @@ async fn project_slow(b: Arc<Bridge>, hub: Hub) {
             keyboard: t.virtual_keyboard,
         })));
         hub.publish(Event::More(Event2::Settings(b.settings())));
+        crate::find::expire(&b.ctx.hud, crate::find::now_ms());
+        hub.publish(Event::More(Event2::FindPhone(crate::find::get(&b.ctx.hud))));
 
         if let Some(Some(ws)) = blocking(workspaces).await {
             hub.publish(ws);
@@ -1085,6 +1099,31 @@ async fn execute_more(b: &Arc<Bridge>, c: Command2) {
                     }
                 }
                 Err(why) => state::push_log(&ctx.hud, format!("[!] resposta recusada · {why}")),
+            }
+        }
+        Command2::FindPhone(req) => {
+            match crate::find::start(&ctx.active, &ctx.hud, &ctx.find_limiter, req).await {
+                Ok(_) => {}
+                Err(crate::find::FindError::NoMode) => {
+                    state::push_log(&ctx.hud, "[!] encontrar telemóvel recusado · nenhum modo");
+                    b.fail(Op::Phone, ErrorKind::Refused);
+                }
+                Err(crate::find::FindError::Offline) => b.fail(Op::Phone, ErrorKind::Offline),
+                Err(crate::find::FindError::RateLimited(wait)) => {
+                    state::push_log(
+                        &ctx.hud,
+                        format!(
+                            "[!] encontrar telemóvel recusado · espera {} s",
+                            wait.as_secs_f32().ceil() as u64
+                        ),
+                    );
+                    b.fail(Op::Phone, ErrorKind::Refused);
+                }
+            }
+        }
+        Command2::StopFindPhone => {
+            if crate::find::stop(&ctx.active, &ctx.hud).await.is_err() {
+                b.fail(Op::Phone, ErrorKind::Offline);
             }
         }
         Command2::OpenOnPhone { url, package } => {

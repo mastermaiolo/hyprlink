@@ -716,6 +716,9 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Histórico limpo", "Historial limpiado"),
     ("ÚLTIMO GESTO", "ÚLTIMO GESTO"),
     ("CODEC EM USO", "CÓDEC EN USO"),
+    ("GPU (VA-API)", "GPU (VA-API)"),
+    ("CPU", "CPU"),
+    ("PipeWire: HyprLink · {}", "PipeWire: HyprLink · {}"),
     ("No PC", "En el PC"),
     // ── responder a notificações ──
     ("responder…", "responder…"),
@@ -765,4 +768,59 @@ pub const TABLE: &[(&str, &str)] = &[
     ),
     // ── fonte do retorno ──
     ("FONTE DO RETORNO", "FUENTE DEL RETORNO"),
+    // ── onde está o telemóvel ──
+    ("ONDE ESTÁ O TELEMÓVEL", "DÓNDE ESTÁ EL MÓVIL"),
+    ("O TELEMÓVEL ESTÁ A TOCAR", "EL MÓVIL ESTÁ SONANDO"),
+    ("ENCONTRAR", "ENCONTRAR"),
+    ("SÓ TOCAR", "SONAR"),
+    ("TOCAR + VIBRAR", "SONAR + VIBRAR"),
+    ("LANTERNA A PISCAR", "LINTERNA"),
+    ("TUDO", "TODO"),
+    ("DURAÇÃO", "DURACIÓN"),
+    ("{} s", "{} s"),
+    ("A TOCAR · {}", "SONANDO · {}"),
+    ("A TOCAR NO TELEMÓVEL", "SONANDO EN EL MÓVIL"),
+    ("PARAR", "DETENER"),
+    ("FECHAR", "CERRAR"),
+    ("BATERIA {}%", "BATERÍA {}%"),
+    ("visto há {} s", "visto hace {} s"),
+    ("visto às {}", "visto a las {}"),
+    ("sem ligação", "sin conexión"),
+    (
+        "sem ligação · último contacto às {}",
+        "sin conexión · último contacto a las {}",
+    ),
+    ("à espera do telemóvel…", "esperando al móvil…"),
+    (
+        "A app do telemóvel não respondeu (versão antiga?)",
+        "La app del móvil no respondió (¿versión antigua?)",
+    ),
+    (
+        "encontrado no telemóvel",
+        "encontrado: detenido en el móvil",
+    ),
+    ("tempo esgotado", "tiempo agotado"),
+    ("parado no PC", "detenido en el PC"),
+    ("erro no telemóvel · {}", "error en el móvil · {}"),
+    (
+        "interrompido (ligação perdida?)",
+        "interrumpido (¿conexión perdida?)",
+    ),
+    // Transferências: velocidade e tempo restante (prompt 61).
+    ("{} min {} s", "{} min {} s"),
+    ("{} h {} min", "{} h {} min"),
+    ("faltam {}", "quedan {}"),
+    ("a calcular…", "calculando…"),
+    ("{} em {} ({} média)", "{} en {} ({} de media)"),
+    // Câmara: o telemóvel voltou a H.264 (prompt 60 B).
+    (
+        "o telemóvel não suporta H.265 · a usar H.264",
+        "el móvil no admite H.265 · se usa H.264",
+    ),
+    // ── ligação por USB ──
+    ("USB", "USB"),
+    ("WI-FI", "WI-FI"),
+    ("CABO", "CABLE"),
+    ("OUTRA", "OTRA"),
+    ("LIGAÇÃO", "CONEXIÓN"),
 ];

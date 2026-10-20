@@ -665,6 +665,9 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Histórico limpo", "历史记录已清除"),
     ("ÚLTIMO GESTO", "最近手势"),
     ("CODEC EM USO", "使用中的编码"),
+    ("GPU (VA-API)", "GPU（VA-API）"),
+    ("CPU", "CPU"),
+    ("PipeWire: HyprLink · {}", "PipeWire：HyprLink · {}"),
     ("No PC", "在 PC 上"),
     // ── responder a notificações ──
     ("responder…", "回复…"),
@@ -714,4 +717,53 @@ pub const TABLE: &[(&str, &str)] = &[
     ),
     // ── fonte do retorno ──
     ("FONTE DO RETORNO", "回传来源"),
+    // ── onde está o telemóvel ──
+    ("ONDE ESTÁ O TELEMÓVEL", "查找手机"),
+    ("O TELEMÓVEL ESTÁ A TOCAR", "手机正在响铃"),
+    ("ENCONTRAR", "查找"),
+    ("SÓ TOCAR", "响铃"),
+    ("TOCAR + VIBRAR", "响铃 + 振动"),
+    ("LANTERNA A PISCAR", "闪光灯"),
+    ("TUDO", "全部"),
+    ("DURAÇÃO", "时长"),
+    ("{} s", "{} 秒"),
+    ("A TOCAR · {}", "响铃中 · {}"),
+    ("A TOCAR NO TELEMÓVEL", "手机响铃中"),
+    ("PARAR", "停止"),
+    ("FECHAR", "关闭"),
+    ("BATERIA {}%", "电池 {}%"),
+    ("visto há {} s", "{} 秒前在线"),
+    ("visto às {}", "{} 在线"),
+    ("sem ligação", "未连接"),
+    (
+        "sem ligação · último contacto às {}",
+        "未连接 · 最后联系 {}",
+    ),
+    ("à espera do telemóvel…", "等待手机响应…"),
+    (
+        "A app do telemóvel não respondeu (versão antiga?)",
+        "手机应用未响应（版本过旧？）",
+    ),
+    ("encontrado no telemóvel", "已找到：在手机上停止"),
+    ("tempo esgotado", "时间已到"),
+    ("parado no PC", "已在电脑上停止"),
+    ("erro no telemóvel · {}", "手机错误 · {}"),
+    ("interrompido (ligação perdida?)", "已中断（连接丢失？）"),
+    // Transferências: velocidade e tempo restante (prompt 61).
+    ("{} min {} s", "{} 分 {} 秒"),
+    ("{} h {} min", "{} 小时 {} 分"),
+    ("faltam {}", "剩余 {}"),
+    ("a calcular…", "计算中…"),
+    ("{} em {} ({} média)", "{}，用时 {}（平均 {}）"),
+    // Câmara: o telemóvel voltou a H.264 (prompt 60 B).
+    (
+        "o telemóvel não suporta H.265 · a usar H.264",
+        "手机不支持 H.265 · 正在使用 H.264",
+    ),
+    // ── ligação por USB ──
+    ("USB", "USB"),
+    ("WI-FI", "WI-FI"),
+    ("CABO", "有线"),
+    ("OUTRA", "未知"),
+    ("LIGAÇÃO", "连接"),
 ];

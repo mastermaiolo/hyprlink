@@ -152,6 +152,37 @@ pub fn cam_shown(stats: Option<WebcamStats>, pref: WebcamConfig) -> WebcamConfig
     }
 }
 
+/// Classe da resolução (480/720/1080): o lado menor, para que 720×1280 na
+/// vertical conte como 720p, tal como 1280×720.
+pub fn cam_class(width: u32, height: u32) -> u32 {
+    width.min(height)
+}
+
+/// O efetivo difere do pedido em classe, fps ou codec (a rotação sozinha não conta).
+pub fn cam_differs(shown: WebcamConfig, pref: WebcamConfig) -> bool {
+    cam_class(shown.width, shown.height) != cam_class(pref.width, pref.height)
+        || shown.fps != pref.fps
+        || shown.codec != pref.codec
+}
+
+/// Texto da nota «ajustou»: classe, fps e codec do formato efetivo.
+pub fn cam_adjusted_text(f: link::WebcamFormat) -> String {
+    format!(
+        "{}p{} {}",
+        cam_class(f.width, f.height),
+        f.fps,
+        hyprlink_gui::fmt::cam_codec(f.codec)
+    )
+}
+
+/// Pediu-se H.265 e chega H.264 (o telemóvel não tem encoder HEVC para este
+/// formato, ou falhou a configurá-lo): o chip marca o efetivo e a nota diz
+/// porquê, em vez de a escolha parecer voltar atrás sozinha.
+pub fn cam_codec_fell_back(stats: Option<WebcamStats>, pref: WebcamConfig) -> bool {
+    pref.codec == CamCodec::H265
+        && stats.and_then(|w| w.format.map(|f| f.codec).or(w.codec)) == Some(CamCodec::H264)
+}
+
 /// Folga para o telemóvel aplicar uma escolha antes de a comparar com o efetivo.
 const CAM_SETTLE_SECS: f32 = 3.0;
 
@@ -264,6 +295,8 @@ pub struct App {
     /// enquanto isso não se mostra a nota «o telemóvel ajustou».
     pub cam_settle_until: f32,
     pub webcam: Option<WebcamStats>,
+    /// Por onde vai a ligação (USB / Wi-Fi…); `None` sem ligação ou daemon antigo.
+    pub link_path: Option<hyprlink_proto::link::LinkPath>,
     pub webcam_on: bool,
     pub nettest: Option<NetTest>,
     pub phone_audio: Option<PhoneAudio>,
@@ -287,7 +320,66 @@ pub struct App {
 
     /// The phone link as a whole: drives the LINK wordmark.
     pub phase: link::LinkPhase,
+
+    /// «Onde está o telemóvel?»: estado como o daemon o conhece.
+    pub find: link::FindPhoneState,
+    /// O popup está aberto.
+    pub find_open: bool,
+    /// Duração escolhida no popup (15 / 30 / 60 s).
+    pub find_secs: u32,
+    /// Quando (`t`) se pediu o último toque, até o telemóvel dizer que começou.
+    find_sent_at: Option<f32>,
+    /// Passaram 5 s sem `phone.find.state`: app antiga?
+    pub find_no_reply: bool,
+    /// Último pacote vindo do telemóvel (segundos Unix), para «visto há».
+    pub phone_seen: Option<u64>,
 }
+
+/// Modos do popup «Onde está o telemóvel?».
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FindMode {
+    Sound,
+    SoundVibrate,
+    Torch,
+    All,
+}
+
+impl FindMode {
+    pub const ALL: [FindMode; 4] = [
+        FindMode::Sound,
+        FindMode::SoundVibrate,
+        FindMode::Torch,
+        FindMode::All,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            // «TOCAR» sozinho já é a chave do «PLAY» da multimédia.
+            FindMode::Sound => t("SÓ TOCAR"),
+            FindMode::SoundVibrate => t("TOCAR + VIBRAR"),
+            FindMode::Torch => t("LANTERNA A PISCAR"),
+            FindMode::All => t("TUDO"),
+        }
+    }
+
+    pub fn request(self, duration_s: u32) -> link::FindPhoneRequest {
+        let (sound, vibrate, torch) = match self {
+            FindMode::Sound => (true, false, false),
+            FindMode::SoundVibrate => (true, true, false),
+            FindMode::Torch => (false, false, true),
+            FindMode::All => (true, true, true),
+        };
+        link::FindPhoneRequest {
+            sound,
+            vibrate,
+            torch,
+            duration_s,
+        }
+    }
+}
+
+/// Sem `phone.find.state` passado este tempo, a GUI avisa (app antiga?).
+pub const FIND_REPLY_WAIT: f32 = 5.0;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -296,6 +388,11 @@ pub enum Message {
     Key(keyboard::Event),
     Select(DeviceId),
     Ping(DeviceId),
+    FindOpen,
+    FindClose,
+    FindStart(FindMode),
+    FindSecs(u32),
+    FindStop,
     Clipboard(DeviceId),
     Unpair(DeviceId),
     BeginPair,
@@ -414,6 +511,12 @@ impl App {
             follow_phone: true,
             gestures: Vec::new(),
             last_gesture: None,
+            find: link::FindPhoneState::default(),
+            find_open: false,
+            find_secs: link::FindPhoneRequest::DEFAULT_S,
+            find_sent_at: None,
+            find_no_reply: false,
+            phone_seen: None,
             latency: History::new(90),
             up: History::new(90),
             down: History::new(90),
@@ -499,7 +602,10 @@ impl App {
             host_acc: 10.0,
             window: None,
             window_size: iced::Size::new(
-                1480.0,
+                std::env::var("HYPRLINK_WINDOW_W")
+                    .ok()
+                    .and_then(|w| w.parse().ok())
+                    .unwrap_or(1480.0),
                 std::env::var("HYPRLINK_WINDOW_H")
                     .ok()
                     .and_then(|h| h.parse().ok())
@@ -539,6 +645,7 @@ impl App {
                 codec: CamCodec::H264,
             },
             webcam: None,
+            link_path: None,
             webcam_on: false,
             nettest: None,
             phone_audio: None,
@@ -595,6 +702,18 @@ impl App {
                     "~/Música/OMNIS_v3_stems.zip".into(),
                 )));
             }
+            // «Onde está o telemóvel?»: popup aberto; a tocar 15 s (o mock
+            // para por tempo); e o aviso de app antiga.
+            Ok("find") => app.find_open = true,
+            Ok("find-ring") => {
+                app.find_open = true;
+                app.find_secs = 15;
+                let _ = app.update(Message::FindStart(FindMode::All));
+            }
+            Ok("find-noreply") => {
+                app.find_open = true;
+                app.find_no_reply = true;
+            }
             _ => {}
         }
         // Let demo commands land before the first frame.
@@ -617,9 +736,13 @@ impl App {
 
     pub fn window_settings() -> window::Settings {
         window::Settings {
-            // HYPRLINK_WINDOW_H: taller windows for full-page captures.
+            // HYPRLINK_WINDOW_H / _W: window size for captures (W also tests
+            // the compact layout, < 960).
             size: iced::Size::new(
-                1480.0,
+                std::env::var("HYPRLINK_WINDOW_W")
+                    .ok()
+                    .and_then(|w| w.parse().ok())
+                    .unwrap_or(1480.0),
                 std::env::var("HYPRLINK_WINDOW_H")
                     .ok()
                     .and_then(|h| h.parse().ok())
@@ -707,6 +830,11 @@ impl App {
             .or(self.devices.first())
     }
 
+    /// À espera de que o telemóvel diga que começou a tocar.
+    pub fn find_waiting(&self) -> bool {
+        self.find_sent_at.is_some()
+    }
+
     pub fn primary(&self) -> Option<&link::Device> {
         self.devices
             .iter()
@@ -786,6 +914,9 @@ impl App {
                 self.rssi_hist.push(r as f32);
             }
             Event::Packet(p) => {
+                if p.dir == Dir::Rx {
+                    self.phone_seen = Some(chrono::Local::now().timestamp().max(0) as u64);
+                }
                 if !self.paused {
                     if self.packets.len() == 400 {
                         self.packets.pop_front();
@@ -801,6 +932,17 @@ impl App {
             Event::More(e) => self.apply_more(e),
             Event::Link(p) => self.phase = p,
             Event::Notice(n) => {
+                // Pedido recusado pelo daemon (sem telemóvel, limite): já não
+                // se espera pela resposta do telemóvel.
+                if matches!(
+                    n,
+                    link::Notice::Failed {
+                        op: link::Op::Phone,
+                        ..
+                    }
+                ) {
+                    self.find_sent_at = None;
+                }
                 let s = fmt::notice(&n, |id| {
                     self.devices.iter().find(|d| d.id == id).map(fmt::name)
                 });
@@ -828,6 +970,7 @@ impl App {
             }
             Event2::Trackpad(c) => self.trackpad = c,
             Event2::Webcam(w) => self.webcam = w,
+            Event2::LinkPath(p) => self.link_path = p,
             Event2::NetTest(n) => self.nettest = Some(n),
             Event2::PhoneAudio(a) => self.phone_audio = Some(a),
             Event2::Mixer { sinks, apps } => {
@@ -838,6 +981,13 @@ impl App {
             Event2::Clipboard(c) => self.clips = c,
             Event2::Transfers(t) => self.transfers = t,
             Event2::Players(p) => self.players = p,
+            Event2::FindPhone(s) => {
+                if s.active {
+                    self.find_sent_at = None;
+                    self.find_no_reply = false;
+                }
+                self.find = s;
+            }
             Event2::Settings(s) => {
                 if self.downloads_input.is_empty() {
                     self.downloads_input = s.downloads_dir.clone();
@@ -917,19 +1067,20 @@ impl App {
         cam_shown(self.webcam, self.webcam_cfg)
     }
 
+    /// «o telemóvel não suporta H.265», depois de o telemóvel ter tido tempo
+    /// de aplicar a escolha.
+    pub fn cam_codec_note(&self) -> Option<&'static str> {
+        (self.t >= self.cam_settle_until && cam_codec_fell_back(self.webcam, self.webcam_cfg))
+            .then(|| t("o telemóvel não suporta H.265 · a usar H.264"))
+    }
+
     /// Nota «o telemóvel ajustou: 720p30 H.264» quando o efetivo difere do
     /// pedido e o telemóvel já teve tempo de aplicar a última escolha.
     pub fn cam_adjusted_note(&self) -> Option<String> {
         let f = self.webcam.and_then(|w| w.format)?;
         let shown = self.cam_shown();
-        (shown != self.webcam_cfg && self.t >= self.cam_settle_until).then(|| {
-            format!(
-                "{}p{} {}",
-                f.height,
-                f.fps,
-                hyprlink_gui::fmt::cam_codec(f.codec)
-            )
-        })
+        (cam_differs(shown, self.webcam_cfg) && self.t >= self.cam_settle_until)
+            .then(|| cam_adjusted_text(f))
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -946,6 +1097,10 @@ impl App {
                 }
                 let t = self.t;
                 self.toasts.retain(|(_, born)| t - born < 4.0);
+                if self.find_sent_at.is_some_and(|at| t - at > FIND_REPLY_WAIT) {
+                    self.find_sent_at = None;
+                    self.find_no_reply = !self.find.active;
+                }
 
                 self.host_acc += dt.as_secs_f32();
                 if self.host_acc > 2.0 {
@@ -1023,7 +1178,9 @@ impl App {
                     }
                 }
                 if let Key::Named(keyboard::key::Named::Escape) = key.as_ref() {
-                    if self.pairing.is_some() {
+                    if self.find_open {
+                        self.find_open = false;
+                    } else if self.pairing.is_some() {
                         self.link.send(Command::CancelPairing);
                     }
                 }
@@ -1031,6 +1188,21 @@ impl App {
             Message::Key(_) => {}
             Message::Select(id) => self.selected = id,
             Message::Ping(id) => self.link.send(Command::Ping(id)),
+            Message::FindOpen => {
+                self.find_open = true;
+                self.find_no_reply = false;
+            }
+            Message::FindClose => self.find_open = false,
+            Message::FindStart(mode) => {
+                self.more(Command2::FindPhone(mode.request(self.find_secs)));
+                self.find_sent_at = Some(self.t);
+                self.find_no_reply = false;
+            }
+            Message::FindSecs(s) => self.find_secs = s,
+            Message::FindStop => {
+                self.find_sent_at = None;
+                self.more(Command2::StopFindPhone);
+            }
             Message::Clipboard(id) => self.link.send(Command::SendClipboard(id)),
             Message::Unpair(id) => self.link.send(Command::Unpair(id)),
             Message::BeginPair => self.link.send(Command::BeginPairing),
@@ -1368,6 +1540,9 @@ impl App {
         if let Some(ticket) = &self.pairing {
             layers.push(views::pairing(self, ticket));
         }
+        if self.find_open {
+            layers.push(views::find_phone(self));
+        }
         if !self.toasts.is_empty() {
             layers.push(self.toasts());
         }
@@ -1490,6 +1665,17 @@ impl App {
         .into()
     }
 
+    /// «USB» / «WI-FI» / «CABO»: por onde vai a ligação (só ligado).
+    fn link_path_chip(&self) -> El<'_> {
+        match self
+            .link_path
+            .filter(|_| self.phase == link::LinkPhase::Connected)
+        {
+            Some(p) => tag_outline(fmt::link_path(p), self.link_color()),
+            None => gap(0.0),
+        }
+    }
+
     fn rail(&self) -> El<'_> {
         if self.is_compact() {
             return self.slim_rail();
@@ -1509,6 +1695,8 @@ impl App {
             gap(space::S),
             // Colour never carries meaning alone: the state is also spelled out.
             kicker_c(format!("■ {}", fmt::phase(self.phase)), self.link_color()),
+            gap(space::S),
+            self.link_path_chip(),
         ];
 
         let mut nav = column![].spacing(2);
@@ -1996,10 +2184,121 @@ mod tests {
                 rotation: 0,
                 mirror: false,
             }),
+            ..Default::default()
         };
         let shown = cam_shown(Some(live), pref());
         assert_eq!((shown.width, shown.height, shown.fps), (1280, 720, 30));
         assert_eq!(shown.codec, CamCodec::H264);
+    }
+
+    fn live_fmt(width: u32, height: u32, fps: u32) -> link::WebcamFormat {
+        link::WebcamFormat {
+            width,
+            height,
+            fps,
+            codec: CamCodec::H265,
+            lens: None,
+            rotation: 0,
+            mirror: false,
+        }
+    }
+
+    #[test]
+    fn vertical_and_horizontal_are_the_same_class() {
+        let pref = WebcamConfig {
+            width: 1280,
+            height: 720,
+            fps: 30,
+            codec: CamCodec::H265,
+        };
+        for (w, h) in [(720, 1280), (1280, 720)] {
+            assert_eq!(cam_class(w, h), 720);
+            let shown = cam_shown(
+                Some(WebcamStats {
+                    mbps: 4.0,
+                    fps: None,
+                    codec: None,
+                    format: Some(live_fmt(w, h, 30)),
+                    ..Default::default()
+                }),
+                pref,
+            );
+            assert!(!cam_differs(shown, pref), "{w}x{h}");
+        }
+    }
+
+    #[test]
+    fn adjusted_note_uses_the_class() {
+        let pref = WebcamConfig {
+            width: 1280,
+            height: 720,
+            fps: 60,
+            codec: CamCodec::H265,
+        };
+        let f = live_fmt(720, 1280, 30);
+        let shown = WebcamConfig {
+            width: f.width,
+            height: f.height,
+            fps: f.fps,
+            codec: f.codec,
+        };
+        assert!(cam_differs(shown, pref));
+        assert_eq!(cam_adjusted_text(f), "720p30 H.265");
+    }
+
+    #[test]
+    fn find_modes_map_to_the_request() {
+        let r = FindMode::Sound.request(30);
+        assert!(r.sound && !r.vibrate && !r.torch && r.duration_s == 30);
+        let r = FindMode::SoundVibrate.request(15);
+        assert!(r.sound && r.vibrate && !r.torch);
+        let r = FindMode::Torch.request(60);
+        assert!(!r.sound && !r.vibrate && r.torch);
+        assert_eq!(FindMode::All.request(30), link::FindPhoneRequest::all(30));
+        for m in FindMode::ALL {
+            assert!(m.request(30).normalized().is_some(), "{m:?}");
+        }
+    }
+
+    #[test]
+    fn h265_pedido_e_h264_efetivo_da_a_nota() {
+        let stats = |codec, fmt: Option<CamCodec>| WebcamStats {
+            mbps: 4.0,
+            fps: None,
+            codec,
+            format: fmt.map(|codec| link::WebcamFormat {
+                width: 1280,
+                height: 720,
+                fps: 30,
+                codec,
+                lens: None,
+                rotation: 0,
+                mirror: false,
+            }),
+            ..Default::default()
+        };
+        // Pelo `webcam.state` ou, numa app antiga, pelo byte do stream.
+        assert!(cam_codec_fell_back(
+            Some(stats(None, Some(CamCodec::H264))),
+            pref()
+        ));
+        assert!(cam_codec_fell_back(
+            Some(stats(Some(CamCodec::H264), None)),
+            pref()
+        ));
+        assert!(!cam_codec_fell_back(
+            Some(stats(Some(CamCodec::H265), Some(CamCodec::H265))),
+            pref()
+        ));
+        assert!(!cam_codec_fell_back(None, pref()));
+        let h264 = WebcamConfig {
+            codec: CamCodec::H264,
+            ..pref()
+        };
+        assert!(!cam_codec_fell_back(
+            Some(stats(None, Some(CamCodec::H264))),
+            h264
+        ));
     }
 
     #[test]
@@ -2012,6 +2311,7 @@ mod tests {
             fps: None,
             codec: Some(CamCodec::H264),
             format: None,
+            ..Default::default()
         };
         assert_eq!(cam_shown(Some(old), pref()), pref());
     }

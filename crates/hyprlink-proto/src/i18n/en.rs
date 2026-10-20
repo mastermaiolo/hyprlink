@@ -704,6 +704,9 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Histórico limpo", "History cleared"),
     ("ÚLTIMO GESTO", "LAST GESTURE"),
     ("CODEC EM USO", "CODEC IN USE"),
+    ("GPU (VA-API)", "GPU (VA-API)"),
+    ("CPU", "CPU"),
+    ("PipeWire: HyprLink · {}", "PipeWire: HyprLink · {}"),
     ("No PC", "On the PC"),
     // ── responder a notificações ──
     ("responder…", "reply…"),
@@ -753,4 +756,56 @@ pub const TABLE: &[(&str, &str)] = &[
     ),
     // ── fonte do retorno ──
     ("FONTE DO RETORNO", "RETURN SOURCE"),
+    // ── onde está o telemóvel ──
+    ("ONDE ESTÁ O TELEMÓVEL", "FIND MY PHONE"),
+    ("O TELEMÓVEL ESTÁ A TOCAR", "THE PHONE IS RINGING"),
+    ("ENCONTRAR", "FIND"),
+    ("SÓ TOCAR", "RING"),
+    ("TOCAR + VIBRAR", "RING + VIBRATE"),
+    ("LANTERNA A PISCAR", "FLASH TORCH"),
+    ("TUDO", "ALL"),
+    ("DURAÇÃO", "DURATION"),
+    ("{} s", "{} s"),
+    ("A TOCAR · {}", "RINGING · {}"),
+    ("A TOCAR NO TELEMÓVEL", "RINGING ON THE PHONE"),
+    ("PARAR", "STOP"),
+    ("FECHAR", "CLOSE"),
+    ("BATERIA {}%", "BATTERY {}%"),
+    ("visto há {} s", "seen {} s ago"),
+    ("visto às {}", "seen at {}"),
+    ("sem ligação", "not connected"),
+    (
+        "sem ligação · último contacto às {}",
+        "not connected · last contact at {}",
+    ),
+    ("à espera do telemóvel…", "waiting for the phone…"),
+    (
+        "A app do telemóvel não respondeu (versão antiga?)",
+        "The phone app did not answer (old version?)",
+    ),
+    ("encontrado no telemóvel", "found — stopped on the phone"),
+    ("tempo esgotado", "time is up"),
+    ("parado no PC", "stopped on the PC"),
+    ("erro no telemóvel · {}", "phone error · {}"),
+    (
+        "interrompido (ligação perdida?)",
+        "interrupted (connection lost?)",
+    ),
+    // Transferências: velocidade e tempo restante (prompt 61).
+    ("{} min {} s", "{} min {} s"),
+    ("{} h {} min", "{} h {} min"),
+    ("faltam {}", "{} left"),
+    ("a calcular…", "calculating…"),
+    ("{} em {} ({} média)", "{} in {} ({} average)"),
+    // Câmara: o telemóvel voltou a H.264 (prompt 60 B).
+    (
+        "o telemóvel não suporta H.265 · a usar H.264",
+        "the phone does not support H.265 · using H.264",
+    ),
+    // ── ligação por USB ──
+    ("USB", "USB"),
+    ("WI-FI", "WI-FI"),
+    ("CABO", "CABLE"),
+    ("OUTRA", "OTHER"),
+    ("LIGAÇÃO", "CONNECTION"),
 ];

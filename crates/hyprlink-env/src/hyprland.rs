@@ -63,16 +63,33 @@ pub fn parse_version(v: &str) -> Option<(u32, u32)> {
 /// - versão ≥ 0.55 sem nenhum dos dois → Lua; sem versão nem ficheiro →
 ///   clássico.
 pub fn infer_mode(version: Option<&str>, config_file: Option<&str>) -> DispatchMode {
+    infer(version, config_file).mode
+}
+
+/// O modo inferido e se é seguro usá-lo sem confirmar por dispatch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Inferred {
+    pub mode: DispatchMode,
+    /// `true`: versão antiga, ou um `hyprland.lua`/`hyprland.conf` encontrado.
+    /// `false` (sem ficheiro de configuração): é um palpite, a confirmar no
+    /// primeiro dispatch a sério.
+    pub certain: bool,
+}
+
+/// Como [`infer_mode`], com o grau de certeza.
+pub fn infer(version: Option<&str>, config_file: Option<&str>) -> Inferred {
     let v = version.and_then(parse_version);
-    if v.is_some_and(|v| v < LUA_SINCE) {
-        return DispatchMode::Classic;
-    }
-    match config_file {
-        Some("hyprland.lua") => DispatchMode::Lua,
-        Some(_) => DispatchMode::Classic,
-        None if v.is_some() => DispatchMode::Lua,
-        None => DispatchMode::Classic,
-    }
+    let (mode, certain) = if v.is_some_and(|v| v < LUA_SINCE) {
+        (DispatchMode::Classic, true)
+    } else {
+        match config_file {
+            Some("hyprland.lua") => (DispatchMode::Lua, true),
+            Some(_) => (DispatchMode::Classic, true),
+            None if v.is_some() => (DispatchMode::Lua, false),
+            None => (DispatchMode::Classic, false),
+        }
+    };
+    Inferred { mode, certain }
 }
 
 /// Guarda o modo detetado (uma vez); `reset` obriga a testar de novo.
@@ -142,6 +159,20 @@ mod tests {
                 stdout: String::new(),
             })
         }
+    }
+
+    #[test]
+    fn inferencia_diz_quando_e_palpite() {
+        let i = infer(Some("0.56.2"), Some("hyprland.lua"));
+        assert_eq!((i.mode, i.certain), (DispatchMode::Lua, true));
+        let i = infer(Some("0.56.2"), Some("hyprland.conf"));
+        assert_eq!((i.mode, i.certain), (DispatchMode::Classic, true));
+        let i = infer(Some("0.54.0"), None);
+        assert_eq!((i.mode, i.certain), (DispatchMode::Classic, true));
+        let i = infer(Some("0.56.2"), None);
+        assert_eq!((i.mode, i.certain), (DispatchMode::Lua, false));
+        let i = infer(None, None);
+        assert_eq!((i.mode, i.certain), (DispatchMode::Classic, false));
     }
 
     #[test]

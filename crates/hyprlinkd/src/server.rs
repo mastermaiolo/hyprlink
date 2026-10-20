@@ -44,6 +44,8 @@ pub struct Ctx {
     /// uni-stream de imagem anunciado por `clipboard.set` has_payload.
     pub clip_img: clip::LastLocalImage,
     pub pending_clip: clip::PendingClipImage,
+    /// A última cópia do PC feita sem telemóvel ligado (texto ou imagem).
+    pub clip_outbox: clip::Outbox,
     /// Tap e coluna vêm de FORA (criados no `main`) porque os dois lados
     /// precisam deles: o servidor (handlers `audio.*`) e a GUI (toggle do
     /// modo coluna) — tem de ser o MESMO handle, senão o tap iniciado pela
@@ -61,6 +63,8 @@ pub struct Ctx {
     pub dbus: Option<zbus::Connection>,
     /// Limite de frequência do `shortcut.run` (por ligação; recomeça ao ligar).
     pub shortcut_limiter: crate::shortcuts::SharedLimiter,
+    /// Limite do `phone.find` (por ligação; recomeça ao ligar).
+    pub find_limiter: crate::find::SharedLimiter,
 }
 
 impl Ctx {
@@ -83,6 +87,7 @@ impl Ctx {
             config,
             clip_img: clip::new_image_guard(),
             pending_clip: clip::new_pending_clip(),
+            clip_outbox: clip::new_outbox(),
             tap,
             speaker,
             webcam: webcam::new_handle(),
@@ -91,6 +96,7 @@ impl Ctx {
             pending_mic: crate::mic::new_pending(),
             dbus,
             shortcut_limiter: crate::shortcuts::new_limiter(),
+            find_limiter: crate::find::new_limiter(),
         }
     }
 }
@@ -164,11 +170,13 @@ pub fn spawn_background_tasks(ctx: Ctx) {
     tokio::spawn(clip::watch(
         ctx.active.clone(),
         ctx.clip_guard.clone(),
+        ctx.clip_outbox.clone(),
         ctx.hud.clone(),
     ));
     tokio::spawn(clip::watch_images(
         ctx.active.clone(),
         ctx.clip_img.clone(),
+        ctx.clip_outbox.clone(),
         ctx.hud.clone(),
     ));
     // Botão do rato preso (telemóvel adormeceu a meio de um arrastar): solta-o.
@@ -223,6 +231,8 @@ pub fn spawn_background_tasks(ctx: Ctx) {
         speaker: ctx.speaker.clone(),
     }));
     tokio::spawn(ctl::publish_status_forever(ctx.hud.clone()));
+    // Endereços do PC (Wi-Fi/cabo/USB) → `pc.addrs` + `link_path`.
+    tokio::spawn(crate::netaddrs::watch(ctx.active.clone(), ctx.hud.clone()));
 }
 
 pub async fn run(endpoint: quinn::Endpoint, pairing: Arc<Mutex<PairingStore>>, ctx: Ctx) {
@@ -250,23 +260,23 @@ pub async fn run(endpoint: quinn::Endpoint, pairing: Arc<Mutex<PairingStore>>, c
                     return;
                 }
             };
-            if let Err(e) = serve(authed, pairing, ctx.clone()).await {
-                state::push_log(&ctx.hud, format!("[!] conexão encerrada: {e}"));
-                state::set_pairing(&ctx.hud);
-                active::clear(&ctx.active);
-                crate::tap::stop(&ctx.tap, &ctx.hud);
-                webcam::stop(&ctx.webcam, &ctx.hud);
-                crate::mic::stop(&ctx.mic, &ctx.hud);
-                // O estado que o telemóvel reportou de si mesmo morre com a
-                // conexão — não fica a informação velha na GUI/ctl.
-                state::set_phone_status(&ctx.hud, Default::default());
-                state::clear_active_notifs(&ctx.hud);
-                // Botão do rato premido pelo telemóvel: solta-se com a ligação.
-                ctx.input.release_all();
-                // Modo coluna sem telemóvel = PC mudo: devolve o som às
-                // colunas na hora (não espera pelo próximo arranque).
-                crate::speaker::disable(&ctx.tap, &ctx.hud, &ctx.config, &ctx.speaker).await;
+            let connection = authed.connection.clone();
+            let device_name = authed.device_name.clone();
+            let result = serve(authed, pairing, ctx.clone()).await;
+            // Uma ligação velha que morre depois de o telemóvel já ter
+            // ligado outra vez não mexe na sessão nova.
+            if !active::clear_if(&ctx.active, &connection) {
+                state::push_log(
+                    &ctx.hud,
+                    format!("[i] {device_name}: ligação antiga fechada; a nova continua"),
+                );
+                return;
             }
+            match result {
+                Ok(()) => state::push_log(&ctx.hud, format!("[!] {device_name} desconectou")),
+                Err(e) => state::push_log(&ctx.hud, format!("[!] conexão encerrada: {e}")),
+            }
+            teardown(&ctx).await;
         });
     }
 }
@@ -602,7 +612,14 @@ async fn serve(authed: Authed, pairing: Arc<Mutex<PairingStore>>, ctx: Ctx) -> a
     }
 
     println!("[+] core.hello de '{device_name}' — dispositivo autorizado");
-    state::set_connected(&ctx.hud, device_name.clone(), peer_fingerprint.clone());
+    // O nome do estado é o que se mostra (alias › nome › «fabricante modelo»):
+    // é também o que dá nome ao nó PipeWire da webcam.
+    let shown_name = pairing
+        .lock()
+        .unwrap()
+        .meta(&peer_fingerprint)
+        .map_or_else(|| device_name.clone(), |m| m.display_name());
+    state::set_connected(&ctx.hud, shown_name, peer_fingerprint.clone());
     state::push_log(
         &ctx.hud,
         format!("[+] core.hello autorizado · {device_name}"),
@@ -618,6 +635,15 @@ async fn serve(authed: Authed, pairing: Arc<Mutex<PairingStore>>, ctx: Ctx) -> a
         if let Some(mac) = default_iface_mac() {
             pairs.push((Value::Text("pc_mac".into()), Value::Text(mac)));
         }
+        // Os IPs do PC por onde o telemóvel pode ligar (Wi-Fi, cabo, USB):
+        // aditivo, as apps antigas ignoram. O `ip` corre fora do executor.
+        let addrs = tokio::task::spawn_blocking(crate::netaddrs::current)
+            .await
+            .unwrap_or_default();
+        pairs.push((
+            Value::Text("pc_addrs".into()),
+            crate::netaddrs::addrs_value(&addrs),
+        ));
         Value::Map(pairs)
     };
     let reply = Packet::new(hello.id, "core.hello", Some(reply_body), false);
@@ -627,7 +653,14 @@ async fn serve(authed: Authed, pairing: Arc<Mutex<PairingStore>>, ctx: Ctx) -> a
     // Atalhos da GUI no telemóvel: a lista (sem comandos) logo a seguir ao
     // handshake; o limite de frequência recomeça com a ligação.
     ctx.shortcut_limiter.lock().unwrap().reset();
+    ctx.find_limiter.lock().unwrap().reset();
     crate::shortcuts::spawn_push_on_connect(ctx.active.clone(), ctx.config.clone());
+    // A última cópia feita no PC enquanto o telemóvel estava desligado.
+    tokio::spawn(clip::flush_pending(
+        ctx.active.clone(),
+        ctx.clip_outbox.clone(),
+        ctx.hud.clone(),
+    ));
 
     // Streams seguintes (incluindo mais chamadas na mesma stream de controlo,
     // se o app reabrir uma nova) são despachadas por tipo.
@@ -655,9 +688,13 @@ async fn serve(authed: Authed, pairing: Arc<Mutex<PairingStore>>, ctx: Ctx) -> a
         tokio::spawn(handle_control_stream(send, recv, ctx.clone()));
     }
 
-    state::push_log(&ctx.hud, format!("[!] {device_name} desconectou"));
+    Ok(())
+}
+
+/// O que morre com a sessão do telemóvel. Só para a ligação que estava
+/// registada (ver `active::clear_if`).
+async fn teardown(ctx: &Ctx) {
     state::set_pairing(&ctx.hud);
-    active::clear(&ctx.active);
     crate::tap::stop(&ctx.tap, &ctx.hud);
     webcam::stop(&ctx.webcam, &ctx.hud);
     crate::mic::stop(&ctx.mic, &ctx.hud);
@@ -665,12 +702,14 @@ async fn serve(authed: Authed, pairing: Arc<Mutex<PairingStore>>, ctx: Ctx) -> a
     // não fica a informação velha na GUI/ctl.
     state::set_phone_status(&ctx.hud, Default::default());
     state::clear_active_notifs(&ctx.hud);
+    // Toque «onde está o telemóvel» a meio: fica em erro (o telemóvel para
+    // sozinho pelo tempo).
+    crate::find::on_disconnect(&ctx.hud);
     // Botão do rato premido pelo telemóvel: solta-se com a ligação.
     ctx.input.release_all();
     // Modo coluna sem telemóvel = PC mudo: devolve o som às colunas na
     // hora (não espera pelo próximo arranque).
     crate::speaker::disable(&ctx.tap, &ctx.hud, &ctx.config, &ctx.speaker).await;
-    Ok(())
 }
 
 /// Lê o id de correlação (8 bytes, comum a todo uni-stream) e decide se é
@@ -975,7 +1014,7 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                 body.and_then(|b| crate::protocol::body_get(b, "mirror"))
                     .and_then(|v| v.as_bool()),
             ) {
-                webcam::apply_transform(&ctx.webcam, rotation, mirror);
+                webcam::apply_transform(&ctx.webcam, hud, rotation, mirror);
             }
         }
         "webcam.mic_start" => {
@@ -1050,6 +1089,14 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
         "phone.status" => {
             if let Some(body) = body {
                 state::set_phone_status(hud, crate::phone::parse(body));
+            }
+        }
+
+        // «Onde está o telemóvel?»: o telemóvel conta se está a tocar e quem
+        // parou (ver find.rs).
+        "phone.find.state" => {
+            if let Some(body) = body {
+                crate::find::on_state(hud, body);
             }
         }
 

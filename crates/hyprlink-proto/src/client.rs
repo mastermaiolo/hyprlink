@@ -140,7 +140,7 @@ pub fn op_of(c: &Command) -> Option<Op> {
             }
             C2::Media { .. } | C2::PhoneMedia(_) => Op::Media,
             C2::SetHeadset(_) => Op::Speaker,
-            C2::OpenOnPhone { .. } => Op::Phone,
+            C2::OpenOnPhone { .. } | C2::FindPhone(_) | C2::StopFindPhone => Op::Phone,
             C2::DismissNotification(_)
             | C2::ReplyNotification { .. }
             | C2::DismissAllNotifications
