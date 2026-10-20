@@ -198,6 +198,7 @@ hyprlinkctl open               # Abre ou foca a janela da aplicação gráfica
 hyprlinkctl doctor             # Diagnóstico de ambiente e relatório de compatibilidade
 hyprlinkctl find               # Faz o celular tocar, vibrar ou acender a lanterna; find stop para
 hyprlinkctl usb setup          # Impede a conexão USB de ser a rota padrão (pergunta antes; usa nmcli)
+hyprlinkctl shortcuts          # Lista os atalhos configurados (--json para scripts)
 ```
 
 Use `hyprlinkctl --help` para ver mais opções. A pasta `contrib/` oferece um widget para Waybar e uma ação para o menu de contexto do gerenciador de arquivos (instale via `contrib/install.sh`).

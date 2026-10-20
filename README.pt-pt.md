@@ -198,6 +198,7 @@ hyprlinkctl open               # Abre ou foca a janela da aplicação gráfica
 hyprlinkctl doctor             # Diagnóstico de ambiente e relatório de compatibilidade
 hyprlinkctl find               # Faz o telemóvel tocar, vibrar ou acender a lanterna; find stop pára
 hyprlinkctl usb setup          # Impede a ligação USB de ser a rota por omissão (pergunta antes; usa nmcli)
+hyprlinkctl shortcuts          # Lista os atalhos configurados (--json para scripts)
 ```
 
 Consulta todas as opções com `hyprlinkctl --help`. A pasta `contrib/` disponibiliza um módulo para a Waybar e uma ação de menu contextual para o gestor de ficheiros (instala com `contrib/install.sh`).

@@ -198,6 +198,7 @@ hyprlinkctl open               # Abre o enfoca la ventana de la interfaz gráfic
 hyprlinkctl doctor             # Diagnóstico del entorno e informe de compatibilidad
 hyprlinkctl find               # Hace sonar, vibrar o encender la linterna del móvil; find stop lo detiene
 hyprlinkctl usb setup          # Evita que el enlace USB tome la ruta por defecto (pregunta antes; usa nmcli)
+hyprlinkctl shortcuts          # Lista los atajos configurados (--json para scripts)
 ```
 
 Consulte el resto de opciones mediante `hyprlinkctl --help`. El directorio `contrib/` incluye un módulo para Waybar y una acción para el menú contextual del explorador de archivos (instálelos con `contrib/install.sh`).

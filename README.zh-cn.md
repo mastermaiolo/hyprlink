@@ -198,6 +198,7 @@ hyprlinkctl open               # 打开或置顶聚焦桌面客户端窗口
 hyprlinkctl doctor             # 运行环境诊断与兼容性自检报告
 hyprlinkctl find               # 让手机响铃、振动或打开手电筒；find stop 停止
 hyprlinkctl usb setup          # 避免 USB 网络共享成为默认路由（会先询问；使用 nmcli）
+hyprlinkctl shortcuts          # 列出已配置的快捷键（--json 供脚本使用）
 ```
 
 运行 `hyprlinkctl --help` 查看完整参数。`contrib/` 目录提供了 Waybar 顶栏小部件与文件管理器右键上下文菜单动作（可通过 `contrib/install.sh` 安装）。
