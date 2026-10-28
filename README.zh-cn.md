@@ -109,11 +109,7 @@
 
 ### 推荐快捷安装：预编译二进制包（x86_64）
 
-从 [GitHub Releases](https://github.com/mastermaiolo/hyprlink/releases) 下载 `hyprlink-0.1.1-linux-x86_64.tar.gz`：
-
-<!-- 发布 v0.1.1（tag v0.1.1）后删除此提示 -->
-> [!NOTE]
-> 0.1.1 的二进制文件随 `v0.1.1` 标签发布。在该版本发布之前，请使用 Arch 的 PKGBUILD 或从源码编译。
+从 [GitHub Releases](https://github.com/mastermaiolo/hyprlink/releases/tag/v0.1.1) 下载 `hyprlink-0.1.1-linux-x86_64.tar.gz`：
 
 ```bash
 tar -xzf hyprlink-0.1.1-linux-x86_64.tar.gz
