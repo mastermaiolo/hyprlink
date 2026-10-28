@@ -109,11 +109,7 @@ Probado en **Arch Linux / CachyOS** con **Hyprland** (Wayland). Los nombres de p
 
 ### Método rápido: Paquete binario precompilado (x86_64)
 
-Descargue `hyprlink-0.1.1-linux-x86_64.tar.gz` desde los [Lanzamientos de GitHub](https://github.com/mastermaiolo/hyprlink/releases):
-
-<!-- retirar esta nota cuando exista la release v0.1.1 (tag v0.1.1) -->
-> [!NOTE]
-> Los binarios 0.1.1 se publican con la etiqueta `v0.1.1`. Mientras esa release no exista, use el PKGBUILD de Arch o compile desde el código.
+Descargue `hyprlink-0.1.1-linux-x86_64.tar.gz` desde los [Lanzamientos de GitHub](https://github.com/mastermaiolo/hyprlink/releases/tag/v0.1.1):
 
 ```bash
 tar -xzf hyprlink-0.1.1-linux-x86_64.tar.gz

@@ -109,11 +109,7 @@ Testado em **Arch Linux / CachyOS** com **Hyprland** (Wayland). Os pacotes indic
 
 ### Método rápido: Pacote binário pré-compilado (x86_64)
 
-Transfere `hyprlink-0.1.1-linux-x86_64.tar.gz` dos [Lançamentos do GitHub](https://github.com/mastermaiolo/hyprlink/releases):
-
-<!-- retirar esta nota quando a release v0.1.1 (tag v0.1.1) existir -->
-> [!NOTE]
-> Os binários 0.1.1 saem com a tag `v0.1.1`. Enquanto essa release não existir, usa o PKGBUILD do Arch ou compila a partir do código.
+Transfere `hyprlink-0.1.1-linux-x86_64.tar.gz` dos [Lançamentos do GitHub](https://github.com/mastermaiolo/hyprlink/releases/tag/v0.1.1):
 
 ```bash
 tar -xzf hyprlink-0.1.1-linux-x86_64.tar.gz

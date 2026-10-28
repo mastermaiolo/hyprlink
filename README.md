@@ -109,11 +109,7 @@ Tested on **Arch Linux / CachyOS** with **Hyprland** (Wayland). The package iden
 
 ### Fast path: Pre-built binary tarball (x86_64)
 
-Download `hyprlink-0.1.1-linux-x86_64.tar.gz` from [GitHub Releases](https://github.com/mastermaiolo/hyprlink/releases):
-
-<!-- retirar esta nota quando a release v0.1.1 (tag v0.1.1) existir -->
-> [!NOTE]
-> The 0.1.1 binaries are published with the `v0.1.1` tag. Until that release exists, use the Arch PKGBUILD or build from source below.
+Download `hyprlink-0.1.1-linux-x86_64.tar.gz` from [GitHub Releases](https://github.com/mastermaiolo/hyprlink/releases/tag/v0.1.1):
 
 ```bash
 tar -xzf hyprlink-0.1.1-linux-x86_64.tar.gz
