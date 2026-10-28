@@ -167,7 +167,7 @@ O serviço de fundo é direcionado a `graphical-session.target`.
 
 ### Emparelhar o telemóvel
 
-1. Instala a app Android companheira a partir da página de [Lançamentos](https://github.com/mastermaiolo/hyprlink/releases) (ativa "Instalar aplicações desconhecidas" no telemóvel).
+1. Instala a app Android companheira a partir da página de [Lançamentos](https://github.com/mastermaiolo/hyprlink-android/releases) (ativa "Instalar aplicações desconhecidas" no telemóvel).
    A app 0.1.1 tem outro identificador (`io.maggio.hyprlink`): instala-se ao lado da antiga; desinstala a antiga à mão e emparelha de novo.
 2. Com o daemon em execução, abre a GUI em **Dispositivos → Emparelhar novo** (ou visualiza o código QR no terminal se executaste o daemon interativamente).
 3. Lê o código QR na app. O código transmite a impressão digital SHA-256 do certificado, o endereço `<IP-DO-PC>:7443` e um token de uso único.
@@ -339,7 +339,7 @@ O perfil `fast` herda de `release` com `lto = false`, `codegen-units = 16` e `ov
 
 ### Aplicação móvel Android
 
-A aplicação para Android (desenvolvida em Kotlin e Jetpack Compose) é gerida num espaço de trabalho autónomo. Os ficheiros APK compilados e assinados são disponibilizados na página de [Lançamentos](https://github.com/mastermaiolo/hyprlink/releases). Para quem desejar criar clientes alternativos, o protocolo integral está documentado em [`PROTOCOL.md`](PROTOCOL.md).
+A aplicação para Android (desenvolvida em Kotlin e Jetpack Compose) é gerida num espaço de trabalho autónomo. Os ficheiros APK compilados e assinados são disponibilizados na página de [Lançamentos](https://github.com/mastermaiolo/hyprlink-android/releases). Para quem desejar criar clientes alternativos, o protocolo integral está documentado em [`PROTOCOL.md`](PROTOCOL.md).
 
 </details>
 

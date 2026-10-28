@@ -167,7 +167,7 @@ O serviço do daemon é associado ao `graphical-session.target`.
 
 ### Pareando o celular
 
-1. Instale o APK do app Android disponível na página de [Releases](https://github.com/mastermaiolo/hyprlink/releases) (permita a instalação de fontes desconhecidas no celular).
+1. Instale o APK do app Android disponível na página de [Releases](https://github.com/mastermaiolo/hyprlink-android/releases) (permita a instalação de fontes desconhecidas no celular).
    O app 0.1.1 tem outro identificador (`io.maggio.hyprlink`): ele se instala ao lado do antigo; desinstale o antigo manualmente e pareie de novo.
 2. Com o daemon em execução, abra a GUI em **Dispositivos → Parear novo** (ou visualize o QR code no terminal se executou o daemon manualmente).
 3. Escaneie o QR code no aplicativo. Ele contém a impressão digital SHA-256 do certificado, o endereço `<IP-DO-PC>:7443` e um token de uso único.
@@ -339,7 +339,7 @@ O perfil `fast` herda de `release` com `lto = false`, `codegen-units = 16` e `ov
 
 ### Aplicativo móvel para Android
 
-O aplicativo para celular Android (desenvolvido em Kotlin com Jetpack Compose) é gerenciado em um repositório dedicado. APKs assinados e prontos são disponibilizados na página de [Releases](https://github.com/mastermaiolo/hyprlink/releases). Para desenvolvedores interessados em criar outros clientes, o protocolo completo está documentado em [`PROTOCOL.md`](PROTOCOL.md).
+O aplicativo para celular Android (desenvolvido em Kotlin com Jetpack Compose) é gerenciado em um repositório dedicado. APKs assinados e prontos são disponibilizados na página de [Releases](https://github.com/mastermaiolo/hyprlink-android/releases). Para desenvolvedores interessados em criar outros clientes, o protocolo completo está documentado em [`PROTOCOL.md`](PROTOCOL.md).
 
 </details>
 

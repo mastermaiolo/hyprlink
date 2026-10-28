@@ -167,7 +167,7 @@ El servicio en segundo plano se vincula a `graphical-session.target`.
 
 ### Emparejamiento con el móvil
 
-1. Instale la aplicación móvil para Android disponible en la sección de [Lanzamientos](https://github.com/mastermaiolo/hyprlink/releases) (habilite la opción de instalar aplicaciones de fuentes desconocidas).
+1. Instale la aplicación móvil para Android disponible en la sección de [Lanzamientos](https://github.com/mastermaiolo/hyprlink-android/releases) (habilite la opción de instalar aplicaciones de fuentes desconocidas).
    La app 0.1.1 tiene otro identificador (`io.maggio.hyprlink`): se instala junto a la antigua; desinstale la antigua a mano y vuelva a emparejar.
 2. Con el servicio en ejecución, abra la interfaz gráfica en **Dispositivos → Emparejar nuevo** (o visualice el código QR en el terminal si ejecutó el daemon manualmente).
 3. Escanee el código QR desde la aplicación. Contiene la huella digital SHA-256 del certificado, la dirección `<IP-DEL-PC>:7443` y un token temporal.
@@ -339,7 +339,7 @@ El perfil `fast` hereda de `release` con `lto = false`, `codegen-units = 16` y `
 
 ### Aplicación móvil para Android
 
-La aplicación móvil para Android (desarrollada en Kotlin con Jetpack Compose) se mantiene en un espacio de trabajo independiente. Los paquetes APK firmados se publican en la página de [Lanzamientos](https://github.com/mastermaiolo/hyprlink/releases). Quienes deseen desarrollar clientes alternativos pueden consultar la especificación completa en [`PROTOCOL.md`](PROTOCOL.md).
+La aplicación móvil para Android (desarrollada en Kotlin con Jetpack Compose) se mantiene en un espacio de trabajo independiente. Los paquetes APK firmados se publican en la página de [Lanzamientos](https://github.com/mastermaiolo/hyprlink-android/releases). Quienes deseen desarrollar clientes alternativos pueden consultar la especificación completa en [`PROTOCOL.md`](PROTOCOL.md).
 
 </details>
 

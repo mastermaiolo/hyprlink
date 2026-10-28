@@ -167,7 +167,7 @@ hyprlink-gui
 
 ### 配对手机步骤
 
-1. 在手机上安装配套 Android 客户端 APK（在 [Releases](https://github.com/mastermaiolo/hyprlink/releases) 页面获取，需允许“安装未知应用”权限）。
+1. 在手机上安装配套 Android 客户端 APK（在 [Releases](https://github.com/mastermaiolo/hyprlink-android/releases) 页面获取，需允许“安装未知应用”权限）。
    0.1.1 版应用使用了新的应用 ID（`io.maggio.hyprlink`），会与旧版并存安装；请手动卸载旧版，然后重新配对。
 2. 在守护进程运行状态下，打开桌面客户端进入 **设备（Devices）→ 配对新设备（Pair new）**（若手动启动守护进程，可在终端中查看二维码）。
 3. 使用手机应用扫描该二维码。二维码数据包含电脑证书 SHA-256 指纹、`<PC-IP>:7443` 地址与单次配对令牌。
@@ -339,7 +339,7 @@ cargo build --release -p hyprlinkd        # 发布版本：启用 LTO，开启�
 
 ### 配套 Android 客户端
 
-Android 手机应用（基于 Kotlin 与 Jetpack Compose）在独立仓库中进行维护。预编译签名的 APK 会发布在 [Releases](https://github.com/mastermaiolo/hyprlink/releases) 页面中。开发者如需开发其他平台的第三方客户端，请完整查阅 [`PROTOCOL.md`](PROTOCOL.md) 协议规范。
+Android 手机应用（基于 Kotlin 与 Jetpack Compose）在独立仓库中进行维护。预编译签名的 APK 会发布在 [Releases](https://github.com/mastermaiolo/hyprlink-android/releases) 页面中。开发者如需开发其他平台的第三方客户端，请完整查阅 [`PROTOCOL.md`](PROTOCOL.md) 协议规范。
 
 </details>
 

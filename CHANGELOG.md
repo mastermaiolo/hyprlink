@@ -4,7 +4,7 @@ Todas as alterações relevantes deste projeto ficam aqui. O formato segue o
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e as versões o
 [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
-## [0.1.1] — 2026-10-DD
+## [0.1.1] — 2026-10-28
 
 Versão de correções, sobretudo de segurança. **Atualização recomendada.** A app
 Android 0.1.0 continua a funcionar com esta versão. A app 0.1.1 tem outro

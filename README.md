@@ -167,7 +167,7 @@ The background service targets `graphical-session.target`.
 
 ### Pairing your phone
 
-1. Install the companion Android app APK from [Releases](https://github.com/mastermaiolo/hyprlink/releases) (enable "Install unknown apps" on Android). Version 0.1.1 of the app has a new identifier (`io.maggio.hyprlink`): it installs beside the old one, so uninstall the old app by hand and pair again.
+1. Install the companion Android app APK from [Releases](https://github.com/mastermaiolo/hyprlink-android/releases) (enable "Install unknown apps" on Android). Version 0.1.1 of the app has a new identifier (`io.maggio.hyprlink`): it installs beside the old one, so uninstall the old app by hand and pair again.
 2. With the daemon active, open the GUI to **Devices → Pair new** (or inspect terminal output if running daemon interactively).
 3. Scan the generated QR code in the app. The payload includes the SHA-256 certificate fingerprint, `<PC-IP>:7443` endpoint, and an ephemeral pairing token.
 4. The link automatically reconnects whenever both devices reside on the same local subnet.
@@ -340,7 +340,7 @@ The `fast` profile inherits from `release` with `lto = false`, `codegen-units = 
 
 ### Companion Android client
 
-The companion mobile application (Kotlin / Jetpack Compose) is versioned in a dedicated workspace. Pre-compiled signed APKs are released on the [GitHub Releases](https://github.com/mastermaiolo/hyprlink/releases) page. Developers seeking to implement alternative mobile or desktop clients should refer to [`PROTOCOL.md`](PROTOCOL.md).
+The companion mobile application (Kotlin / Jetpack Compose) is versioned in a dedicated workspace. Pre-compiled signed APKs are released on the [GitHub Releases](https://github.com/mastermaiolo/hyprlink-android/releases) page. Developers seeking to implement alternative mobile or desktop clients should refer to [`PROTOCOL.md`](PROTOCOL.md).
 
 </details>
 
