@@ -87,6 +87,13 @@ pub fn active_window_json() -> String {
 /// espaço separa o dispatcher do argumento, igual ao app manda. Com o prefixo
 /// `lua:` o resto é uma expressão Lua (`lua:hl.dsp.window.kill()`), para o que
 /// não tenha mapeamento.
+/// Modo já conhecido no arranque (inferência segura, sem dispatch): o
+/// primeiro dispatch não precisa de testar. Se falhar, `dispatch_with` testa
+/// de novo como sempre.
+pub fn seed_mode(m: hyprlink_env::hyprland::DispatchMode) {
+    MODE.set(m);
+}
+
 pub fn dispatch(cmd: &str) -> String {
     dispatch_checked(cmd).unwrap_or_else(|e| format!("erro: {e}"))
 }
@@ -578,6 +585,20 @@ mod tests {
             3,
             "sem tentar o clássico nem repetir o teste: {calls:?}"
         );
+    }
+
+    /// Modo já em cache no arranque (inferência segura): nenhum teste por
+    /// dispatch, só os comandos.
+    #[test]
+    fn modo_semeado_nao_testa() {
+        let f = Fake::new(true);
+        let c = ModeCache::new();
+        c.set(hyprlink_env::hyprland::DispatchMode::Lua);
+        assert!(go(&f, &c, DispatchChoice::Auto, "workspace 2").is_ok());
+        assert!(go(&f, &c, DispatchChoice::Auto, "killactive").is_ok());
+        let calls = f.calls();
+        assert!(!calls.iter().any(|c| c.contains("no_op")), "{calls:?}");
+        assert_eq!(calls.len(), 2, "{calls:?}");
     }
 
     #[test]

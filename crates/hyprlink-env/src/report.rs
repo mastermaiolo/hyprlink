@@ -13,7 +13,7 @@ use crate::battery::{self, Supply};
 use crate::camera::{self, DeviceState};
 use crate::gpu::{self, Gpu, GpuPlan};
 use crate::hyprland::{self, DispatchMode};
-use crate::overrides::{self, DispatchChoice, Resolved};
+use crate::overrides::{self, DecoderChoice, DispatchChoice, OutputChoice, Resolved};
 use crate::pipewire::{self, EeState, TapTarget};
 use crate::plan::{self, AudioBackend, AudioServer, ShotTool};
 use crate::sensors::{self, Sensor};
@@ -45,6 +45,10 @@ pub struct Report {
     pub dispatch_mode: DispatchMode,
     /// Como se chegou ao modo: «teste», «forçado» ou «assumido».
     pub dispatch_mode_source: &'static str,
+    /// O modo é seguro sem mais testes (forçado, testado, ou inferido com um
+    /// ficheiro de configuração/versão antiga). `false`: o daemon confirma por
+    /// dispatch no primeiro uso a sério.
+    pub dispatch_mode_certain: bool,
     pub classic_dispatch_accepted: &'static str,
     pub shell: Detection,
     pub cpu_vendor: Option<String>,
@@ -68,6 +72,15 @@ pub struct Report {
     pub v4l2loopback_dkms: Option<bool>,
     pub camera_device: String,
     pub camera_device_state: DeviceState,
+    /// Descodificação H.264/H.265 por VA-API (plugin `va` do GStreamer).
+    pub webcam_va: camera::VaSupport,
+    /// O plugin `pipewiresink` existe (saída PipeWire da câmara).
+    pub pipewiresink: bool,
+    /// Para onde a câmara vai com a opção `webcam_output` atual.
+    pub webcam_output_effective: camera::Output,
+    /// Ancoragem USB ativa: rota por omissão e firewall (só leitura).
+    /// `None` sem interface USB (ou fora do `doctor`).
+    pub usb: Option<crate::net::UsbReport>,
     pub notifications_owner: Option<String>,
     pub mpris_players: Vec<String>,
     /// `pw-dump` respondeu (o grafo do PipeWire foi lido).
@@ -150,6 +163,50 @@ fn backend_label(b: Option<AudioBackend>) -> &'static str {
     }
 }
 
+fn va_label(r: &Report) -> String {
+    match (r.webcam_va.h264, r.webcam_va.h265) {
+        (true, true) => "VA-API disponível (H.264, H.265)".into(),
+        (true, false) => "VA-API disponível só para H.264 (H.265 usa o CPU)".into(),
+        (false, true) => "VA-API disponível só para H.265 (H.264 usa o CPU)".into(),
+        (false, false) if !r.webcam_va.plugin => {
+            "VA-API indisponível (falta o plugin gst-plugin-va); usa o CPU".into()
+        }
+        (false, false) => {
+            "VA-API indisponível (falta o driver: mesa para AMD, intel-media-driver para Intel); usa o CPU"
+                .into()
+        }
+    }
+}
+
+fn output_label(r: &Report) -> String {
+    let (kind, what) = match r.webcam_output_effective {
+        camera::Output::V4l2loopback => (
+            "v4l2loopback",
+            format!(
+                "{}: todas as apps de câmara; precisa do módulo do kernel",
+                r.camera_device
+            ),
+        ),
+        camera::Output::Pipewire => (
+            "PipeWire (EXPERIMENTAL)",
+            "nó «hyprlink-camera», sem módulo do kernel; só apps com câmara PipeWire/portal; \
+             ainda por validar em navegadores — prefere v4l2loopback"
+                .into(),
+        ),
+    };
+    let how = match r.options.webcam_output {
+        OutputChoice::Auto => "webcam_output=auto",
+        OutputChoice::V4l2loopback => "webcam_output=v4l2loopback",
+        OutputChoice::Pipewire => "webcam_output=pipewire",
+    };
+    let missing = if r.webcam_output_effective == camera::Output::Pipewire && !r.pipewiresink {
+        " — FALTA o plugin pipewiresink (gst-plugin-pipewire)"
+    } else {
+        ""
+    };
+    format!("{kind} ({how}) · {what}{missing}")
+}
+
 fn device_label(d: DeviceState) -> &'static str {
     match d {
         DeviceState::Free => "livre",
@@ -217,21 +274,45 @@ pub fn hyprland_instance(env: &Env) -> Option<crate::instance::Source> {
         .map(|(_, s)| s)
 }
 
+/// Quanto recolher.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Depth {
+    /// Tudo (o `doctor`).
+    Full,
+    /// Salta o que é lento e só serve para mostrar (versões das ferramentas,
+    /// D-Bus, `modinfo`, `dkms`): o arranque do daemon.
+    Quick,
+}
+
+/// Como saber o modo do `hyprctl dispatch` (clássico ou Lua).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModeProbe {
+    /// Testa com `hyprctl dispatch hl.dsp.no_op()`: **é um dispatch na sessão**.
+    Dispatch,
+    /// Infere pela versão e pela configuração (`hyprland::infer`); nunca
+    /// despacha. O daemon e o `doctor --no-dispatch`.
+    Infer,
+}
+
+/// O `doctor` por omissão: tudo, com o teste por dispatch.
 pub fn collect(env: &Env, ov: &overrides::Overrides) -> Report {
-    collect_inner(env, ov, true, true)
+    collect_with(env, ov, Depth::Full, ModeProbe::Dispatch)
 }
 
 /// Como [`collect`], mas **sem** `hyprctl dispatch`: o modo é inferido pela
-/// versão e pela configuração (`hyprland::infer_mode`). É o que os agentes e
+/// versão e pela configuração (`hyprland::infer`). É o que os agentes e
 /// os testes usam numa sessão viva (`hyprlinkctl doctor --no-dispatch`).
 pub fn collect_no_dispatch(env: &Env, ov: &overrides::Overrides) -> Report {
-    collect_inner(env, ov, true, false)
+    collect_with(env, ov, Depth::Full, ModeProbe::Infer)
 }
 
-/// `deep = false` salta o que é lento e só serve para mostrar (versões das
-/// ferramentas, D-Bus, `modinfo`, `dkms`): é o que o daemon usa ao arrancar.
-pub fn collect_with(env: &Env, ov: &overrides::Overrides, deep: bool) -> Report {
-    collect_inner(env, ov, deep, true)
+pub fn collect_with(
+    env: &Env,
+    ov: &overrides::Overrides,
+    depth: Depth,
+    probe: ModeProbe,
+) -> Report {
+    collect_inner(env, ov, depth == Depth::Full, probe == ModeProbe::Dispatch)
 }
 
 fn collect_inner(env: &Env, ov: &overrides::Overrides, deep: bool, dispatch: bool) -> Report {
@@ -241,9 +322,11 @@ fn collect_inner(env: &Env, ov: &overrides::Overrides, deep: bool, dispatch: boo
     let shell = shell::detect(&procs, &have);
 
     // Hyprland
+    // Sem dispatch, a versão faz falta para inferir o modo (uma consulta
+    // rápida, também no arranque do daemon).
     let hyprland_version = env
         .run("hyprctl", &["version"])
-        .filter(|_| deep)
+        .filter(|_| deep || !dispatch)
         .filter(|o| o.ok)
         .and_then(|o| first_line(&o.stdout))
         .map(|l| short_version(&l));
@@ -259,16 +342,25 @@ fn collect_inner(env: &Env, ov: &overrides::Overrides, deep: bool, dispatch: boo
     } else {
         None
     };
-    let (dispatch_mode, source) = match options.hypr_dispatch_mode {
-        DispatchChoice::Classic => (DispatchMode::Classic, "forçado (hypr_dispatch_mode)"),
-        DispatchChoice::Lua => (DispatchMode::Lua, "forçado (hypr_dispatch_mode)"),
-        DispatchChoice::Auto if !dispatch => (
-            hyprland::infer_mode(hyprland_version.as_deref(), hyprland_config_file.as_deref()),
-            "inferido pela versão e pela configuração (sem dispatch)",
-        ),
+    let (dispatch_mode, source, dispatch_mode_certain) = match options.hypr_dispatch_mode {
+        DispatchChoice::Classic => (DispatchMode::Classic, "forçado (hypr_dispatch_mode)", true),
+        DispatchChoice::Lua => (DispatchMode::Lua, "forçado (hypr_dispatch_mode)", true),
+        DispatchChoice::Auto if !dispatch => {
+            let i = hyprland::infer(hyprland_version.as_deref(), hyprland_config_file.as_deref());
+            let source = if i.certain {
+                "inferido pela versão e pela configuração (sem dispatch)"
+            } else {
+                "inferido pela versão e pela configuração (sem dispatch; a confirmar no primeiro uso)"
+            };
+            (i.mode, source, i.certain)
+        }
         DispatchChoice::Auto => match probed {
-            Some(m) => (m, "teste com hl.dsp.no_op()"),
-            None => (DispatchMode::Classic, "assumido (sem resposta do hyprctl)"),
+            Some(m) => (m, "teste com hl.dsp.no_op()", true),
+            None => (
+                DispatchMode::Classic,
+                "assumido (sem resposta do hyprctl)",
+                false,
+            ),
         },
     };
     let classic_dispatch_accepted = match (dispatch_mode, probed) {
@@ -330,6 +422,16 @@ fn collect_inner(env: &Env, ov: &overrides::Overrides, deep: bool, dispatch: boo
     // Câmara
     let nr = options.v4l2_device_nr;
     let camera_device_state = camera::device_state(&env.sys, &env.dev, nr);
+    let module_is_loaded = camera::module_loaded(&env.sys);
+    let want_modinfo =
+        deep || (options.webcam_output == overrides::OutputChoice::Auto && !module_is_loaded);
+    let module_avail = want_modinfo
+        .then(|| camera::module_available(env))
+        .flatten();
+    let webcam_output_effective =
+        camera::resolve_output(options.webcam_output, module_is_loaded, module_avail);
+    let webcam_va = camera::va_support(env);
+    let pipewiresink = camera::pipewiresink_present(env);
 
     // D-Bus
     let notifications_owner = env
@@ -389,6 +491,7 @@ fn collect_inner(env: &Env, ov: &overrides::Overrides, deep: bool, dispatch: boo
         hyprland_config_file,
         dispatch_mode,
         dispatch_mode_source: source,
+        dispatch_mode_certain,
         classic_dispatch_accepted,
         shell,
         cpu_vendor,
@@ -411,6 +514,12 @@ fn collect_inner(env: &Env, ov: &overrides::Overrides, deep: bool, dispatch: boo
         v4l2loopback_dkms: deep.then(|| camera::dkms_has_v4l2loopback(env)).flatten(),
         camera_device: format!("/dev/video{nr}"),
         camera_device_state,
+        webcam_va,
+        pipewiresink,
+        webcam_output_effective,
+        usb: deep
+            .then(|| crate::net::usb_report(env, crate::net::DAEMON_PORT))
+            .flatten(),
         notifications_owner,
         mpris_players,
         pipewire_graph: snap.is_some(),
@@ -576,6 +685,50 @@ pub fn render_text(r: &Report) -> String {
         }
     );
 
+    if let Some(u) = &r.usb {
+        let _ = writeln!(w, "\n[Ligação por USB (ancoragem)]");
+        let _ = writeln!(w, "  interface    : {}", u.interfaces.join(", "));
+        if u.default_route_via_usb {
+            let _ = writeln!(
+                w,
+                "  AVISO        : a rota por omissão passa pelo telemóvel (a internet do PC vai pela ancoragem)"
+            );
+            match &u.never_default_cmd {
+                Some(c) => {
+                    let _ = writeln!(w, "  sugestão     : {c}");
+                    let _ = writeln!(w, "                 (ou: hyprlinkctl usb setup)");
+                }
+                None => {
+                    let _ = writeln!(
+                        w,
+                        "  sugestão     : marca ipv4.never-default e ipv6.never-default na ligação desta interface (nmcli não encontrou o nome)"
+                    );
+                }
+            }
+        } else {
+            let _ = writeln!(
+                w,
+                "  rota         : a rota por omissão não passa pelo telemóvel"
+            );
+        }
+        match &u.firewall {
+            None => {
+                let _ = writeln!(w, "  firewall     : sem firewalld/ufw ativos");
+            }
+            Some(f) => {
+                let state = match f.open {
+                    Some(true) => "porta UDP aberta",
+                    Some(false) => "porta UDP FECHADA nesta interface/zona",
+                    None => "não consegui ler (o ufw precisa de root)",
+                };
+                let _ = writeln!(w, "  firewall     : {} — {state}", f.tool);
+                if let Some(c) = &f.command {
+                    let _ = writeln!(w, "  sugestão     : {c}");
+                }
+            }
+        }
+    }
+
     let _ = writeln!(w, "\n[Áudio]");
     let _ = writeln!(w, "  servidor     : {}", r.audio_server.label());
     let _ = writeln!(w, "  volume       : {}", backend_label(r.audio_backend));
@@ -685,6 +838,17 @@ pub fn render_text(r: &Report) -> String {
         r.camera_device,
         device_label(r.camera_device_state)
     );
+    let _ = writeln!(w, "  descodificação de vídeo       : {}", va_label(r));
+    let _ = writeln!(
+        w,
+        "  webcam_decoder                : {}",
+        match r.options.webcam_decoder {
+            DecoderChoice::Auto => "auto (GPU se der, senão CPU)",
+            DecoderChoice::Gpu => "gpu (VA-API; avisa no Diário se tiver de recuar para o CPU)",
+            DecoderChoice::Cpu => "cpu (forçado)",
+        }
+    );
+    let _ = writeln!(w, "  saída da câmara               : {}", output_label(r));
 
     let _ = writeln!(w, "\n[O que o daemon vai fazer]");
     let _ = writeln!(
@@ -733,6 +897,8 @@ pub fn render_text(r: &Report) -> String {
     let _ = writeln!(w, "  audio_backend      : {:?}", o.audio_backend);
     let _ = writeln!(w, "  hypr_dispatch_mode : {:?}", o.hypr_dispatch_mode);
     let _ = writeln!(w, "  tap_source         : {:?}", o.tap_source);
+    let _ = writeln!(w, "  webcam_decoder     : {:?}", o.webcam_decoder);
+    let _ = writeln!(w, "  webcam_output      : {:?}", o.webcam_output);
     for p in &r.option_problems {
         let _ = writeln!(w, "  ! {p}");
     }

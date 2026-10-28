@@ -14,7 +14,8 @@ use hyprlink_gui::tr;
 use chrono::{Datelike, Local};
 use iced::widget::text::{LineHeight, Wrapping};
 use iced::widget::{
-    Space, button, canvas, column, container, qr_code, row, slider, text, text_input,
+    Space, button, canvas, column, container, mouse_area, opaque, qr_code, row, slider, text,
+    text_input,
 };
 use iced::{Alignment, Color, Length, Padding};
 
@@ -594,6 +595,21 @@ pub fn cover(app: &App) -> El<'_> {
             .width(Length::Fill),
         ]
         .spacing(space::S),
+        gap(space::S),
+        btn(
+            if app.find.active {
+                t("O TELEMÓVEL ESTÁ A TOCAR")
+            } else {
+                t("ONDE ESTÁ O TELEMÓVEL")
+            },
+            if app.find.active {
+                theme::danger
+            } else {
+                theme::ghost
+            },
+            dev.map(|_| Message::FindOpen)
+        )
+        .width(Length::Fill),
         gap(space::S),
         row![
             btn(
@@ -1177,6 +1193,183 @@ pub fn pairing<'a>(app: &'a App, ticket: &'a PairingTicket) -> El<'a> {
         .center(Length::Fill)
         .style(theme::scrim)
         .into()
+}
+
+/// Popup «Onde está o telemóvel?»: modos, duração, contagem e PARAR. Fecha
+/// com Esc ou com um clique fora do cartão.
+pub fn find_phone(app: &App) -> El<'_> {
+    use crate::app::FindMode;
+    use crate::link::{FindPhoneRequest, FindStoppedBy};
+
+    let linked = app.primary();
+    let dev = linked.or_else(|| app.device());
+    let now = Local::now();
+    let now_s = now.timestamp().max(0) as u64;
+    let f = &app.find;
+
+    // Cabeçalho: nome, bateria, «visto há».
+    let mut facts = row![].spacing(space::L).align_y(Alignment::Center);
+    if let Some(d) = dev {
+        facts = facts.push(text(fmt::name(d)).font(SANS_SEMI).size(14).color(PAPER));
+        if let (Some(pct), true) = (d.battery, linked.is_some()) {
+            facts = facts.push(kicker(tr!("BATERIA {}%", pct)));
+        }
+    }
+    let seen = match (linked, app.phone_seen) {
+        (Some(_), Some(at)) => {
+            let ago = now_s.saturating_sub(at);
+            if ago < 60 {
+                tr!("visto há {} s", ago)
+            } else {
+                tr!("visto às {}", fmt::time(at))
+            }
+        }
+        (Some(_), None) => t("ligado").to_string(),
+        (None, Some(at)) => tr!("sem ligação · último contacto às {}", fmt::time(at)),
+        (None, None) => t("sem ligação").to_string(),
+    };
+    facts = facts
+        .push(fill_x())
+        .push(mono(seen, if linked.is_some() { SUB } else { HOT }));
+
+    let can = linked.is_some();
+    let mode_btn = |m: FindMode| -> El<'_> {
+        btn(
+            m.label(),
+            if m == FindMode::All {
+                theme::primary
+            } else {
+                theme::ghost
+            },
+            can.then_some(Message::FindStart(m)),
+        )
+        .width(Length::Fill)
+        .into()
+    };
+    // Janela estreita: 2 × 2.
+    let modes: El = if app.is_compact() {
+        let [a, b, c, d] = FindMode::ALL;
+        column![
+            row![mode_btn(a), mode_btn(b)].spacing(space::S),
+            row![mode_btn(c), mode_btn(d)].spacing(space::S),
+        ]
+        .spacing(space::S)
+        .into()
+    } else {
+        row(FindMode::ALL.map(mode_btn)).spacing(space::S).into()
+    };
+    let mut secs = row![kicker(t("DURAÇÃO")), hgap(space::M)]
+        .spacing(space::S)
+        .align_y(Alignment::Center);
+    for s in [15, 30, FindPhoneRequest::MAX_S] {
+        secs = secs.push(chip(
+            tr!("{} s", s),
+            app.find_secs == s,
+            Message::FindSecs(s),
+        ));
+    }
+
+    // Estado: a tocar (contagem + PARAR), à espera, sem resposta ou como parou.
+    let status: El = if f.active {
+        let left_ms = f
+            .until_ms
+            .map(|u| u.saturating_sub(now.timestamp_millis().max(0) as u64));
+        let label = match left_ms {
+            Some(ms) => tr!("A TOCAR · {}", fmt::clock(ms + 999)),
+            None => t("A TOCAR NO TELEMÓVEL").to_string(),
+        };
+        column![
+            row![
+                square(
+                    if (app.t * 2.0).fract() < 0.5 {
+                        HOT
+                    } else {
+                        alpha(HOT, 0.35)
+                    },
+                    8.0
+                ),
+                hgap(space::M),
+                headline(label, size::H1),
+                fill_x(),
+                btn(t("PARAR"), theme::danger, Some(Message::FindStop)),
+            ]
+            .align_y(Alignment::Center),
+            gap(space::S),
+            match left_ms {
+                Some(ms) => bar(
+                    (ms as f32 / (app.find_secs.max(1) * 1000) as f32).min(1.0),
+                    HOT,
+                    2.0
+                ),
+                None => Space::new().into(),
+            },
+        ]
+        .into()
+    } else if app.find_waiting() {
+        mono(t("à espera do telemóvel…"), SUB).into()
+    } else if app.find_no_reply {
+        mono(t("A app do telemóvel não respondeu (versão antiga?)"), HOT).into()
+    } else {
+        match (f.last_stopped_by, &f.last_error) {
+            (Some(FindStoppedBy::User), _) => mono(t("encontrado no telemóvel"), LINK_UP).into(),
+            (Some(FindStoppedBy::Timeout), _) => mono(t("tempo esgotado"), SUB).into(),
+            (Some(FindStoppedBy::Pc), _) => mono(t("parado no PC"), SUB).into(),
+            (Some(FindStoppedBy::Error), Some(e)) => {
+                mono(tr!("erro no telemóvel · {}", e), HOT).into()
+            }
+            (Some(FindStoppedBy::Error), None) => {
+                mono(t("interrompido (ligação perdida?)"), HOT).into()
+            }
+            (None, _) => Space::new().into(),
+        }
+    };
+
+    let card = container(
+        column![
+            row![
+                kicker_c(t("ENCONTRAR"), ACID),
+                fill_x(),
+                kicker(t("ESC PARA FECHAR"))
+            ],
+            gap(space::M),
+            headline(t("ONDE ESTÁ O TELEMÓVEL"), size::D3),
+            gap(space::M),
+            facts,
+            gap(space::S),
+            rule(),
+            gap(space::L),
+            modes,
+            gap(space::M),
+            secs,
+            gap(space::XL),
+            status,
+            gap(space::L),
+            row![
+                fill_x(),
+                btn(t("FECHAR"), theme::ghost, Some(Message::FindClose))
+            ],
+        ]
+        .width(Length::Fill),
+    )
+    .max_width(720)
+    .padding(space::GUTTER)
+    .style(|th| {
+        let mut s = theme::frame(th);
+        s.background = Some(INK_0.into());
+        s.border.color = LINE_STRONG;
+        s
+    });
+
+    // O cartão é opaco (os cliques nele não chegam ao fundo); um clique no
+    // fundo escurecido fecha.
+    mouse_area(
+        container(opaque(card))
+            .center(Length::Fill)
+            .padding(space::L)
+            .style(theme::scrim),
+    )
+    .on_press(Message::FindClose)
+    .into()
 }
 
 // ═════════════════════════════ 03 SECRETÁRIA ═════════════════════════════

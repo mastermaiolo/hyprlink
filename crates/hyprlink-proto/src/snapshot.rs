@@ -8,7 +8,7 @@
 //! - Additive changes keep `v = 1`; anything breaking bumps `v`.
 
 use crate::host::Host;
-use crate::link::{Device, Dir, Event, Kind, LinkState, PhoneStatus};
+use crate::link::{Device, Dir, Event, Event2, Kind, LinkState, PhoneStatus, TransferState};
 use serde::{Deserialize, Serialize};
 
 pub const VERSION: u8 = 1;
@@ -55,11 +55,45 @@ pub struct PacketBrief {
     pub note: String,
 }
 
+/// The file transfer in progress (one at a time). Sizes in bytes.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct TransferBrief {
+    pub id: u64,
+    pub name: String,
+    pub dir: Dir,
+    pub done: u64,
+    pub bytes: u64,
+    /// Moving average (`rate::RateMeter`); `null` until the first sample.
+    pub bytes_per_sec: Option<u64>,
+    /// Seconds left; `null` while it is still "calculating".
+    pub eta_s: Option<u64>,
+}
+
+/// "Find my phone" as the daemon knows it (`phone.find.state`).
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+pub struct FindBrief {
+    pub active: bool,
+    /// Rings until this time (epoch ms), if the phone said so.
+    pub until_ms: Option<u64>,
+    /// Who stopped the last ring: "user" (found on the phone), "timeout",
+    /// "pc" or "error"; `null` if it never rang.
+    pub last_stopped_by: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Snapshot {
     pub v: u8,
     /// "up" | "mock" | "down"
     pub daemon: String,
+    /// Added in 0.1.1 (additive): the daemon's version (from the socket
+    /// handshake); `null` when it is down. Plugins compare it with
+    /// `ctl_version` to spot an old `hyprlinkctl`.
+    #[serde(default)]
+    pub daemon_version: Option<String>,
+    /// Added in 0.1.1: the version of the `hyprlinkctl` that wrote this line.
+    /// Missing in older binaries.
+    #[serde(default)]
+    pub ctl_version: Option<String>,
     /// "connected" | "connecting" | "disconnected" — the LINK colour.
     pub link: crate::link::LinkPhase,
     // ── the phone ──
@@ -78,6 +112,17 @@ pub struct Snapshot {
     pub down_kbps: Option<f32>,
     pub up_kbps: Option<f32>,
     pub workspace: Option<u8>,
+    /// Added in 0.1.1 (additive, still v1): `null` when nothing is moving.
+    #[serde(default)]
+    pub transfer: Option<TransferBrief>,
+    /// Added in 0.1.1 (additive, still v1). `active: false` with an older
+    /// daemon or before any ring.
+    #[serde(default)]
+    pub find_phone: FindBrief,
+    /// Added in 0.1.1 (additive, still v1): `"usb" | "wifi" | "eth" | "other"`,
+    /// the path of the active link; `null` when not connected.
+    #[serde(default)]
+    pub link_path: Option<crate::link::LinkPath>,
     // ── this PC ──
     pub host: Option<Host>,
 }
@@ -153,6 +198,28 @@ impl Snapshot {
                     .as_ref()
                     .map(|p| p.code.clone().unwrap_or_else(|| "qr".into()))
             }
+            Event::More(Event2::Transfers(list)) => {
+                self.transfer = list
+                    .iter()
+                    .find(|t| t.state == TransferState::Active)
+                    .map(|t| TransferBrief {
+                        id: t.id,
+                        name: t.name.clone(),
+                        dir: t.dir,
+                        done: t.done,
+                        bytes: t.bytes,
+                        bytes_per_sec: t.bytes_per_sec,
+                        eta_s: t.eta_s,
+                    });
+            }
+            Event::More(Event2::LinkPath(p)) => self.link_path = *p,
+            Event::More(Event2::FindPhone(f)) => {
+                self.find_phone = FindBrief {
+                    active: f.active,
+                    until_ms: f.until_ms,
+                    last_stopped_by: f.last_stopped_by.map(|b| b.as_str().to_string()),
+                };
+            }
             Event::Packet(p) => {
                 self.last_packet = Some(PacketBrief {
                     dir: p.dir,
@@ -192,6 +259,72 @@ mod tests {
             tap: Some(0.4),
         });
         assert!(!s.mic.on && s.tap.on);
+    }
+
+    #[test]
+    fn transfer_in_progress_is_in_the_snapshot() {
+        use crate::link::Transfer;
+        let t = |id, state| Transfer {
+            id,
+            name: "a.mp4".into(),
+            dir: Dir::Tx,
+            bytes: 100,
+            done: 40,
+            state,
+            at: 0,
+            bytes_per_sec: Some(10),
+            eta_s: Some(6),
+            duration_ms: None,
+        };
+        let mut s = Snapshot::new("up");
+        s.apply(&Event::More(Event2::Transfers(vec![
+            t(1, TransferState::Done),
+            t(2, TransferState::Active),
+        ])));
+        let b = s.transfer.clone().unwrap();
+        assert_eq!(
+            (b.id, b.done, b.bytes_per_sec, b.eta_s),
+            (2, 40, Some(10), Some(6))
+        );
+        let v = serde_json::to_value(&s).unwrap();
+        assert_eq!(v["transfer"]["eta_s"], 6);
+        s.apply(&Event::More(Event2::Transfers(vec![t(
+            1,
+            TransferState::Done,
+        )])));
+        assert!(s.transfer.is_none());
+    }
+
+    #[test]
+    fn find_phone_is_in_the_snapshot() {
+        use crate::link::{FindPhoneState, FindStoppedBy};
+        let mut s = Snapshot::new("up");
+        let v = serde_json::to_value(&s).unwrap();
+        assert_eq!(v["find_phone"]["active"], false);
+        assert!(v["find_phone"]["last_stopped_by"].is_null());
+        s.apply(&Event::More(Event2::FindPhone(FindPhoneState {
+            active: true,
+            until_ms: Some(1_700_000_030_000),
+            last_stopped_by: None,
+            last_error: None,
+        })));
+        assert_eq!(
+            s.find_phone,
+            FindBrief {
+                active: true,
+                until_ms: Some(1_700_000_030_000),
+                last_stopped_by: None
+            }
+        );
+        s.apply(&Event::More(Event2::FindPhone(FindPhoneState {
+            active: false,
+            until_ms: None,
+            last_stopped_by: Some(FindStoppedBy::User),
+            last_error: None,
+        })));
+        let v = serde_json::to_value(&s).unwrap();
+        assert_eq!(v["find_phone"]["active"], false);
+        assert_eq!(v["find_phone"]["last_stopped_by"], "user");
     }
 
     #[test]

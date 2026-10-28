@@ -12,6 +12,7 @@ pub mod env;
 pub mod gpu;
 pub mod hyprland;
 pub mod instance;
+pub mod net;
 pub mod overrides;
 pub mod pipewire;
 pub mod plan;

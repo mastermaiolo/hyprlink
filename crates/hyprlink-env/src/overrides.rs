@@ -36,6 +36,12 @@ pub struct Overrides {
     /// áudio (tap) captura.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tap_source: Option<Value>,
+    /// `auto|gpu|cpu`: quem descodifica o vídeo da câmara.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub webcam_decoder: Option<Value>,
+    /// `v4l2loopback|pipewire|auto`: para onde vai a câmara virtual.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub webcam_output: Option<Value>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -81,6 +87,24 @@ pub enum TapChoice {
     EasyeffectsPost,
 }
 
+/// `webcam_decoder`: `Auto` tenta o VA-API (GPU) e recua para o CPU.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DecoderChoice {
+    Auto,
+    Gpu,
+    Cpu,
+}
+
+/// `webcam_output`: `V4l2loopback` é o comportamento de sempre.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputChoice {
+    V4l2loopback,
+    Pipewire,
+    Auto,
+}
+
 pub const V4L2_DEFAULT_NR: u32 = 42;
 
 /// Valores validados, prontos a usar.
@@ -94,6 +118,8 @@ pub struct Resolved {
     pub audio_backend: AudioChoice,
     pub hypr_dispatch_mode: DispatchChoice,
     pub tap_source: TapChoice,
+    pub webcam_decoder: DecoderChoice,
+    pub webcam_output: OutputChoice,
 }
 
 impl Default for Resolved {
@@ -107,6 +133,8 @@ impl Default for Resolved {
             audio_backend: AudioChoice::Auto,
             hypr_dispatch_mode: DispatchChoice::Auto,
             tap_source: TapChoice::Auto,
+            webcam_decoder: DecoderChoice::Auto,
+            webcam_output: OutputChoice::V4l2loopback,
         }
     }
 }
@@ -218,6 +246,26 @@ impl Overrides {
                 ),
             }
         }
+        if let Some(v) = &self.webcam_decoder {
+            match text(v).as_deref() {
+                Some("auto") => {}
+                Some("gpu") => r.webcam_decoder = DecoderChoice::Gpu,
+                Some("cpu") => r.webcam_decoder = DecoderChoice::Cpu,
+                _ => bad
+                    .push("webcam_decoder: valor desconhecido (suportados: auto, gpu, cpu)".into()),
+            }
+        }
+        if let Some(v) = &self.webcam_output {
+            match text(v).as_deref() {
+                Some("v4l2loopback") => {}
+                Some("pipewire") => r.webcam_output = OutputChoice::Pipewire,
+                Some("auto") => r.webcam_output = OutputChoice::Auto,
+                _ => bad.push(
+                    "webcam_output: valor desconhecido (suportados: v4l2loopback, pipewire, auto)"
+                        .into(),
+                ),
+            }
+        }
         (r, bad)
     }
 }
@@ -250,6 +298,8 @@ mod tests {
             "audio_backend": "pactl",
             "hypr_dispatch_mode": "lua",
             "tap_source": "easyeffects_post",
+            "webcam_decoder": "CPU",
+            "webcam_output": "pipewire",
         }));
         let (r, bad) = o.resolve(&|_| true);
         assert!(bad.is_empty(), "{bad:?}");
@@ -260,6 +310,20 @@ mod tests {
         assert_eq!(r.audio_backend, AudioChoice::Pactl);
         assert_eq!(r.hypr_dispatch_mode, DispatchChoice::Lua);
         assert_eq!(r.tap_source, TapChoice::EasyeffectsPost);
+        assert_eq!(r.webcam_decoder, DecoderChoice::Cpu);
+        assert_eq!(r.webcam_output, OutputChoice::Pipewire);
+    }
+
+    #[test]
+    fn webcam_por_omissao_e_gpu_com_recuo_e_v4l2loopback() {
+        let (r, _) = Overrides::default().resolve(&|_| false);
+        assert_eq!(r.webcam_decoder, DecoderChoice::Auto);
+        assert_eq!(r.webcam_output, OutputChoice::V4l2loopback);
+        let (r, bad) =
+            ov(json!({"webcam_decoder": "gpu", "webcam_output": "auto"})).resolve(&|_| false);
+        assert!(bad.is_empty());
+        assert_eq!(r.webcam_decoder, DecoderChoice::Gpu);
+        assert_eq!(r.webcam_output, OutputChoice::Auto);
     }
 
     #[test]
@@ -273,10 +337,12 @@ mod tests {
             "audio_backend": 3,
             "hypr_dispatch_mode": "x",
             "tap_source": "pre",
+            "webcam_decoder": "av1",
+            "webcam_output": "x11",
         }));
         let (r, bad) = o.resolve(&|_| false);
         assert_eq!(r, Resolved::default());
-        assert_eq!(bad.len(), 8, "{bad:?}");
+        assert_eq!(bad.len(), 10, "{bad:?}");
     }
 
     #[test]

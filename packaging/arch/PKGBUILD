@@ -38,6 +38,8 @@ depends=(
 makedepends=('cargo' 'clang' 'lld' 'pkgconf')
 optdepends=(
   'v4l2loopback-dkms: telemóvel como webcam do PC (/dev/video42)'
+  'gst-plugin-va: descodificação da webcam na GPU (VA-API; AMD com o mesa)'
+  'intel-media-driver: VA-API em GPU Intel (com gst-plugin-va)'
   'xdg-desktop-portal-gtk: seletor de ficheiros da GUI'
   'grimblast-git: capturas de ecrã a partir do telemóvel'
   'grim: capturas de ecrã (alternativa ao grimblast)'

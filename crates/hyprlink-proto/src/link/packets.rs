@@ -47,6 +47,11 @@ pub const SHARE_OFFER: &str = "share.file";
 pub const NOTIF_DISMISS: &str = "notification.dismiss";
 pub const PHONE_OPEN_URL: &str = "phone.open_url";
 pub const PHONE_RUN_APP: &str = "phone.run_app";
+/// PC → telemóvel: «onde está o telemóvel?» (som, vibração, lanterna).
+pub const PHONE_FIND: &str = "phone.find";
+pub const PHONE_FIND_STOP: &str = "phone.find_stop";
+/// Telemóvel → PC: estado do `phone.find` (ativo, até quando, quem parou).
+pub const PHONE_FIND_STATE: &str = "phone.find.state";
 pub const NOTIF_REPLY: &str = "notification.reply";
 /// Was in "proposed"; the phone already sends it.
 pub const NOTIF_POSTED: &str = "notification.post";

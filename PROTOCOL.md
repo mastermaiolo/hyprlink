@@ -131,10 +131,15 @@ completamente diferentes, e confundir os dois já causou bugs reais:
 
 Direção: **P→D** telemóvel→daemon, **D→P** daemon→telemóvel.
 
+**Tipo desconhecido = ignorado.** Quem recebe um `type` que não conhece não
+responde nem fecha a ligação: o daemon só regista no Diário («tipo ainda não
+implementado»), a app só regista no log dela. É por isso que os pacotes novos
+são aditivos e um lado mais antigo continua a funcionar (sem a função nova).
+
 ### core
 | type | dir | body |
 |---|---|---|
-| `core.hello` | P→D req / D→P resp | P→D: `{device_name, capabilities:[...], pairing_token?}` (token só no 1º pareamento); D→P: `{device_name}` (único campo lido) + `pc_mac?` (MAC da interface de saída, formato `aa:bb:cc:dd:ee:ff` — best-effort; a app grava no pareamento pra poder acordar o PC por Wake-on-LAN quando o daemon nem está a correr) |
+| `core.hello` | P→D req / D→P resp | P→D: `{device_name, capabilities:[...], pairing_token?}` (token só no 1º pareamento); D→P: `{device_name}` (único campo lido) + `pc_mac?` (MAC da interface de saída, formato `aa:bb:cc:dd:ee:ff` — best-effort; a app grava no pareamento pra poder acordar o PC por Wake-on-LAN quando o daemon nem está a correr) + `pc_addrs?` (ver «pc.addrs» abaixo) |
 | `core.ping` | P→D req (10s) | `null` |
 | `core.pong` | D→P resp | não parseado |
 
@@ -285,6 +290,12 @@ desistem sem erro. Um ficheiro **ainda em fila não se pode cancelar** (só tem
 **receção** (telemóvel→PC) não entra na fila: as capturas automáticas do
 telemóvel chegam logo, mesmo com um envio longo em curso.
 
+**Velocidade e tempo restante** não passam no wire: cada lado calcula-os a
+partir dos bytes feitos e do total (média móvel exponencial, amostras a cada
+≥ 500 ms, α = 0,3; tempo restante só depois de 2 s e com velocidade > 0). No
+PC chegam à GUI e ao JSON v1 do `hyprlinkctl` (`transfer.bytes_per_sec`,
+`transfer.eta_s`, campos aditivos).
+
 ### audio
 | type | dir | body |
 |---|---|---|
@@ -378,6 +389,34 @@ alfanuméricos separados por pontos, pelo menos dois); o que falhar fica
 recusado no Diário e nada é enviado.
 | `phone.media` | D→P push | `{action:"previous"\|"play_pause"\|"next"}` — controla a MediaSession ativa do telemóvel (o inverso do `media.command`, que controla o MPRIS do PC); sem resposta — o telemóvel reenvia `phone.status` com o `now_playing` atualizado depois de agir |
 
+### phone.find («onde está o telemóvel?»)
+
+O PC pede ao telemóvel que toque, vibre e/ou pisque a lanterna, para o
+encontrar em casa. Sem câmaras (o Android não as deixa abrir em segundo plano).
+
+| type | dir | body |
+|---|---|---|
+| `phone.find` | D→P push | `{sound: bool, vibrate: bool, torch: bool, duration_s: uint}` — pelo menos um `true`; `duration_s` 5–60 (o daemon corta a esse intervalo; o telemóvel corta acima de 60) |
+| `phone.find_stop` | D→P push | `{}` |
+| `phone.find.state` | P→D push | `{active: bool, until_ms?: uint (epoch ms), stopped_by?: "user"\|"timeout"\|"pc"\|"error", error?: String}` |
+
+- O telemóvel manda `phone.find.state` com `active:true` (e `until_ms`) quando
+  começa, e com `active:false` + `stopped_by` quando para: `user` (parado no
+  telemóvel: encontrado), `timeout`, `pc` (depois de um `phone.find_stop`) ou
+  `error` (com `error`, texto curto). Um `phone.find` com outro já a tocar
+  substitui o anterior.
+- Daemon: no máximo **1 `phone.find` a cada 3 s e 10 por minuto** por ligação
+  (o excesso fica recusado no Diário, nada é enviado); o `phone.find_stop` nunca
+  é limitado. Sem telemóvel ligado → erro, não fica em fila.
+- Se a ligação cair com o toque ativo, o daemon dá-o por parado com
+  `stopped_by:"error"` (o telemóvel para sozinho pelo tempo). Se passar o
+  `until_ms` (+3 s) sem `phone.find.state`, dá-o por parado com `timeout`.
+- Uma app antiga ignora `phone.find` (tipo desconhecido, ver acima) e nunca manda
+  `phone.find.state`: a GUI avisa ao fim de 5 s sem resposta.
+- Quem os envia: a GUI (Início → Ações rápidas → «ONDE ESTÁ O TELEMÓVEL»,
+  `Command2::FindPhone`/`StopFindPhone`) e `hyprlinkctl find`. O estado chega à
+  GUI como `Event2::FindPhone` e ao `status.json` como `find_phone.active`.
+
 ### phone.status (P→D, o telemóvel reporta o estado dele)
 
 Contrato 2026-10-04: **só dados, nunca texto formatado** (unidades fixas:
@@ -414,6 +453,29 @@ Enviado a cada 2s enquanto ligado; tudo opcional — o que faltar mostra-se «�
 | `rtt_ms` | float | RTT do QUIC medido pela própria conexão |
 | `disk_free_b` / `disk_total_b` | uint (bytes) | `statvfs` do sistema de ficheiros da pasta pessoal (ou do `disk_path` da config): livre = `f_bavail × f_frsize`, total = `f_blocks × f_frsize`; lido de 30 em 30 s, o último valor repete-se nos ciclos intermédios; omitido se falhar (nunca 0) |
 | `gpu_pct` | float 0–100 | AMD: `/sys/class/drm/card*/device/gpu_busy_percent`; NVIDIA: `nvidia-smi --query-gpu=utilization.gpu` (de 6 em 6 s, fora do ciclo, timeout 1 s, **só com a placa já acordada** — `power/runtime_status` = `active` em `/sys/bus/pci/devices` —, para não tirar uma GPU dedicada do repouso; a opção `gpu_nvidia_wake` da config força a consulta); várias GPUs → a mais carregada; Intel e sem GPU compatível → omitido |
+
+### pc.addrs e `pc_addrs` (D→P, ligação por cabo USB)
+
+Os endereços do PC por onde o telemóvel pode ligar, para a app tentar **o
+mesmo** QUIC + mTLS também pela ancoragem USB (sem adb nem transporte novo).
+Aditivo: apps antigas ignoram.
+
+- `core.hello` (resposta D→P) ganha `pc_addrs`: lista de
+  `{ip: text, kind: "wifi"|"usb"|"eth"|"other", iface: text}`.
+- `pc.addrs` (D→P push) `{pc_addrs: [...]}` com a lista inteira, enviado
+  **quando a lista muda** (interface USB sobe/desce, IP novo); poll de 2 s
+  com telemóvel ligado. Uma lista vazia é válida (nenhum caminho).
+
+Regras da lista: só **IPv4** privado (10/8, 172.16/12, 192.168/16) ou
+link-local (169.254/16) das interfaces **ativas**; nunca loopback nem bridges
+de containers/VMs (`docker*`, `virbr*`, `veth*`, `br-*`). O daemon faz `bind`
+a `0.0.0.0:7443` (UDP), por isso escuta em todas essas interfaces; o socket é
+só IPv4, logo não se anunciam IPv6. `kind` vem de `/sys/class/net/<if>`:
+`wireless` ou `phy80211` → `wifi`; controlador `rndis_host`, `cdc_ncm` ou
+`cdc_ether` (`device/driver`) → `usb`; nome `en*`/`eth*` → `eth`; senão `other`.
+
+O PC sabe por onde a ligação ativa vai pelo IP local do QUIC
+(`link_path` no `status.json`/`hyprlinkctl status`: `usb|wifi|eth|other`).
 
 ### capabilities e hello enriquecidos
 
@@ -459,6 +521,20 @@ disponível — pode divergir do que o `webcam.start` pediu; o byte indicador é
 sempre a fonte da verdade. Rotação/espelho resetam para 0°/false a cada
 início de sessão de streaming.
 
+Rotação e tamanho no PC:
+- O encoder manda sempre a imagem **como a câmara a capta** (em paisagem); o
+  `rotation` de `webcam.transform`/`webcam.state` é a **única** rotação, feita
+  no PC. O daemon guarda-a mesmo que chegue antes do vídeo.
+- O tamanho da câmara virtual é o das dimensões da sessão orientadas pela
+  rotação (90/270° → ao alto, ex. 720×1280), em qualquer orientação que o
+  `webcam.state` as mande. A imagem nunca é esticada (barras se for preciso).
+- A v4l2loopback não deixa mudar o formato com a câmara a correr; o daemon
+  refaz o pipeline quando nenhum programa a está a ler. Com um programa a ler,
+  mantém o tamanho e avisa no Diário. Por isso o telemóvel tem de repetir
+  VPS/SPS/PPS em cada keyframe.
+- Quando o uni-stream de vídeo fecha, a sessão espera **3 s** por um
+  reinício com o mesmo id antes de parar a câmara.
+
 ## 6. Gotchas para o daemon Rust (não documentados em nenhum lugar antes)
 
 - Nenhum destes tinha implementação real no daemon anterior (só protocolo em
@@ -475,9 +551,12 @@ início de sessão de streaming.
   configuração Lua (Hyprland 0.55+; confirmado no 0.56.2), `hyprctl dispatch`
   é um atalho de `eval 'hl.dispatch(...)'` e recebe uma expressão Lua; o
   clássico falha com exit code != 0 (`hl.dispatch: expected a dispatcher`).
-  `hypr::dispatch` **deteta o modo uma vez** com `hl.dsp.no_op()` e guarda-o
-  (volta a testar se um dispatch falhar; a opção `hypr_dispatch_mode` força um
-  modo): em modo clássico envia `<dispatcher> <args>`; em modo Lua traduz. A
+  **O arranque do daemon nunca faz dispatch:** infere o modo pela versão e pelo
+  ficheiro em `~/.config/hypr` (`hyprland.lua` → Lua, `hyprland.conf` →
+  clássico) e, se for seguro, guarda-o logo. Só sem ficheiro de configuração é
+  que `hypr::dispatch` **confirma o modo uma vez**, no primeiro dispatch a sério,
+  com `hl.dsp.no_op()` (volta a testar se um dispatch falhar; a opção
+  `hypr_dispatch_mode` força um modo): em modo clássico envia `<dispatcher> <args>`; em modo Lua traduz. A
   tabela completa (com a fonte de cada linha, na wiki do Hyprland) está em
   `docs/COMPATIBILIDADE.md` §2; os principais:
   - `workspace <n>` / `e-1` / `name:x` → `hl.dsp.focus({ workspace = "<n>" })`
@@ -520,6 +599,8 @@ no `hyprlinkctl doctor`. O valor em uso aparece no `doctor` e nas Definições d
 | `temp_sensor` | caminho absoluto de um `…_input` com temperatura plausível | sensor de `cpu_temp_c` |
 | `gpu_source` | `auto` · `amd` · `nvidia` · `intel` · `none` | origem de `gpu_pct`; `intel` só com driver `i915` e `intel_gpu_top` |
 | `v4l2_device_nr` | inteiro 1–255 (42) | `/dev/videoN` da webcam virtual |
+| `webcam_decoder` | `auto` · `gpu` · `cpu` (`auto`) | quem descodifica o vídeo da câmara: `gpu` é VA-API (`vah264dec`/`vah265dec`), `auto` tenta-a e recua para o CPU |
+| `webcam_output` | `v4l2loopback` · `pipewire` · `auto` (`v4l2loopback`) | para onde vai a câmara: `/dev/videoN` (v4l2loopback), nó PipeWire, ou `auto` (v4l2loopback se o módulo estiver disponível, senão PipeWire) |
 | `audio_backend` | `auto` · `wpctl` · `pactl` | programa do volume em `pc.action volume_*` |
 | `hypr_dispatch_mode` | `auto` · `classic` · `lua` | sintaxe do `hyprctl dispatch` |
 | `tap_source` | `auto` · `default` · `easyeffects_pre` · `easyeffects_post` | o que o retorno de áudio (`audio.tap_*`) captura; ver abaixo |

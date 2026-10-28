@@ -35,6 +35,17 @@ pub fn phase(p: crate::link::LinkPhase) -> &'static str {
     }
 }
 
+/// Por onde vai a ligação (chip no cabeçalho e na página da câmara).
+pub fn link_path(p: crate::link::LinkPath) -> &'static str {
+    use crate::link::LinkPath::*;
+    match p {
+        Usb => t("USB"),
+        Wifi => t("WI-FI"),
+        Eth => t("CABO"),
+        Other => t("OUTRA"),
+    }
+}
+
 pub fn cap(c: Cap) -> &'static str {
     match c {
         Cap::Workspaces => t("workspaces"),
@@ -298,6 +309,47 @@ pub fn size(bytes: u64) -> String {
     format!("{} {u}", decimal(v, 1))
 }
 
+/// 12 400 000 B/s → "12,4 MB/s" (same units as [`size`]).
+pub fn rate(bytes_per_sec: u64) -> String {
+    format!("{}/s", size(bytes_per_sec))
+}
+
+/// 45 → "45 s"; 130 → "2 min 10 s"; 3900 → "1 h 05 min".
+pub fn duration(secs: u64) -> String {
+    if secs < 60 {
+        crate::tr!("{} s", secs)
+    } else if secs < 3600 {
+        crate::tr!("{} min {} s", secs / 60, secs % 60)
+    } else {
+        crate::tr!(
+            "{} h {} min",
+            secs / 3600,
+            format!("{:02}", secs % 3600 / 60)
+        )
+    }
+}
+
+/// Second line of a running transfer: "12,4 MB/s · faltam 2 min 10 s", or
+/// "a calcular…" while the speed or the time left is not known yet.
+pub fn transfer_speed(bytes_per_sec: Option<u64>, eta_s: Option<u64>) -> String {
+    match (bytes_per_sec, eta_s) {
+        (Some(r), Some(eta)) => format!("{} · {}", rate(r), crate::tr!("faltam {}", duration(eta))),
+        (Some(r), None) => format!("{} · {}", rate(r), t("a calcular…")),
+        (None, _) => t("a calcular…").to_string(),
+    }
+}
+
+/// Finished transfer: "1,9 GB em 2 min 31 s (12,6 MB/s média)". Under a
+/// second the duration rounds up to "1 s".
+pub fn transfer_summary(bytes: u64, duration_ms: u64, bytes_per_sec: u64) -> String {
+    crate::tr!(
+        "{} em {} ({} média)",
+        size(bytes),
+        duration(duration_ms.div_ceil(1000)),
+        rate(bytes_per_sec)
+    )
+}
+
 /// Short month name in the current language (`month0` is 0–11).
 pub fn month(month0: usize) -> &'static str {
     const M: [&str; 12] = [
@@ -365,6 +417,37 @@ mod tests {
         assert_eq!(
             gesture_action("pc:volume_{dir}"),
             "pc.action volume_up|down"
+        );
+    }
+
+    #[test]
+    fn transfer_speed_and_time_left() {
+        crate::i18n::set(crate::i18n::Lang::PtPt);
+        assert_eq!(rate(12_400_000), "12,4 MB/s");
+        assert_eq!(rate(512), "512 B/s");
+        assert_eq!(duration(45), "45 s");
+        assert_eq!(duration(130), "2 min 10 s");
+        assert_eq!(duration(3900), "1 h 05 min");
+        assert_eq!(
+            transfer_speed(Some(12_400_000), Some(130)),
+            "12,4 MB/s · faltam 2 min 10 s"
+        );
+        assert_eq!(
+            transfer_speed(Some(12_400_000), Some(45)),
+            "12,4 MB/s · faltam 45 s"
+        );
+        assert_eq!(
+            transfer_speed(Some(12_400_000), None),
+            "12,4 MB/s · a calcular…"
+        );
+        assert_eq!(transfer_speed(None, None), "a calcular…");
+        assert_eq!(
+            transfer_summary(1_900_000_000, 151_000, 12_600_000),
+            "1,9 GB em 2 min 31 s (12,6 MB/s média)"
+        );
+        assert_eq!(
+            transfer_summary(4_812_334, 535, 9_000_000),
+            "4,8 MB em 1 s (9,0 MB/s média)"
         );
     }
 

@@ -24,6 +24,8 @@ pub struct More {
     settings: Settings,
     next_id: u64,
     active_ws: u8,
+    /// «Onde está o telemóvel?» a tocar: até quando (no relógio `t`).
+    find_until: Option<f32>,
 }
 
 fn now_unix() -> u64 {
@@ -283,6 +285,9 @@ impl More {
                     done: 4_812_334,
                     state: TransferState::Done,
                     at: now - 1800,
+                    bytes_per_sec: Some(9_000_000),
+                    eta_s: None,
+                    duration_ms: Some(535),
                 },
                 Transfer {
                     id: 2,
@@ -292,6 +297,9 @@ impl More {
                     done: 52_430_112,
                     state: TransferState::Done,
                     at: now - 7400,
+                    bytes_per_sec: Some(9_000_000),
+                    eta_s: None,
+                    duration_ms: Some(5826),
                 },
                 Transfer {
                     id: 1,
@@ -301,6 +309,9 @@ impl More {
                     done: 380_000,
                     state: TransferState::Failed,
                     at: now - 86_000,
+                    bytes_per_sec: None,
+                    eta_s: None,
+                    duration_ms: None,
                 },
             ],
             players: vec![
@@ -343,6 +354,7 @@ impl More {
             },
             next_id: 100,
             active_ws: 3,
+            find_until: None,
         }
     }
 
@@ -431,7 +443,29 @@ impl More {
         Self::more(out, Event2::Players(self.players.clone()));
         Self::more(out, Event2::Settings(self.settings.clone()));
         Self::more(out, Event2::Webcam(None));
+        Self::more(out, Event2::FindPhone(FindPhoneState::default()));
         self.active_window(out);
+    }
+
+    fn find_stopped(&mut self, out: &mut Vec<Event>, t: f32, by: FindStoppedBy) {
+        self.find_until = None;
+        Self::packet(
+            out,
+            t,
+            Dir::Rx,
+            super::packets::PHONE_FIND_STATE,
+            40,
+            by.as_str(),
+        );
+        Self::more(
+            out,
+            Event2::FindPhone(FindPhoneState {
+                active: false,
+                until_ms: None,
+                last_stopped_by: Some(by),
+                last_error: None,
+            }),
+        );
     }
 
     fn active_window(&self, out: &mut Vec<Event>) {
@@ -625,6 +659,42 @@ impl More {
                     Self::packet(out, t, Dir::Tx, p::PHONE_RUN_APP, 48 + pkg.len(), pkg);
                 }
             }
+            // O telemóvel simulado começa logo a tocar e para sozinho ao fim
+            // da duração (`stopped_by: timeout`, em `poll`).
+            Command2::FindPhone(req) => {
+                if let Some(req) = req.normalized() {
+                    Self::packet(
+                        out,
+                        t,
+                        Dir::Tx,
+                        p::PHONE_FIND,
+                        52,
+                        format!("{} s", req.duration_s),
+                    );
+                    self.find_until = Some(t + req.duration_s as f32);
+                    let until_ms = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(0)
+                        + u64::from(req.duration_s) * 1000;
+                    Self::packet(out, t, Dir::Rx, p::PHONE_FIND_STATE, 40, "active");
+                    Self::more(
+                        out,
+                        Event2::FindPhone(FindPhoneState {
+                            active: true,
+                            until_ms: Some(until_ms),
+                            last_stopped_by: None,
+                            last_error: None,
+                        }),
+                    );
+                }
+            }
+            Command2::StopFindPhone => {
+                Self::packet(out, t, Dir::Tx, p::PHONE_FIND_STOP, 24, "");
+                if self.find_until.is_some() {
+                    self.find_stopped(out, t, FindStoppedBy::Pc);
+                }
+            }
             Command2::DismissAllNotifications => {
                 self.notifs.clear();
                 Self::packet(out, t, Dir::Tx, p::NOTIF_DISMISS, 24, "all");
@@ -676,6 +746,9 @@ impl More {
                         done: 0,
                         state: TransferState::Active,
                         at: now_unix(),
+                        bytes_per_sec: None,
+                        eta_s: None,
+                        duration_ms: None,
                     },
                 );
                 Self::packet(out, t, Dir::Tx, p::SHARE_OFFER, 96, name);
@@ -732,6 +805,10 @@ impl More {
         let step = self.acc;
         self.acc = 0.0;
 
+        if self.find_until.is_some_and(|until| t >= until) {
+            self.find_stopped(out, t, FindStoppedBy::Timeout);
+        }
+
         // Webcam stats.
         if self.webcam.is_some() {
             let mbps = 6.2 + (t * 1.3).sin() * 0.6;
@@ -750,17 +827,26 @@ impl More {
                         rotation: 0,
                         mirror: false,
                     }),
+                    decoder: Some(CamDecoder::Gpu),
+                    output: Some(CamOutput::V4l2(42)),
                 })),
             );
         }
 
-        // Active transfers progress (≈ 9 MB/s).
+        // Active transfers progress (≈ 9 MB/s), with the speed and time left
+        // the real daemon reports (`rate::RateMeter`).
+        const RATE: u64 = 9_000_000;
         let mut changed = false;
         for tr in &mut self.transfers {
             if tr.state == TransferState::Active {
-                tr.done = (tr.done + (9_000_000.0 * step) as u64).min(tr.bytes);
+                tr.done = (tr.done + (RATE as f32 * step) as u64).min(tr.bytes);
+                tr.bytes_per_sec = Some(RATE);
+                tr.eta_s = (now_unix().saturating_sub(tr.at) >= 2)
+                    .then(|| (tr.bytes - tr.done).div_ceil(RATE));
                 if tr.done >= tr.bytes {
                     tr.state = TransferState::Done;
+                    tr.eta_s = None;
+                    tr.duration_ms = Some(tr.bytes * 1000 / RATE);
                 }
                 changed = true;
             }

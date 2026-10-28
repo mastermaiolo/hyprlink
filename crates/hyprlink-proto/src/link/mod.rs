@@ -72,6 +72,28 @@ pub enum LinkPhase {
     Connected,
 }
 
+/// Por onde vai a ligação ativa (pelo IP local da ligação QUIC).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LinkPath {
+    /// Ancoragem USB (`rndis_host`, `cdc_ncm`, `cdc_ether`).
+    Usb,
+    Wifi,
+    Eth,
+    Other,
+}
+
+impl LinkPath {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LinkPath::Usb => "usb",
+            LinkPath::Wifi => "wifi",
+            LinkPath::Eth => "eth",
+            LinkPath::Other => "other",
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Device {
     pub id: DeviceId,
@@ -531,6 +553,25 @@ pub struct WebcamFormat {
     pub mirror: bool,
 }
 
+/// Quem descodifica o vídeo da câmara no PC.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CamDecoder {
+    /// VA-API (GPU).
+    Gpu,
+    Cpu,
+}
+
+/// Para onde o PC escreve a câmara virtual.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CamOutput {
+    /// `/dev/video<N>` (v4l2loopback).
+    V4l2(u32),
+    /// Nó de câmara PipeWire, sem módulo do kernel.
+    Pipewire,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
 pub struct WebcamStats {
     pub mbps: f32,
@@ -545,6 +586,12 @@ pub struct WebcamStats {
     /// telemóvel antigo (sem o pacote): a GUI cai para o pedido.
     #[serde(default)]
     pub format: Option<WebcamFormat>,
+    /// Descodificador em uso no PC. `None` = daemon antigo / ainda não sabe.
+    #[serde(default)]
+    pub decoder: Option<CamDecoder>,
+    /// Destino da câmara virtual no PC. `None` = daemon antigo.
+    #[serde(default)]
+    pub output: Option<CamOutput>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
@@ -675,6 +722,16 @@ pub struct Transfer {
     pub done: u64,
     pub state: TransferState,
     pub at: u64,
+    /// Em curso: velocidade atual (média móvel, `rate::RateMeter`). Acabada:
+    /// a média da transferência toda. `None` = ainda não se sabe.
+    #[serde(default)]
+    pub bytes_per_sec: Option<u64>,
+    /// Em curso: segundos que faltam; `None` = «a calcular…».
+    #[serde(default)]
+    pub eta_s: Option<u64>,
+    /// Acabada: quanto tempo durou, em milissegundos.
+    #[serde(default)]
+    pub duration_ms: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -717,6 +774,91 @@ pub struct Settings {
 pub struct EnvValue {
     pub key: String,
     pub value: String,
+}
+
+/// Pedido «onde está o telemóvel?» (`phone.find`). Pelo menos um modo;
+/// `duration_s` fica entre [`FindPhoneRequest::MIN_S`] e
+/// [`FindPhoneRequest::MAX_S`] (ver [`FindPhoneRequest::normalized`]).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FindPhoneRequest {
+    pub sound: bool,
+    pub vibrate: bool,
+    pub torch: bool,
+    pub duration_s: u32,
+}
+
+impl FindPhoneRequest {
+    pub const MIN_S: u32 = 5;
+    pub const MAX_S: u32 = 60;
+    pub const DEFAULT_S: u32 = 30;
+
+    /// Som + vibração + lanterna.
+    pub fn all(duration_s: u32) -> Self {
+        Self {
+            sound: true,
+            vibrate: true,
+            torch: true,
+            duration_s,
+        }
+    }
+
+    pub fn any_mode(&self) -> bool {
+        self.sound || self.vibrate || self.torch
+    }
+
+    /// `None` sem nenhum modo; a duração fica cortada a 5–60 s.
+    pub fn normalized(self) -> Option<Self> {
+        self.any_mode().then_some(Self {
+            duration_s: self.duration_s.clamp(Self::MIN_S, Self::MAX_S),
+            ..self
+        })
+    }
+}
+
+/// Quem parou o `phone.find` (`stopped_by` do `phone.find.state`).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FindStoppedBy {
+    /// Tocou em «parar» no telemóvel: encontrado.
+    User,
+    Timeout,
+    Pc,
+    /// Falhou no telemóvel ou a ligação caiu.
+    Error,
+}
+
+impl FindStoppedBy {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "user" => Some(Self::User),
+            "timeout" => Some(Self::Timeout),
+            "pc" => Some(Self::Pc),
+            "error" => Some(Self::Error),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Timeout => "timeout",
+            Self::Pc => "pc",
+            Self::Error => "error",
+        }
+    }
+}
+
+/// Estado do «onde está o telemóvel?» como o daemon o conhece.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+pub struct FindPhoneState {
+    pub active: bool,
+    /// Até quando toca (epoch ms), se o telemóvel o disse.
+    #[serde(default)]
+    pub until_ms: Option<u64>,
+    #[serde(default)]
+    pub last_stopped_by: Option<FindStoppedBy>,
+    #[serde(default)]
+    pub last_error: Option<String>,
 }
 
 /// Commands for the new pages. Kept apart so the original enum stays readable.
@@ -784,6 +926,11 @@ pub enum Command2 {
         url: Option<String>,
         package: Option<String>,
     },
+    /// «Onde está o telemóvel?»: `phone.find` (som, vibração, lanterna).
+    /// Limitado a 1 a cada 3 s e 10 por minuto.
+    FindPhone(FindPhoneRequest),
+    /// `phone.find_stop`: nunca é limitado.
+    StopFindPhone,
 }
 
 /// Events for the new pages.
@@ -811,4 +958,8 @@ pub enum Event2 {
         rules: Vec<GestureRule>,
         last: Option<GestureLast>,
     },
+    /// Estado do «onde está o telemóvel?» (`phone.find.state`).
+    FindPhone(FindPhoneState),
+    /// Por onde vai a ligação ativa; `None` sem ligação.
+    LinkPath(Option<LinkPath>),
 }

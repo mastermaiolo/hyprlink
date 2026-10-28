@@ -572,3 +572,31 @@ fn doctor_encontra_a_instancia_sem_a_variavel() {
     }
     std::fs::remove_dir_all(&rt).ok();
 }
+
+// ── ancoragem USB no doctor ────────────────────────────────────────────────
+
+#[test]
+fn doctor_mostra_a_ancoragem_usb_so_quando_existe() {
+    use hyprlink_env::net::{FirewallNote, UsbReport};
+    let mut r = rep("amd-so");
+    assert!(!report::render_text(&r).contains("[Ligação por USB"));
+    r.usb = Some(UsbReport {
+        interfaces: vec!["usb0".into()],
+        default_route_via_usb: true,
+        connection: Some("Wired connection 1".into()),
+        never_default_cmd: Some(
+            "nmcli connection modify \"Wired connection 1\" ipv4.never-default yes ipv6.never-default yes"
+                .into(),
+        ),
+        firewall: Some(FirewallNote {
+            tool: "firewalld",
+            open: Some(false),
+            command: Some("pkexec firewall-cmd --zone=public --add-port=7443/udp".into()),
+        }),
+    });
+    let t = report::render_text(&r);
+    assert!(t.contains("[Ligação por USB (ancoragem)]"), "{t}");
+    assert!(t.contains("a rota por omissão passa pelo telemóvel"));
+    assert!(t.contains("ipv4.never-default yes ipv6.never-default yes"));
+    assert!(t.contains("FECHADA") && t.contains("--add-port=7443/udp"));
+}

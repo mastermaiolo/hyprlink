@@ -49,7 +49,7 @@ The link is established directly on your local network over **QUIC + mTLS** (mut
 - **Two-way clipboard**: seamless clipboard sync, including raw UTF-8 text and lossless PNG image buffers.
 - **File transfer**: bidirectional transfer queue, real-time progress tracking, transfer history, and configurable download destination.
 - **Media**: control desktop MPRIS players from your phone with playback progress and album artwork; desktop playback is mirrored to phone notifications.
-- **Phone as webcam**: stream phone camera as a virtual video device (`/dev/video42` via `v4l2loopback`) using hardware H.264 or H.265.
+- **Phone as webcam**: stream phone camera as a virtual video device (`/dev/video42` via `v4l2loopback`, or a PipeWire node) using H.264 or H.265, decoded on the GPU (VA-API) with CPU fallback.
 - **Audio bridge**: phone microphone as PC input, phone as desktop speaker, and PC audio streamed to phone.
 - **Remote touchpad & keyboard**: `/dev/uinput` integration providing cursor movement, click/drag, live typing, Enter, and hotkeys with fail-safe key release on disconnect.
 - **Quick actions**: lock screen, suspend, full/area screenshot (copied to clipboard and stored), volume adjustment, media keys, and arbitrary `hyprctl dispatch` triggers.
@@ -81,7 +81,8 @@ The link is established directly on your local network over **QUIC + mTLS** (mut
 | **Mouse buttons & drag** (`input.button`) | 🚧 Testing | Daemon and Android ready; pending field verification |
 | **Phone gestures** (`gesture`) | 🚧 Testing | Daemon, GUI and Android ready; pending verification |
 | **Audio bridge** (mic, speaker, tap stream) | 🚧 Testing | PipeWire and GStreamer pipeline verification |
-| **Virtual webcam** (H.264 / H.265 on /dev/video42) | 🚧 Testing | v4l2loopback module loading via pkexec |
+| **Virtual webcam** (H.264 / H.265 on /dev/video42 or PipeWire) | 🚧 Testing | VA-API with CPU fallback; v4l2loopback module loading via pkexec; PipeWire output is experimental |
+| **USB tethering link** (phone over USB) | 🚧 Testing | Needs the 0.1.1 Android app; not yet validated on a real phone |
 
 Full protocol details are documented in [`PROTOCOL.md`](PROTOCOL.md) and version history in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -97,7 +98,8 @@ Tested on **Arch Linux / CachyOS** with **Hyprland** (Wayland). The package iden
 |---|---|
 | **Base / Core** | `hyprland`, `pipewire`, `wireplumber`, `libpulse` (`pactl`), `wl-clipboard` |
 | **Audio & Camera (GStreamer)** | `gst-plugins-base-libs`, `gst-plugins-good`, `gst-plugins-bad-libs` (H.265), `gst-libav` (H.264/H.265), `gst-plugin-pipewire` |
-| **Virtual Webcam** | `v4l2loopback-dkms` (loaded onto `/dev/video42` via `pkexec`) |
+| **Virtual Webcam** | `v4l2loopback-dkms` (loaded onto `/dev/video42` via `pkexec`); optional with the PipeWire output (`webcam_output` = `pipewire`, or `auto` without the module) |
+| **Hardware Decoding (Optional, VA-API)** | `gst-plugin-va` + driver: `mesa` (AMD), `intel-media-driver` (Intel); without them, the CPU decodes |
 | **GUI File Picker** | `xdg-desktop-portal` + `xdg-desktop-portal-gtk` |
 | **Quick Actions (Optional)** | Lock: `noctalia`, `hyprlock`, or `loginctl`; Screenshots: `grimblast` or `grim` + `slurp` |
 | **Build Toolchain** | `rust`, `clang`, `lld`, `pkgconf` |
@@ -108,6 +110,10 @@ Tested on **Arch Linux / CachyOS** with **Hyprland** (Wayland). The package iden
 ### Fast path: Pre-built binary tarball (x86_64)
 
 Download `hyprlink-0.1.1-linux-x86_64.tar.gz` from [GitHub Releases](https://github.com/mastermaiolo/hyprlink/releases):
+
+<!-- retirar esta nota quando a release v0.1.1 (tag v0.1.1) existir -->
+> [!NOTE]
+> The 0.1.1 binaries are published with the `v0.1.1` tag. Until that release exists, use the Arch PKGBUILD or build from source below.
 
 ```bash
 tar -xzf hyprlink-0.1.1-linux-x86_64.tar.gz
@@ -161,7 +167,7 @@ The background service targets `graphical-session.target`.
 
 ### Pairing your phone
 
-1. Install the companion Android app APK from [Releases](https://github.com/mastermaiolo/hyprlink/releases) (enable "Install unknown apps" on Android).
+1. Install the companion Android app APK from [Releases](https://github.com/mastermaiolo/hyprlink-android/releases) (enable "Install unknown apps" on Android). Version 0.1.1 of the app has a new identifier (`io.maggio.hyprlink`): it installs beside the old one, so uninstall the old app by hand and pair again.
 2. With the daemon active, open the GUI to **Devices → Pair new** (or inspect terminal output if running daemon interactively).
 3. Scan the generated QR code in the app. The payload includes the SHA-256 certificate fingerprint, `<PC-IP>:7443` endpoint, and an ephemeral pairing token.
 4. The link automatically reconnects whenever both devices reside on the same local subnet.
@@ -183,7 +189,6 @@ hyprlinkctl ping               # Round-trip latency check to phone
 hyprlinkctl watch --json       # Continuous JSON telemetry stream
 hyprlinkctl clipboard          # Push desktop clipboard buffer to phone
 hyprlinkctl pair               # Open 120-second discovery pairing window
-hyprlinkctl mirror toggle      # Phone screen mirror (planned, not yet in the daemon)
 hyprlinkctl mic toggle         # Toggle phone microphone input (on | off | toggle)
 hyprlinkctl tap toggle         # Toggle PC sound stream to phone
 hyprlinkctl speaker toggle     # Toggle phone as desktop output sink
@@ -193,6 +198,8 @@ hyprlinkctl doctor             # Diagnostic environment and compatibility audit
 hyprlinkctl doctor --no-dispatch  # Same audit, never runs hyprctl dispatch
 hyprlinkctl status --waybar    # One-line JSON for a Waybar custom module
 hyprlinkctl shortcuts          # List configured shortcuts (--json for scripts)
+hyprlinkctl find               # Make the phone ring, vibrate or light the torch; find stop ends it
+hyprlinkctl usb setup          # Keep USB tethering off the default route (asks first; uses nmcli)
 ```
 
 Explore additional options with `hyprlinkctl --help`. A Waybar integration widget and a context-menu desktop action are supplied in `contrib/` (install via `contrib/install.sh`).
@@ -219,6 +226,8 @@ Settings reside in `~/.config/hyprlink/config.json` and are manageable directly 
   },
   "disk_path": "/home/user",
   "gpu_nvidia_wake": false,
+  "webcam_decoder": "auto",
+  "webcam_output": "v4l2loopback",
   "lang": "en-GB"
 }
 ```
@@ -229,6 +238,8 @@ Settings reside in `~/.config/hyprlink/config.json` and are manageable directly 
 * `battery_alerts`: Low and high threshold percentage boundaries.
 * `disk_path`: Mount point inspected for storage telemetry (defaults to `$HOME`).
 * `gpu_nvidia_wake`: When `false` (default), prevents telemetry scans from waking sleeping discrete NVIDIA GPUs.
+* `webcam_decoder`: `auto` (default) tries VA-API on the GPU and falls back to the CPU; `gpu` or `cpu` forces one of them.
+* `webcam_output`: `v4l2loopback` (default, `/dev/video42`), `pipewire` (experimental, no kernel module) or `auto` (v4l2loopback when the module is available, otherwise PipeWire).
 * `lang`: Interface language identifier (`en-GB`, `pt-BR`, `pt-PT`, `es-ES`, `zh-CN`).
 
 To test the GUI without an active daemon or phone, launch mock mode:
@@ -249,6 +260,7 @@ HYPRLINK_MOCK=1 hyprlink-gui
 │   ├── hyprlinkd/            Headless daemon (binary: hyprlink-daemon, no window)
 │   ├── hyprlink-gui/         Desktop GUI (iced, independent process with tray icon)
 │   ├── hyprlink-proto/       Shared contract, CBOR framing, wire types, fmt.rs
+│   ├── hyprlink-env/         Environment probes: webcam, USB network, PipeWire, doctor report
 │   └── hyprlinkctl/          Command-line tool for keybindings, Waybar, shell scripts
 ├── contrib/                  Waybar integration module, context menu .desktop entries
 ├── packaging/arch/           Local PKGBUILD definition (package hyprlink-bridge)
@@ -286,7 +298,7 @@ Over the local network, a single QUIC connection on **7443/UDP** multiplexes:
    - Verify write permission to the virtual input character device: `getfacl /dev/uinput`.
    - Grant user access via udev rule if missing.
 3. **Virtual webcam device absent**:
-   - Ensure `v4l2loopback-dkms` is installed.
+   - Ensure `v4l2loopback-dkms` is installed (not needed with `webcam_output` = `pipewire`).
    - The daemon invokes `pkexec` to initialise `/dev/video42`.
 4. **Service does not start upon graphical login**:
    - If running without `uwsm`, verify `graphical-session.target` activation.
@@ -328,7 +340,7 @@ The `fast` profile inherits from `release` with `lto = false`, `codegen-units = 
 
 ### Companion Android client
 
-The companion mobile application (Kotlin / Jetpack Compose) is versioned in a dedicated workspace. Pre-compiled signed APKs are released on the [GitHub Releases](https://github.com/mastermaiolo/hyprlink/releases) page. Developers seeking to implement alternative mobile or desktop clients should refer to [`PROTOCOL.md`](PROTOCOL.md).
+The companion mobile application (Kotlin / Jetpack Compose) is versioned in a dedicated workspace. Pre-compiled signed APKs are released on the [GitHub Releases](https://github.com/mastermaiolo/hyprlink-android/releases) page. Developers seeking to implement alternative mobile or desktop clients should refer to [`PROTOCOL.md`](PROTOCOL.md).
 
 </details>
 
@@ -343,6 +355,14 @@ The companion mobile application (Kotlin / Jetpack Compose) is versioned in a de
 Core engineering builds upon [`quinn`](https://github.com/quinn-rs/quinn), [`rustls`](https://github.com/rustls/rustls), [`iced`](https://github.com/iced-rs/iced), `ciborium`, `ksni`, and `zbus`.
 
 Typefaces bundled with the desktop and mobile clients — Anton, Instrument Serif, Inter, IBM Plex Mono, and Noto Sans SC — are distributed under the SIL Open Font License 1.1; licensing statements reside in `crates/hyprlink-gui/assets/fonts/OFL-*.txt`.
+
+### Support
+
+HyprLink is built by one person in their spare time. If it is useful to you, you can support it on Ko-fi: <https://ko-fi.com/mastermaggio>
+
+<p align="center">
+  <a href="https://ko-fi.com/mastermaggio"><img src="docs/img/kofi-banner.webp" width="480" alt="Support HyprLink on Ko-fi"></a>
+</p>
 
 ---
 

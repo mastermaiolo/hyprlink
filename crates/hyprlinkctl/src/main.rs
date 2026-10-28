@@ -33,6 +33,7 @@
 mod doctor;
 mod legacy;
 mod real;
+mod usb;
 mod waybar;
 
 use hyprlink_proto::fmt;
@@ -40,7 +41,7 @@ use hyprlink_proto::host::Probe;
 use hyprlink_proto::i18n::{self, Lang};
 #[cfg(feature = "mock")]
 use hyprlink_proto::link::mock::Simulator;
-use hyprlink_proto::link::{Codec, Command, MirrorConfig, Transport};
+use hyprlink_proto::link::{Codec, Command, FindPhoneRequest, MirrorConfig, Transport};
 use hyprlink_proto::snapshot::Snapshot;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
@@ -224,6 +225,11 @@ fn human(s: &Snapshot) -> String {
         ),
         None => i18n::t("sem telemóvel").into(),
     };
+    // Por onde vai a ligação (USB / Wi-Fi…), só com telemóvel ligado.
+    let phone = match s.link_path.filter(|_| s.device.is_some()) {
+        Some(p) => format!("{phone} · {}", fmt::link_path(p)),
+        None => phone,
+    };
     let pc = s
         .host
         .as_ref()
@@ -274,14 +280,17 @@ fn ok(json: bool, msg: &str, extra: serde_json::Value) -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "uso: hyprlinkctl <watch|status|ping|clipboard|pair|mic|tap|speaker|mirror|ws|open|doctor|shortcuts> [args] [--json] [--lang L]\n\
+        "uso: hyprlinkctl <watch|status|ping|clipboard|pair|mic|tap|speaker|mirror|ws|open|doctor|usb|shortcuts|find> [args] [--json] [--lang L]\n\
          \n  sem --json, status|ping|mic|tap|speaker usam o protocolo de texto do daemon (ok …/erro: …)\
          \n  só texto: send <ficheiro> · dispatch <cmd> · lock · notif <título> [corpo] · url · phone-url · phone-app\n\
          \n  watch --json [--interval MS]   uma linha JSON por instantâneo (por omissão 500 ms)\
          \n  mic|tap|speaker on|off|toggle\n  mirror start|stop|toggle\n  ws <1-10>\
          \n  status --waybar                 uma linha {{text,tooltip,class}} para a Waybar (lê o status.json)\
          \n  doctor [--json] [--report [f]] [--no-dispatch]  relatório de compatibilidade (só lê;\n                                 --no-dispatch não faz hyprctl dispatch)\
+         \n  usb setup                       tira a rota por omissão à ancoragem USB (nmcli, como\n                                 utilizador, com confirmação; o doctor só sugere)\
          \n  shortcuts [--json]              lista os atalhos configurados\
+         \n  find [sound|vibrate|torch|all] [--secs N] [--json]   faz tocar o telemóvel (por omissão\n                                 all, 30 s; N entre 5 e 60)\
+         \n  find stop [--json]              para o toque\
          \n  --lang pt-PT|pt-BR|en|es|zh   idioma dos textos (por omissão, o do ambiente)"
     );
     ExitCode::from(2)
@@ -314,7 +323,7 @@ fn mock_requested(args: &[String], env: Option<&str>) -> bool {
 }
 
 /// A metade JSON contra o daemon real (`real.rs`).
-fn run_real(pos: &[&str], json: bool, interval: Duration) -> ExitCode {
+fn run_real(pos: &[&str], json: bool, interval: Duration, secs: u32) -> ExitCode {
     match pos.first().copied() {
         Some("watch") => real::watch(json, interval, human),
         Some("status") => real::status(json, human),
@@ -333,8 +342,54 @@ fn run_real(pos: &[&str], json: bool, interval: Duration) -> ExitCode {
             None => usage(),
         },
         Some("open") => real::open_gui(json),
+        Some("find") => match find_arg(pos.get(1).copied(), secs) {
+            Some(req) => real::find(json, req),
+            None => usage(),
+        },
         _ => usage(),
     }
+}
+
+/// Flags que levam um valor a seguir (`--secs 15`): o valor não é posicional.
+const VALUE_FLAGS: &[&str] = &["--interval", "--secs", "--lang"];
+
+/// Os argumentos que não são flags nem valores de flags.
+fn positional(args: &[String]) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut skip = false;
+    for a in args {
+        if skip {
+            skip = false;
+        } else if VALUE_FLAGS.contains(&a.as_str()) {
+            skip = true;
+        } else if !a.starts_with("--") {
+            out.push(a.as_str());
+        }
+    }
+    out
+}
+
+/// `find [sound|vibrate|torch|all|stop]`: `Some(None)` = parar; `None` = modo
+/// desconhecido. A duração fica cortada a 5–60 s.
+fn find_arg(mode: Option<&str>, secs: u32) -> Option<Option<FindPhoneRequest>> {
+    let off = FindPhoneRequest {
+        sound: false,
+        vibrate: false,
+        torch: false,
+        duration_s: secs,
+    };
+    let req = match mode.unwrap_or("all") {
+        "stop" => return Some(None),
+        "all" => FindPhoneRequest::all(secs),
+        "sound" => FindPhoneRequest { sound: true, ..off },
+        "vibrate" => FindPhoneRequest {
+            vibrate: true,
+            ..off
+        },
+        "torch" => FindPhoneRequest { torch: true, ..off },
+        _ => return None,
+    };
+    req.normalized().map(Some)
 }
 
 /// `shortcuts`: lê o `config.json` local (igual com e sem daemon).
@@ -396,6 +451,9 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let json = args.iter().any(|a| a == "--json");
+    if args.first().map(String::as_str) == Some("usb") {
+        return usb::run(&args);
+    }
     if args.first().map(String::as_str) == Some("doctor") {
         return doctor::run(&args);
     }
@@ -414,11 +472,7 @@ fn main() -> ExitCode {
     {
         legacy::run(args);
     }
-    let pos: Vec<&str> = args
-        .iter()
-        .filter(|a| !a.starts_with("--"))
-        .map(String::as_str)
-        .collect();
+    let pos = positional(&args);
     let flag = |name: &str| -> Option<u64> {
         args.iter()
             .position(|a| a == name)
@@ -427,11 +481,14 @@ fn main() -> ExitCode {
     };
 
     let interval = Duration::from_millis(flag("--interval").unwrap_or(500).clamp(100, 10_000));
+    let secs = flag("--secs")
+        .map(|s| s.min(u64::from(u32::MAX)) as u32)
+        .unwrap_or(FindPhoneRequest::DEFAULT_S);
     if pos.first().copied() == Some("shortcuts") {
         return shortcuts(json);
     }
     if !mock {
-        return run_real(&pos, json, interval);
+        return run_real(&pos, json, interval, secs);
     }
 
     // Simulador (`HYPRLINK_MOCK=1` / `--mock`).
@@ -497,6 +554,23 @@ fn main() -> ExitCode {
             )
         }
         Some("clipboard") => ok(json, "área de transferência enviada", serde_json::json!({})),
+        Some("find") => match find_arg(pos.get(1).copied(), secs) {
+            Some(Some(req)) => ok(
+                json,
+                &format!(
+                    "a tocar no telemóvel ({}) · {} s",
+                    real::find_modes(&req),
+                    req.duration_s
+                ),
+                serde_json::json!({ "find_phone": real::find_state_json(true) }),
+            ),
+            Some(None) => ok(
+                json,
+                "toque parado",
+                serde_json::json!({ "find_phone": real::find_state_json(false) }),
+            ),
+            None => usage(),
+        },
         Some("pair") => {
             let mut t = load();
             t.pair_until = now_s() + 120;
@@ -569,6 +643,63 @@ mod lang_tests {
 
     fn v(a: &[&str]) -> Vec<String> {
         a.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn valores_de_flags_nao_sao_posicionais() {
+        let a = v(&["find", "--secs", "15", "torch", "--json"]);
+        assert_eq!(positional(&a), vec!["find", "torch"]);
+        let a = v(&["watch", "--interval", "250", "--json"]);
+        assert_eq!(positional(&a), vec!["watch"]);
+    }
+
+    #[test]
+    fn find_modos_e_duracao() {
+        let r = find_arg(None, 30).unwrap().unwrap();
+        assert_eq!(r, FindPhoneRequest::all(30));
+        let r = find_arg(Some("vibrate"), 2).unwrap().unwrap();
+        assert!(r.vibrate && !r.sound && !r.torch);
+        assert_eq!(r.duration_s, 5, "cortado ao mínimo");
+        assert_eq!(
+            find_arg(Some("torch"), 600).unwrap().unwrap().duration_s,
+            60
+        );
+        assert_eq!(find_arg(Some("stop"), 30), Some(None));
+        assert_eq!(find_arg(Some("xpto"), 30), None);
+    }
+
+    #[test]
+    fn status_mostra_por_onde_vai_a_ligacao() {
+        use hyprlink_proto::link::{Event, Event2, Kind, LinkPath, LinkState};
+        use hyprlink_proto::snapshot::DeviceBrief;
+        let mut s = Snapshot::new("up");
+        s.apply(&Event::More(Event2::LinkPath(Some(LinkPath::Usb))));
+        assert!(
+            !human(&s).contains("USB"),
+            "sem telemóvel não mostra o caminho"
+        );
+        s.device = Some(DeviceBrief {
+            id: 1,
+            name: "Poco".into(),
+            manufacturer: None,
+            model: None,
+            android: None,
+            kind: Kind::Phone,
+            state: LinkState::Linked,
+            battery: Some(80),
+            charging: false,
+        });
+        assert!(
+            human(&s).lines().next().unwrap().ends_with("· USB"),
+            "{}",
+            human(&s)
+        );
+        s.apply(&Event::More(Event2::LinkPath(None)));
+        assert!(!human(&s).contains("USB"));
+        let j = serde_json::to_value(&s).unwrap();
+        assert!(j["link_path"].is_null());
+        s.apply(&Event::More(Event2::LinkPath(Some(LinkPath::Wifi))));
+        assert_eq!(serde_json::to_value(&s).unwrap()["link_path"], "wifi");
     }
 
     #[test]
