@@ -256,6 +256,21 @@ pub fn download_dir(config: &SharedConfig) -> PathBuf {
     config.lock().unwrap().download_dir.clone()
 }
 
+/// Subpastas de [`download_dir`] onde caem os ficheiros recebidos.
+pub const INCOMING_SUBDIRS: [&str; 2] = ["Screenshot", "Transferidos"];
+
+/// Pasta de um ficheiro recebido: `Screenshot` só para `kind:"screenshot"`
+/// (sincronização automática do telemóvel); sem `kind` ou desconhecido,
+/// `Transferidos`. O `kind` só se compara com a lista fechada — nunca entra
+/// no caminho.
+pub fn incoming_dir(config: &SharedConfig, kind: Option<&str>) -> PathBuf {
+    let sub = match kind {
+        Some("screenshot") => INCOMING_SUBDIRS[0],
+        _ => INCOMING_SUBDIRS[1],
+    };
+    download_dir(config).join(sub)
+}
+
 pub fn set_download_dir(config: &SharedConfig, dir: &Path) {
     let mut c = config.lock().unwrap();
     c.download_dir = dir.to_path_buf();
@@ -553,5 +568,17 @@ mod tests {
         assert!(!r[4].on);
         // Ação vazia não apaga a de origem.
         assert_eq!(r[2].action, "togglespecialworkspace");
+    }
+
+    #[test]
+    fn pasta_de_rececao_por_kind() {
+        let c: SharedConfig = Arc::new(Mutex::new(cfg(r#"{"download_dir": "/base"}"#)));
+        let d = |k| incoming_dir(&c, k);
+        assert_eq!(d(None), Path::new("/base/Transferidos"));
+        assert_eq!(d(Some("screenshot")), Path::new("/base/Screenshot"));
+        // Desconhecido ou malicioso: nunca vira caminho.
+        for k in ["Screenshot", "foto", "", "../x", "/etc", "screenshot/../.."] {
+            assert_eq!(d(Some(k)), Path::new("/base/Transferidos"), "{k}");
+        }
     }
 }

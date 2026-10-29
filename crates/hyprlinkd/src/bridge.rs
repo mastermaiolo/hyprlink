@@ -77,6 +77,53 @@ pub fn on_paired(fingerprint: &str, name: &str) {
     }));
 }
 
+/// Primeiros 8 caracteres da impressão digital, para o registo.
+fn short_fp(fingerprint: &str) -> String {
+    wire_fingerprint(fingerprint).chars().take(8).collect()
+}
+
+struct Revoked {
+    fingerprint: String,
+    /// Era o telemóvel ligado: a ligação tem de fechar.
+    linked: bool,
+}
+
+/// Tira `id` da loja e, se era o ligado, põe já o estado em desligado (para a
+/// lista e o LINK não o mostrarem até o servidor fazer o `teardown`). O ligado
+/// que já não está na loja (fantasma) revoga-se na mesma. `Ok(None)`: `id`
+/// não está nem emparelhado nem ligado.
+fn revoke(
+    pairing: &Mutex<PairingStore>,
+    hud: &Arc<Mutex<state::HudState>>,
+    id: DeviceId,
+) -> std::io::Result<Option<Revoked>> {
+    let linked = match &hud.lock().unwrap().conn {
+        ConnState::Connected {
+            fingerprint_hex, ..
+        } if device_id(fingerprint_hex) == id => Some(fingerprint_hex.clone()),
+        _ => None,
+    };
+    let mut store = pairing.lock().unwrap();
+    let stored = store
+        .list_fingerprints()
+        .into_iter()
+        .find(|fp| device_id(fp) == id);
+    let Some(fingerprint) = stored.clone().or(linked.clone()) else {
+        return Ok(None);
+    };
+    if stored.is_some() {
+        store.revoke(&fingerprint)?;
+    }
+    drop(store);
+    if linked.is_some() {
+        state::set_pairing(hud);
+    }
+    Ok(Some(Revoked {
+        fingerprint,
+        linked: linked.is_some(),
+    }))
+}
+
 // ───────────────────────────── a ponte ─────────────────────────────
 
 struct Bridge {
@@ -168,7 +215,11 @@ impl Bridge {
     }
 
     fn fail(&self, op: Op, error: ErrorKind) {
-        hub::global().publish(Event::Notice(Notice::Failed { op, error }));
+        hub::global().publish(Event::Notice(Notice::Failed {
+            op,
+            error,
+            detail: None,
+        }));
     }
 
     // ─────────────── projeções ───────────────
@@ -838,27 +889,51 @@ async fn execute(b: &Arc<Bridge>, c: Command) {
             hub.publish(Event::Pairing(None));
         }
         Command::Unpair(id) => {
-            let Some(fp) = b.fingerprint_of(id) else {
-                b.fail(Op::Pairing, ErrorKind::Refused);
-                return;
-            };
+            // O nome antes de revogar: depois a loja já não o tem.
             let name = b
-                .pairing
-                .lock()
-                .unwrap()
-                .meta(&fp)
-                .map(|m| m.name.clone())
+                .devices()
+                .into_iter()
+                .find(|d| d.id == id)
+                .map(|d| d.name)
                 .unwrap_or_default();
-            if b.pairing.lock().unwrap().revoke(&fp).is_err() {
-                b.fail(Op::Pairing, ErrorKind::Refused);
-                return;
-            }
-            if b.connected_fingerprint().as_deref() == Some(fp.as_str())
-                && let Some(conn) = ctx.active.lock().unwrap().take()
+            let revoked = match revoke(&b.pairing, &ctx.hud, id) {
+                Ok(Some(r)) => r,
+                // Já não estava (duplo clique, lista velha): o pedido já está cumprido.
+                Ok(None) => {
+                    state::push_log(
+                        &ctx.hud,
+                        format!("[i] revogar #{id:08x}: já não estava emparelhado"),
+                    );
+                    hub.publish(Event::Devices(b.devices()));
+                    return;
+                }
+                Err(e) => {
+                    state::push_log(
+                        &ctx.hud,
+                        format!("[!] revogar #{id:08x}: paired_devices.json: {e}"),
+                    );
+                    hub.publish(Event::Notice(Notice::Failed {
+                        op: Op::Pairing,
+                        error: ErrorKind::Storage,
+                        detail: Some(e.to_string()),
+                    }));
+                    return;
+                }
+            };
+            // Fecha sem tirar a ligação do registo: o servidor vê-a morrer,
+            // `active::clear_if` acerta e corre o `teardown` de sempre.
+            if revoked.linked
+                && let Some(conn) = b.connection()
             {
                 conn.close(0u32.into(), b"HyprLink: dispositivo revogado");
             }
-            state::push_log(&ctx.hud, format!("[i] dispositivo revogado · {fp}"));
+            state::push_log(
+                &ctx.hud,
+                format!(
+                    "[i] dispositivo revogado · {}",
+                    short_fp(&revoked.fingerprint)
+                ),
+            );
             hub.publish(Event::Notice(Notice::Revoked { device: id, name }));
             hub.publish(Event::Devices(b.devices()));
         }
@@ -1421,6 +1496,67 @@ mod tests {
         assert_eq!(a, b);
         assert_eq!(a, 0x3f8a_2817);
         assert_eq!(wire_fingerprint("3F:8A:28"), "3f8a28");
+    }
+
+    const FP_A: &str = "3F:8A:28:17:D3:25";
+    const FP_B: &str = "77:01:02:03:04:05";
+
+    fn store_with(tag: &str, fps: &[&str]) -> Mutex<PairingStore> {
+        let dir =
+            std::env::temp_dir().join(format!("hyprlink-revoke-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut s = PairingStore::in_dir(&dir, "00");
+        for fp in fps {
+            s.insert_paired(fp);
+        }
+        Mutex::new(s)
+    }
+
+    fn linked_hud(fp: &str) -> Arc<Mutex<state::HudState>> {
+        let hud = state::HudState::new("00".into());
+        state::set_connected(&hud, "Pixel".into(), fp.into());
+        hud
+    }
+
+    fn is_linked(hud: &Arc<Mutex<state::HudState>>) -> bool {
+        matches!(hud.lock().unwrap().conn, ConnState::Connected { .. })
+    }
+
+    #[test]
+    fn revoking_the_linked_phone_empties_the_store_and_unlinks() {
+        let store = store_with("ligado", &[FP_A]);
+        let hud = linked_hud(FP_A);
+        let r = revoke(&store, &hud, device_id(FP_A)).unwrap().unwrap();
+        assert!(r.linked);
+        assert!(store.lock().unwrap().list_fingerprints().is_empty());
+        assert!(!is_linked(&hud), "ficou o fantasma ligado");
+    }
+
+    #[test]
+    fn revoking_twice_or_a_ghost_is_not_an_error() {
+        let store = store_with("duas", &[FP_A]);
+        let hud = linked_hud(FP_A);
+        let id = device_id(FP_A);
+        revoke(&store, &hud, id).unwrap();
+        assert!(revoke(&store, &hud, id).unwrap().is_none());
+        // Fantasma: ligado mas já fora da loja.
+        let ghost = linked_hud(FP_A);
+        let r = revoke(&store, &ghost, id).unwrap().unwrap();
+        assert!(r.linked && !is_linked(&ghost));
+    }
+
+    #[test]
+    fn revoking_another_phone_keeps_the_link() {
+        let store = store_with("outro", &[FP_A, FP_B]);
+        let hud = linked_hud(FP_A);
+        let r = revoke(&store, &hud, device_id(FP_B)).unwrap().unwrap();
+        assert!(!r.linked);
+        assert!(is_linked(&hud));
+        assert_eq!(
+            store.lock().unwrap().list_fingerprints(),
+            vec![FP_A.to_string()]
+        );
+        assert_eq!(short_fp(FP_A), "3f8a2817");
     }
 
     #[test]

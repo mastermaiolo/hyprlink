@@ -6,7 +6,6 @@
 //!   hyprlinkctl mic on|off|toggle
 //!   hyprlinkctl tap on|off|toggle
 //!   hyprlinkctl speaker on|off|toggle          retorno a partir do sink hyprlink-speaker
-//!   hyprlinkctl mirror start|stop|toggle
 //!   hyprlinkctl ws <N>
 //!   hyprlinkctl open                           open (or focus) the GUI
 //!   hyprlinkctl doctor [--json] [--report [f]] [--no-dispatch]  relatório de compatibilidade (só lê)
@@ -280,11 +279,11 @@ fn ok(json: bool, msg: &str, extra: serde_json::Value) -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "uso: hyprlinkctl <watch|status|ping|clipboard|pair|mic|tap|speaker|mirror|ws|open|doctor|usb|shortcuts|find> [args] [--json] [--lang L]\n\
+        "uso: hyprlinkctl <watch|status|ping|clipboard|pair|mic|tap|speaker|ws|open|doctor|usb|shortcuts|find> [args] [--json] [--lang L]\n\
          \n  sem --json, status|ping|mic|tap|speaker usam o protocolo de texto do daemon (ok …/erro: …)\
          \n  só texto: send <ficheiro> · dispatch <cmd> · lock · notif <título> [corpo] · url · phone-url · phone-app\n\
          \n  watch --json [--interval MS]   uma linha JSON por instantâneo (por omissão 500 ms)\
-         \n  mic|tap|speaker on|off|toggle\n  mirror start|stop|toggle\n  ws <1-10>\
+         \n  mic|tap|speaker on|off|toggle\n  ws <1-10>\
          \n  status --waybar                 uma linha {{text,tooltip,class}} para a Waybar (lê o status.json)\
          \n  doctor [--json] [--report [f]] [--no-dispatch]  relatório de compatibilidade (só lê;\n                                 --no-dispatch não faz hyprctl dispatch)\
          \n  usb setup                       tira a rota por omissão à ancoragem USB (nmcli, como\n                                 utilizador, com confirmação; o doctor só sugere)\
@@ -484,6 +483,11 @@ fn main() -> ExitCode {
     let secs = flag("--secs")
         .map(|s| s.min(u64::from(u32::MAX)) as u32)
         .unwrap_or(FindPhoneRequest::DEFAULT_S);
+    // Escondido do uso até o espelho existir; o código de `channel` fica.
+    if pos.first().copied() == Some("mirror") {
+        eprintln!("erro: espelho do ecrã ainda não implementado");
+        return ExitCode::from(2);
+    }
     if pos.first().copied() == Some("shortcuts") {
         return shortcuts(json);
     }

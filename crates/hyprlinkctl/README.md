@@ -17,7 +17,6 @@ hyprlinkctl watch --json [--interval MS]   # 1.ª linha em < 1 s; depois a cada 
 hyprlinkctl status --json
 hyprlinkctl ping --json
 hyprlinkctl mic|tap|speaker on|off|toggle --json
-hyprlinkctl mirror start|stop|toggle --json
 hyprlinkctl ws <1-10> --json
 hyprlinkctl find [sound|vibrate|torch|all] [--secs N] [--json]   # por omissão all, 30 s (5–60)
 hyprlinkctl find stop [--json]

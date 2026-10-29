@@ -50,6 +50,15 @@ pub const TABLE: &[(&str, &str)] = &[
     ("ainda por implementar", "not implemented yet"),
     ("sem telemóvel ligado", "no phone linked"),
     ("recusado pelo telemóvel", "refused by the phone"),
+    (
+        "aparelho já não está emparelhado",
+        "device is no longer paired",
+    ),
+    (
+        "não foi possível gravar paired_devices.json: {}",
+        "could not write paired_devices.json: {}",
+    ),
+    ("erro desconhecido", "unknown error"),
     ("sem resposta", "no reply"),
     ("Toque", "Ringtone"),
     ("Notificações", "Notifications"),

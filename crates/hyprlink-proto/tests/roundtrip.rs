@@ -274,10 +274,12 @@ fn all_events() -> Vec<Event> {
         Event::Notice(Notice::Failed {
             op: Op::Mirror,
             error: ErrorKind::NotImplemented,
+            detail: None,
         }),
         Event::Notice(Notice::Failed {
             op: Op::Ping,
             error: ErrorKind::Offline,
+            detail: None,
         }),
         Event::Phone(phone(true)),
         Event::Phone(phone(false)),
@@ -338,6 +340,7 @@ fn notice_has_no_prose() {
     let v = serde_json::to_value(Notice::Failed {
         op: Op::Speaker,
         error: ErrorKind::Refused,
+        detail: None,
     })
     .unwrap();
     assert_eq!(
@@ -518,4 +521,26 @@ fn mock_find_phone_rings_stops_and_times_out() {
         Some(FindStoppedBy::Timeout)
     );
     assert!(!s.last().unwrap().active);
+}
+
+#[test]
+fn unknown_error_kinds_and_detail_stay_compatible() {
+    // Um daemon mais novo: variante que este cliente não conhece.
+    let v: ErrorKind = serde_json::from_str("\"disk_on_fire\"").unwrap();
+    assert_eq!(v, ErrorKind::Unknown);
+    let mut cbor = Vec::new();
+    ciborium::into_writer(&"disk_on_fire", &mut cbor).unwrap();
+    let v: ErrorKind = ciborium::from_reader(cbor.as_slice()).unwrap();
+    assert_eq!(v, ErrorKind::Unknown);
+    // Um daemon até à 0.1.1: sem `detail`.
+    let old = serde_json::json!({"Failed": {"op": "pairing", "error": "refused"}});
+    let n: Notice = serde_json::from_value(old).unwrap();
+    assert!(matches!(
+        n,
+        Notice::Failed {
+            op: Op::Pairing,
+            error: ErrorKind::Refused,
+            detail: None
+        }
+    ));
 }

@@ -4,6 +4,39 @@ Todas as alterações relevantes deste projeto ficam aqui. O formato segue o
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e as versões o
 [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [Por publicar] 0.1.3
+
+### Corrigido
+- Revogar o telemóvel que está ligado fecha a ligação e tira-o da lista de
+  aparelhos; antes ficava na GUI como «ligado» e um segundo «REVOGAR» dava
+  «recusado pelo telemóvel». Revogar um aparelho que já não está emparelhado
+  deixou de ser erro.
+- As falhas de emparelhamento dizem a causa real: «aparelho já não está
+  emparelhado» ou «não foi possível gravar paired_devices.json: <erro>», em vez
+  de «recusado pelo telemóvel». O daemon regista no log o motivo de cada recusa
+  local (com a impressão digital encurtada a 8 caracteres).
+
+### Alterado
+- `hyprlinkctl mirror` sai da ajuda e, se for chamado, termina com código 2 e
+  «espelho do ecrã ainda não implementado», sem contactar o daemon.
+- `scripts/release-binario.sh` tira as notas da release de
+  `docs/release-notes-vVERSÃO.md` quando existe (senão, do `CHANGELOG.md`, com aviso).
+- Ficheiros recebidos do telemóvel ficam organizados em subpastas de
+  `download_dir`: `<download_dir>/Screenshot` para as capturas sincronizadas
+  automaticamente pela app e `<download_dir>/Transferidos` para o restante.
+- `share.file` ganha o campo opcional `kind` (só telemóvel → PC);
+  `"screenshot"` vai para `Screenshot`, sem `kind` (ou outro valor) vai para
+  `Transferidos`.
+
+### Compatibilidade
+- O protocolo local (GUI/CLI ↔ daemon) ganha o erro `storage`, um campo
+  opcional `detail` nas falhas, e `unknown` para erros futuros. Uma GUI 0.1.1
+  ligada a um daemon 0.1.3 só é afetada se a gravação de `paired_devices.json`
+  falhar: perde esse aviso e volta a ligar-se sozinha.
+- A app Android 0.1.3 funciona com um daemon antigo, mas aí ignora-se o `kind`
+  e todos os ficheiros recebidos caem na pasta base (`download_dir`), sem erros.
+  Apps antigas com este daemon: tudo vai para `Transferidos`.
+
 ## [0.1.1] — 2026-10-28
 
 Versão de correções, sobretudo de segurança. **Atualização recomendada.** A app

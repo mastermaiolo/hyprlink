@@ -1767,7 +1767,7 @@ dependencies = [
 
 [[package]]
 name = "hyprlink-env"
-version = "0.1.1"
+version = "0.1.3"
 dependencies = [
  "rustix 1.1.4",
  "serde",
@@ -1776,7 +1776,7 @@ dependencies = [
 
 [[package]]
 name = "hyprlink-gui"
-version = "0.1.1"
+version = "0.1.3"
 dependencies = [
  "chrono",
  "hyprlink-proto",
@@ -1791,7 +1791,7 @@ dependencies = [
 
 [[package]]
 name = "hyprlink-proto"
-version = "0.1.1"
+version = "0.1.3"
 dependencies = [
  "chrono",
  "ciborium",
@@ -1803,7 +1803,7 @@ dependencies = [
 
 [[package]]
 name = "hyprlinkctl"
-version = "0.1.1"
+version = "0.1.3"
 dependencies = [
  "hyprlink-env",
  "hyprlink-proto",
@@ -1813,7 +1813,7 @@ dependencies = [
 
 [[package]]
 name = "hyprlinkd"
-version = "0.1.1"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "bytes 1.12.1",

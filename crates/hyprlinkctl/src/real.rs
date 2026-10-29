@@ -110,6 +110,8 @@ fn error_code(e: ErrorKind) -> (&'static str, &'static str) {
         ErrorKind::Offline => ("offline", "sem telemóvel ligado"),
         ErrorKind::Refused => ("refused", "recusado"),
         ErrorKind::Timeout => ("timeout", "sem resposta"),
+        ErrorKind::Storage => ("storage", "o daemon não conseguiu gravar o estado"),
+        ErrorKind::Unknown => ("unknown", "erro desconhecido"),
     }
 }
 
@@ -117,7 +119,7 @@ fn error_code(e: ErrorKind) -> (&'static str, &'static str) {
 fn send_and_check(s: &mut Session, c: Command, op: Op) -> Result<(), ErrorKind> {
     s.send(c).map_err(|_| ErrorKind::Timeout)?;
     match s.wait_for(GRACE, |e| match e {
-        Event::Notice(Notice::Failed { op: o, error }) if *o == op => Some(*error),
+        Event::Notice(Notice::Failed { op: o, error, .. }) if *o == op => Some(*error),
         _ => None,
     }) {
         Ok(err) => Err(err),
@@ -179,6 +181,7 @@ pub fn find(json_out: bool, req: Option<FindPhoneRequest>) -> ExitCode {
             Event::Notice(Notice::Failed {
                 op: Op::Phone,
                 error,
+                ..
             }) => Some(Err(*error)),
             _ => None,
         });
@@ -203,6 +206,7 @@ pub fn find(json_out: bool, req: Option<FindPhoneRequest>) -> ExitCode {
         Event::Notice(Notice::Failed {
             op: Op::Phone,
             error,
+            ..
         }) => Some(Err(*error)),
         _ => None,
     });
@@ -361,6 +365,7 @@ pub fn ping(json_out: bool) -> ExitCode {
         Event::Notice(Notice::Failed {
             op: Op::Ping,
             error,
+            ..
         }) => Some(Err(*error)),
         _ => None,
     });
@@ -399,6 +404,7 @@ pub fn clipboard(json_out: bool) -> ExitCode {
         Event::Notice(Notice::Failed {
             op: Op::Clipboard,
             error,
+            ..
         }) => Some(Err(*error)),
         _ => None,
     });

@@ -277,6 +277,7 @@ mod tests {
         hub.publish(Event::Notice(Notice::Failed {
             op: Op::Mirror,
             error: hyprlink_proto::link::ErrorKind::NotImplemented,
+            detail: None,
         }));
         for s in [&mut a, &mut b] {
             assert!(matches!(

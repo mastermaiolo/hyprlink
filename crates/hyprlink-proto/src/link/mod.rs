@@ -229,12 +229,30 @@ pub enum Command {
 /// Typed replies the GUI turns into toasts. No wording on the wire.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Notice {
-    PingReply { device: DeviceId, rtt_ms: f32 },
-    ClipboardSent { device: DeviceId },
-    Paired { device: DeviceId, name: String },
-    Revoked { device: DeviceId, name: String },
+    PingReply {
+        device: DeviceId,
+        rtt_ms: f32,
+    },
+    ClipboardSent {
+        device: DeviceId,
+    },
+    Paired {
+        device: DeviceId,
+        name: String,
+    },
+    Revoked {
+        device: DeviceId,
+        name: String,
+    },
     MirrorStarted,
-    Failed { op: Op, error: ErrorKind },
+    Failed {
+        op: Op,
+        error: ErrorKind,
+        /// Raw cause for the log-minded (an I/O error); not translated.
+        /// Absent from older daemons; older clients ignore it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -266,9 +284,16 @@ pub enum ErrorKind {
     NotImplemented,
     /// No phone connected.
     Offline,
-    /// The phone said no.
+    /// The phone said no — or, for `Op::Pairing`, the daemon could not find
+    /// the device (daemons up to 0.1.1).
     Refused,
     Timeout,
+    /// The daemon could not write its own state (`Op::Pairing`:
+    /// `paired_devices.json`); `Notice::Failed::detail` has the error.
+    Storage,
+    /// A kind this build does not know (a newer daemon).
+    #[serde(other)]
+    Unknown,
 }
 
 /// Things the daemon tells the GUI.

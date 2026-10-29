@@ -17,6 +17,14 @@ pub const TABLE: &[(&str, &str)] = &[
     ("ainda por implementar", "ainda não implementado"),
     ("sem telemóvel ligado", "nenhum celular conectado"),
     ("recusado pelo telemóvel", "recusado pelo celular"),
+    (
+        "aparelho já não está emparelhado",
+        "o aparelho não está mais pareado",
+    ),
+    (
+        "não foi possível gravar paired_devices.json: {}",
+        "não foi possível salvar paired_devices.json: {}",
+    ),
     ("A TRANSFERIR", "TRANSFERINDO"),
     ("sem telemóvel", "sem celular"),
     // ── tray.rs ──

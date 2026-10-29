@@ -56,6 +56,15 @@ pub const TABLE: &[(&str, &str)] = &[
     ("ainda por implementar", "aún sin implementar"),
     ("sem telemóvel ligado", "ningún móvil enlazado"),
     ("recusado pelo telemóvel", "rechazado por el móvil"),
+    (
+        "aparelho já não está emparelhado",
+        "el dispositivo ya no está emparejado",
+    ),
+    (
+        "não foi possível gravar paired_devices.json: {}",
+        "no se pudo guardar paired_devices.json: {}",
+    ),
+    ("erro desconhecido", "error desconocido"),
     ("sem resposta", "sin respuesta"),
     ("Toque", "Tono"),
     ("Notificações", "Notificaciones"),

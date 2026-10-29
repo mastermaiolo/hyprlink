@@ -95,7 +95,7 @@ socket:
 cargo install --path crates/hyprlinkctl
 hyprlinkctl status
 hyprlinkctl watch --json          # uma linha JSON a cada 500 ms (--interval MS)
-hyprlinkctl mic on|off|toggle     # tap …, speaker …, mirror start|stop|toggle, ws N, ping, clipboard, pair, open
+hyprlinkctl mic on|off|toggle     # tap …, speaker …, ws N, ping, clipboard, pair, open
 ```
 
 O formato do JSON está em `crates/hyprlink-proto/src/snapshot.rs` (`v = 1`): desconhecido é `null`, nunca

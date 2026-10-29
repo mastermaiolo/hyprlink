@@ -50,6 +50,12 @@ pub const TABLE: &[(&str, &str)] = &[
     ("ainda por implementar", "尚未实现"),
     ("sem telemóvel ligado", "没有已连接的手机"),
     ("recusado pelo telemóvel", "被手机拒绝"),
+    ("aparelho já não está emparelhado", "设备已不再配对"),
+    (
+        "não foi possível gravar paired_devices.json: {}",
+        "保存 paired_devices.json 失败：{}",
+    ),
+    ("erro desconhecido", "未知错误"),
     ("sem resposta", "无响应"),
     ("Toque", "铃声"),
     ("Notificações", "通知"),
