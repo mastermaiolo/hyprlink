@@ -11,7 +11,7 @@
 #                                próprio em src/, sem tocar no target/ do repo
 
 pkgname=hyprlink-bridge
-pkgver=0.1.1
+pkgver=0.1.3
 pkgrel=1
 pkgdesc='Android phone ↔ Hyprland link over QUIC + mTLS: notifications, clipboard, files, media, webcam, mic'
 arch=('x86_64')
@@ -58,7 +58,7 @@ source=(
   'hyprlink-bridge-autostart.desktop'
   'hyprlink-bridge.svg'
 )
-sha256sums=('21aa20573a7b0d3fa6349a3ad510d6249e64101c4d91c506cd40ac2e4b0134c6'
+sha256sums=('813301a37417c4fb2142eff673f099b3fb2969209c9b7be5857aeb53f03aab0f'
             'cebbc61cb25a2306422a16b8fba244c4b7077d9b06cf092704cb9e5603519562'
             '6f135c38214913bfea0d692b9ee7532ec02088e1c1236d3c03a31888d82c216f'
             '19ec8238389c4799d0999281346c29bce81220d9c3be15cce83d3ba110e286c8'
