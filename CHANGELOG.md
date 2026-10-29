@@ -4,7 +4,7 @@ Todas as alterações relevantes deste projeto ficam aqui. O formato segue o
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e as versões o
 [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
-## [Por publicar] 0.1.3
+## [0.1.3] — 2026-10-29
 
 ### Corrigido
 - Revogar o telemóvel que está ligado fecha a ligação e tira-o da lista de
