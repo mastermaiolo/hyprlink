@@ -266,6 +266,7 @@ fn drain_offline(commands: &Arc<Mutex<Receiver<Command>>>, items: &Sender<Item>,
                     let _ = items.send(Item::Event(Event::Notice(Notice::Failed {
                         op,
                         error: crate::link::ErrorKind::Offline,
+                        detail: None,
                     })));
                 }
             }
@@ -441,7 +442,8 @@ mod tests {
             ev[0],
             Event::Notice(Notice::Failed {
                 op: Op::Mic,
-                error: ErrorKind::Offline
+                error: ErrorKind::Offline,
+                ..
             })
         ));
 

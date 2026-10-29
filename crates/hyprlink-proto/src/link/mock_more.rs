@@ -774,6 +774,7 @@ impl More {
                 out.push(Event::Notice(Notice::Failed {
                     op: Op::Media,
                     error: ErrorKind::NotImplemented,
+                    detail: None,
                 }));
             }
             Command2::SetDownloadsDir(d) => {

@@ -773,7 +773,6 @@ async fn route_uni_stream(mut recv: quinn::RecvStream, ctx: Ctx) {
             ctx.incoming_files.clone(),
             ctx.active.clone(),
             ctx.hud.clone(),
-            ctx.config.clone(),
         )
         .await;
     }
@@ -1278,11 +1277,13 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                 // Teto e espaço livre verificados já no anúncio, antes de se
                 // criar o ficheiro (o stream recusado leva share.done ok=false).
                 let max = config::max_incoming_file_bytes(&ctx.config);
-                let free = share::free_space_for(&config::download_dir(&ctx.config));
+                let dir = config::incoming_dir(&ctx.config, body_get_str(b, "kind"));
+                let free = share::free_space_for(&dir);
                 match share::announce_incoming(
                     packet.id,
                     name.clone(),
                     size,
+                    dir,
                     &ctx.incoming_files,
                     max,
                     free,
@@ -1300,6 +1301,7 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                             hyprlink_proto::link::Notice::Failed {
                                 op: hyprlink_proto::link::Op::Files,
                                 error: hyprlink_proto::link::ErrorKind::Refused,
+                                detail: None,
                             },
                         ));
                     }
@@ -1350,6 +1352,7 @@ async fn handle_control_stream(mut send: quinn::SendStream, mut recv: quinn::Rec
                             hyprlink_proto::link::Notice::Failed {
                                 op: hyprlink_proto::link::Op::Phone,
                                 error: hyprlink_proto::link::ErrorKind::Refused,
+                                detail: None,
                             },
                         ));
                     }

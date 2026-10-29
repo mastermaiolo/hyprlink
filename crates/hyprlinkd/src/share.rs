@@ -13,12 +13,14 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{Semaphore, SemaphorePermit};
 
 use crate::active::{ActiveConn, announce, push};
-use crate::config::{self, SharedConfig};
+use crate::config;
 use crate::state::{HudState, push_log};
 
 pub(crate) struct PendingIncoming {
     name: String,
     size: u64,
+    /// Pasta de destino (por `kind`), já usada na verificação de espaço.
+    dir: PathBuf,
     /// Quando foi anunciado — os que ficam sem stream expiram.
     at: Instant,
     /// `Some(motivo)` = anúncio recusado (teto ou espaço): o stream que
@@ -73,6 +75,7 @@ pub fn announce_incoming(
     id: u64,
     name: String,
     size: u64,
+    dir: PathBuf,
     registry: &IncomingRegistry,
     max: u64,
     free: Option<u64>,
@@ -86,6 +89,7 @@ pub fn announce_incoming(
         PendingIncoming {
             name,
             size,
+            dir,
             at: now,
             refused: verdict.clone().err(),
         },
@@ -431,10 +435,18 @@ async fn receive_to_dir<R: tokio::io::AsyncRead + Unpin>(
     finished
 }
 
-/// Apaga os `.<nome>.hyprlink-part` de `dir` com mais de `max_age` (por
-/// `mtime`, relativo a `now`). Só ficheiros normais; ligações simbólicas e
-/// pastas ficam. Devolve quantos apagou.
-pub fn clean_orphan_parts(dir: &Path, max_age: Duration, now: std::time::SystemTime) -> usize {
+/// Apaga os `.<nome>.hyprlink-part` com mais de `max_age` (por `mtime`,
+/// relativo a `now`) em `base` e nas suas [`config::INCOMING_SUBDIRS`] (sem
+/// descer mais). Só ficheiros normais; ligações simbólicas e pastas ficam.
+/// Devolve quantos apagou.
+pub fn clean_orphan_parts(base: &Path, max_age: Duration, now: std::time::SystemTime) -> usize {
+    std::iter::once(base.to_path_buf())
+        .chain(config::INCOMING_SUBDIRS.map(|s| base.join(s)))
+        .map(|dir| clean_orphan_parts_in(&dir, max_age, now))
+        .sum()
+}
+
+fn clean_orphan_parts_in(dir: &Path, max_age: Duration, now: std::time::SystemTime) -> usize {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return 0;
     };
@@ -471,7 +483,6 @@ pub async fn receive_uni_stream(
     registry: IncomingRegistry,
     active: ActiveConn,
     hud: Arc<Mutex<HudState>>,
-    config: SharedConfig,
 ) {
     let mut pending = None;
     for _ in 0..20 {
@@ -495,7 +506,7 @@ pub async fn receive_uni_stream(
         return;
     }
 
-    let dir = config::download_dir(&config);
+    let dir = pending.dir;
     if let Err(e) = tokio::fs::create_dir_all(&dir).await {
         push_log(
             &hud,
@@ -936,12 +947,33 @@ mod tests {
     #[test]
     fn anuncio_acima_do_teto_e_recusado_e_marcado() {
         let reg = new_incoming_registry();
-        let r = announce_incoming(1, "a.iso".into(), 5 * GIB, &reg, 4 * GIB, Some(100 * GIB));
+        let r = announce_incoming(
+            1,
+            "a.iso".into(),
+            5 * GIB,
+            PathBuf::new(),
+            &reg,
+            4 * GIB,
+            Some(100 * GIB),
+        );
         assert!(r.unwrap_err().contains("limite"));
         assert!(reg.lock().unwrap()[&1].refused.is_some());
         // No teto exato passa; 0 = sem teto.
-        assert!(announce_incoming(2, "b".into(), 4 * GIB, &reg, 4 * GIB, None).is_ok());
-        assert!(announce_incoming(3, "c".into(), 50 * GIB, &reg, 0, Some(100 * GIB)).is_ok());
+        assert!(
+            announce_incoming(2, "b".into(), 4 * GIB, PathBuf::new(), &reg, 4 * GIB, None).is_ok()
+        );
+        assert!(
+            announce_incoming(
+                3,
+                "c".into(),
+                50 * GIB,
+                PathBuf::new(),
+                &reg,
+                0,
+                Some(100 * GIB)
+            )
+            .is_ok()
+        );
         assert!(reg.lock().unwrap()[&2].refused.is_none());
     }
 
@@ -967,7 +999,7 @@ mod tests {
     fn excesso_de_anuncios_pendentes_tira_os_mais_antigos() {
         let reg = new_incoming_registry();
         for id in 0..(MAX_PENDING as u64 + 10) {
-            announce_incoming(id, format!("f{id}"), 1, &reg, 0, None).unwrap();
+            announce_incoming(id, format!("f{id}"), 1, PathBuf::new(), &reg, 0, None).unwrap();
             std::thread::sleep(Duration::from_millis(1));
         }
         let map = reg.lock().unwrap();
@@ -986,6 +1018,7 @@ mod tests {
                 PendingIncoming {
                     name: String::new(),
                     size: 1,
+                    dir: PathBuf::new(),
                     at,
                     refused: None,
                 },
@@ -1173,6 +1206,84 @@ mod tests {
                 "normal.txt"
             ]
         );
+    }
+
+    fn shared_config(base: &Path) -> config::SharedConfig {
+        let json = serde_json::json!({ "download_dir": base });
+        Arc::new(Mutex::new(serde_json::from_value(json).unwrap()))
+    }
+
+    /// Anúncio → registo → receção, como `server.rs` + `receive_uni_stream`:
+    /// screenshot vai para `Screenshot`, o resto (e app antiga sem `kind`)
+    /// para `Transferidos`; o mesmo nome repetido ganha `(1)` só na sua pasta.
+    #[tokio::test]
+    async fn rececao_cai_na_pasta_do_kind() {
+        let base = tmp_dir("kind");
+        let config = shared_config(&base);
+        let reg = new_incoming_registry();
+        let no = std::sync::atomic::AtomicBool::new(false);
+        for (id, kind) in [
+            (1, Some("screenshot")),
+            (2, None),
+            (3, Some("../x")),
+            (4, Some("screenshot")),
+        ] {
+            let dir = config::incoming_dir(&config, kind);
+            let free = free_space_for(&dir);
+            announce_incoming(id, "s.png".into(), 2, dir, &reg, 0, free).unwrap();
+            let pending = reg.lock().unwrap().remove(&id).unwrap();
+            std::fs::create_dir_all(&pending.dir).unwrap();
+            recv_bytes(&pending.dir, &pending.name, b"ok", 2, &no)
+                .await
+                .unwrap();
+        }
+        assert_eq!(listing(&base), ["Screenshot", "Transferidos"]);
+        assert_eq!(listing(&base.join("Screenshot")), ["s (1).png", "s.png"]);
+        assert_eq!(listing(&base.join("Transferidos")), ["s (1).png", "s.png"]);
+    }
+
+    /// O espaço livre é o da pasta de destino real (que ainda pode não
+    /// existir), e é essa pasta que fica no registo para a receção.
+    #[test]
+    fn espaco_livre_e_destino_sao_a_mesma_pasta() {
+        let base = tmp_dir("espaco");
+        let config = shared_config(&base);
+        let reg = new_incoming_registry();
+        let dir = config::incoming_dir(&config, Some("screenshot"));
+        assert!(!dir.exists());
+        let free = free_space_for(&dir);
+        assert_eq!(free, free_space_for(&base));
+        announce_incoming(1, "a".into(), 1, dir.clone(), &reg, 0, free).unwrap();
+        assert_eq!(reg.lock().unwrap()[&1].dir, base.join("Screenshot"));
+        let r = announce_incoming(2, "b".into(), 1, dir, &reg, 0, Some(0));
+        assert!(r.unwrap_err().contains("espaço"));
+    }
+
+    #[test]
+    fn parciais_orfaos_limpos_na_base_e_nas_duas_subpastas() {
+        let base = tmp_dir("orfaos-sub");
+        let fundo = base.join("Screenshot/fundo");
+        std::fs::create_dir_all(base.join("Transferidos")).unwrap();
+        std::fs::create_dir_all(&fundo).unwrap();
+        let ha_2h = std::time::SystemTime::now() - Duration::from_secs(2 * 60 * 60);
+        for d in [
+            &*base,
+            &base.join("Screenshot"),
+            &base.join("Transferidos"),
+            &fundo,
+        ] {
+            let p = d.join(".v.png.hyprlink-part");
+            std::fs::write(&p, b"x").unwrap();
+            std::fs::File::options()
+                .write(true)
+                .open(&p)
+                .unwrap()
+                .set_modified(ha_2h)
+                .unwrap();
+        }
+        let n = clean_orphan_parts(&base, ORPHAN_PART_AGE, std::time::SystemTime::now());
+        assert_eq!(n, 3, "base + Screenshot + Transferidos; sem recursão");
+        assert_eq!(listing(&fundo), [".v.png.hyprlink-part"]);
     }
 
     #[tokio::test]

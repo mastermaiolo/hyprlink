@@ -263,3 +263,21 @@ fn hyprlink_mock_continua_a_dar_o_simulador() {
     assert_eq!(v["daemon"], "mock");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn mirror_esta_escondido_e_nao_fala_com_o_daemon() {
+    let dir = runtime_dir("mirror");
+    let sock = UnixListener::bind(dir.join("hyprlink.sock")).unwrap();
+    sock.set_nonblocking(true).unwrap();
+    for mock in [false, true] {
+        let out = ctl(&dir, &["mirror", "start", "--json"], mock)
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(2));
+        assert!(String::from_utf8_lossy(&out.stderr).contains("ainda não implementado"));
+    }
+    assert!(sock.accept().is_err(), "ligou ao daemon");
+    let help = ctl(&dir, &["--help"], false).output().unwrap();
+    assert!(!String::from_utf8_lossy(&help.stderr).contains("mirror"));
+    std::fs::remove_dir_all(&dir).ok();
+}

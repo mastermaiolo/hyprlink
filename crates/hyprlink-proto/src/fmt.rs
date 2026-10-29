@@ -207,16 +207,28 @@ pub fn notice(n: &Notice, lookup: impl Fn(u32) -> Option<String>) -> String {
             crate::tr!("{} · certificado revogado", name.to_uppercase())
         }
         Notice::MirrorStarted => t("ESPELHO · transmissão iniciada").into(),
-        Notice::Failed { op: o, error } => crate::tr!(
-            "{} · {}",
-            op(*o).to_uppercase(),
-            match error {
-                ErrorKind::NotImplemented => t("ainda por implementar"),
-                ErrorKind::Offline => t("sem telemóvel ligado"),
-                ErrorKind::Refused => t("recusado pelo telemóvel"),
-                ErrorKind::Timeout => t("sem resposta"),
-            }
-        ),
+        Notice::Failed {
+            op: o,
+            error,
+            detail,
+        } => {
+            let why: String = match (o, error) {
+                (_, ErrorKind::NotImplemented) => t("ainda por implementar").into(),
+                (_, ErrorKind::Offline) => t("sem telemóvel ligado").into(),
+                // No emparelhamento quem recusa é o daemon (até à 0.1.1:
+                // aparelho que já não estava na lista).
+                (Op::Pairing, ErrorKind::Refused) => t("aparelho já não está emparelhado").into(),
+                (_, ErrorKind::Refused) => t("recusado pelo telemóvel").into(),
+                (_, ErrorKind::Timeout) => t("sem resposta").into(),
+                // shortcut: só o emparelhamento grava hoje; outra op com Storage pede outra frase.
+                (_, ErrorKind::Storage) => crate::tr!(
+                    "não foi possível gravar paired_devices.json: {}",
+                    detail.as_deref().unwrap_or("?")
+                ),
+                (_, ErrorKind::Unknown) => t("erro desconhecido").into(),
+            };
+            crate::tr!("{} · {}", op(*o).to_uppercase(), why)
+        }
     }
 }
 
@@ -418,6 +430,46 @@ mod tests {
             gesture_action("pc:volume_{dir}"),
             "pc.action volume_up|down"
         );
+    }
+
+    #[test]
+    fn failures_name_who_said_no() {
+        use crate::i18n::{Lang, t_in};
+        crate::i18n::set(Lang::PtPt);
+        let failed = |op, error, detail: Option<&str>| {
+            notice(
+                &Notice::Failed {
+                    op,
+                    error,
+                    detail: detail.map(str::to_string),
+                },
+                |_| None,
+            )
+        };
+        assert_eq!(
+            failed(Op::Pairing, ErrorKind::Refused, None),
+            "EMPARELHAMENTO · aparelho já não está emparelhado"
+        );
+        assert_eq!(
+            failed(Op::Pairing, ErrorKind::Storage, Some("disco cheio")),
+            "EMPARELHAMENTO · não foi possível gravar paired_devices.json: disco cheio"
+        );
+        assert_eq!(
+            failed(Op::Speaker, ErrorKind::Refused, None),
+            "MODO COLUNA · recusado pelo telemóvel"
+        );
+        assert_eq!(
+            failed(Op::Ping, ErrorKind::Unknown, None),
+            "PING · erro desconhecido"
+        );
+        for l in [Lang::EnGb, Lang::EsEs, Lang::Zh, Lang::PtBr] {
+            for k in [
+                "aparelho já não está emparelhado",
+                "não foi possível gravar paired_devices.json: {}",
+            ] {
+                assert_ne!(t_in(l, k), k, "{l:?} sem tradução de «{k}»");
+            }
+        }
     }
 
     #[test]
